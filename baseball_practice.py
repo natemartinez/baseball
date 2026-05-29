@@ -29,6 +29,7 @@ def setup_field()
 '''
 
 
+from operator import truediv
 from roster import PositionPlayer, rosters
 
 def adjust_lineup_order(lineup, pos1, pos2):
@@ -60,6 +61,11 @@ def display_lineups(lineup):
     Helper Function - adjust_lineup_order()
     '''
     for order, player in enumerate(lineup, start=1):
+        print(f"{order}. {player.name} - {player.position}")
+
+
+def display_rotations(rotation):
+    for order, player in enumerate(rotation, start=1):
         print(f"{order}. {player.name} - {player.position}")
 
 def in_play():
@@ -104,7 +110,6 @@ def init_game():
     return print("Play Ball!")
 
 
-
 def print_option(option):
     '''
     Docstring for printOption
@@ -117,14 +122,16 @@ def print_option(option):
       5. Quit
 
     :param option: Input of what was chosen from main()
-    '''
+    '''        
+    team_rosters = [rosters['away_team'], rosters['home_team']] # List of two dictionaries
+    team_names = ["New York Yankees", "New York Mets"]
+
+
     if option == 1:
         init_game()
     elif option == 2:
-        teams = [rosters['away_team']['position_players'], rosters['home_team']['position_players']]
-        team_names = ["New York Yankees", "New York Mets"]
-
-        for i, team in enumerate(teams):
+        [team['position_players'] for team in team_rosters]
+        for i, team in enumerate(batters):
             print(f"\n--- {team_names[i]} Lineup ---")
             display_lineups(team)
 
@@ -145,6 +152,33 @@ def print_option(option):
                         adjust_lineup_order(team, first_player, second_player)
                         print(f"\n--- {team_names[i]} Updated Lineup ---")
                         display_lineups(team)
+                    else:
+                        print(f"Enter two different numbers between 1 and {len(team)}")
+                except ValueError:
+                    print(f"Enter two different numbers between 1 and {len(team)}")
+
+    elif option == 3:
+        starting_pitchers = [team['pitchers']['starters'] for team in team_rosters]
+        for i, team in enumerate(starting_pitchers):  
+            print(f"\n--- {team_names[i]} Rotation ---")
+            display_rotations(team)
+
+            while True:
+                try:
+                    raw1 = input("Choose 1st player to switch or type 'done': ")
+                    if raw1.lower() == 'done':
+                        break
+                    raw2 = input("Choose 2nd player to switch with or type 'done': ")
+                    if raw2.lower() == 'done':
+                        break
+
+                    first_player = int(raw1)
+                    second_player = int(raw2)
+
+                    if 1 <= first_player <= len(team) and 1 <= second_player <= len(team) and first_player != second_player:
+                        adjust_lineup_order(team, first_player, second_player)
+                        print(f"\n--- {team_names[i]} Updated Lineup ---")
+                        display_rotations(team)
                     else:
                         print(f"Enter two different numbers between 1 and {len(team)}")
                 except ValueError:
