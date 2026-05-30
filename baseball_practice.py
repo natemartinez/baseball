@@ -47,7 +47,6 @@ def adjust_lineup_order(lineup, pos1, pos2):
 
     return lineup
 
-
 def display_lineups(lineup):
     '''
     Params (Input) - Batter Lineup (one team, list of PositionPlayer)
@@ -63,10 +62,10 @@ def display_lineups(lineup):
     for order, player in enumerate(lineup, start=1):
         print(f"{order}. {player.name} - {player.position}")
 
-
 def display_rotations(rotation):
     for order, player in enumerate(rotation, start=1):
         print(f"{order}. {player.name} - {player.position}")
+
 
 def in_play():
     '''
@@ -108,7 +107,6 @@ def at_bat():
 
 def init_game():
     return print("Play Ball!")
-
 
 def print_option(option):
     '''
@@ -188,7 +186,6 @@ def print_option(option):
         quit()
         
     # return/cleanup after intended function
-
 
 def main():
     """Main loop - Pitching, Hitting, Results"""
