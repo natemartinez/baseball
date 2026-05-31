@@ -3,3 +3,5 @@
 __pycache__/
 *.pyc
 .venv/
+yahoo_api.py
+yahoo_auth.py
