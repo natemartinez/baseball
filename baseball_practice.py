@@ -1,214 +1,204 @@
-'''
-Practice of baseball back-end logic game
-  - CURRENT TRAJECTORY - Strictly text-based
-  - FUTURE TRAJECTORY - SQLite & Flask server included 
-    (database <--> backend <--> frontend)
-
-'''
-
-
-'''
-# Pseudocode
-
-- MAIN GOAL: build simulation that returns a successful simulation of a proper
-nine-inning game (3 outs, 9 innings, final score, substitutions, box score, hit/walk/out)
-
-- SUB GOALS:
-
-  1. define main() function that handles all results from other functions
-  2. pitch -> hit/foul/miss/called strike/ball -> result -> pitch 
-    (user-controlled, timeouts() between events)
-'''
-
-'''
-FUNCTIONS NEEDED
-def init_roster() -- Call once, Roster initializes random players and stays the same until simulation starts over
-                    Use dict to create players
-
-def setup_field()
-'''
-
-
-from operator import truediv
+import tkinter as tk
+from tkinter import messagebox, Listbox, MULTIPLE, Button, Label, Frame
 from roster import PositionPlayer, rosters
+from backend.game_engine import GameEngine
+import random
 
+# ------------------- YOUR EXISTING BACKEND (unchanged) -------------------
 def adjust_lineup_order(lineup, pos1, pos2):
-    '''
-    Params (Inputs)
-      - lineup: list of PositionPlayer objects
-      - pos1, pos2: 1-indexed batting order positions to swap
-    Modifies lineup in-place.
-    '''
-
     index1 = pos1 - 1
     index2 = pos2 - 1
-
     lineup[index1], lineup[index2] = lineup[index2], lineup[index1]
-
     return lineup
 
 def display_lineups(lineup):
-    '''
-    Params (Input) - Batter Lineup (one team, list of PositionPlayer)
-    Output - Prints numbered batting order to console
-
-    Constraints:
-    - No negatives
-    - Only 1-9
-    - No repeat inputs
-
-    Helper Function - adjust_lineup_order()
-    '''
+    lines = []
     for order, player in enumerate(lineup, start=1):
-        print(f"{order}. {player.name} - {player.position}")
+        lines.append(f"{order}. {player.name} - {player.position}")
+    return lines
 
 def display_rotations(rotation):
+    lines = []
     for order, player in enumerate(rotation, start=1):
-        print(f"{order}. {player.name} - {player.position}")
+        lines.append(f"{order}. {player.name} - {player.position}")
+    return lines
+# -------------------------------------------------------------------------
 
 
-def in_play():
-    '''
-     Function for when the ball is in play (bat makes contact with ball, not fouled)
-    '''
+# ------------------------- MAIN UI (SINGLE WINDOW) -------------------------
+class BaseballApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Baseball Simulation")
+        self.root.geometry("700x600")
 
-    return
+        # Load team data
+        self.team_rosters = [rosters['away_team'], rosters['home_team']]
+        self.team_names = ["New York Yankees", "New York Mets"]
 
-def pitch():
-    '''
-     params:
-      - pitchRating(stuff, movement, control)
-      - pitchTypes
-      - pitchersStyle
-     
-      - hitRating(contact, hot/cold zones)
+        # Current state
+        self.current_team_index = 0
+        self.current_mode = None
+        self.game_engine = None
 
+        # Toolbar
+        toolbar = Frame(root)
+        toolbar.pack(side=tk.TOP, fill=tk.X)
 
-      IDEAS:
-      - would like to build a function to take field dimensions into account
-    '''
+        Button(toolbar, text="Play Ball!", command=self.show_game).pack(side=tk.LEFT, padx=5, pady=5)
+        Button(toolbar, text="Adjust Lineups", command=self.show_lineups).pack(side=tk.LEFT, padx=5, pady=5)
+        Button(toolbar, text="Adjust Rotation", command=self.show_rotation).pack(side=tk.LEFT, padx=5, pady=5)
+        Button(toolbar, text="Settings", command=self.show_settings).pack(side=tk.LEFT, padx=5, pady=5)
+        Button(toolbar, text="Quit", command=root.quit).pack(side=tk.LEFT, padx=5, pady=5)
 
-    return
+        # Main content area
+        self.content_frame = Frame(root)
+        self.content_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-def at_bat():
-    '''
-      - Function loop for a single at-bat
+        self.show_welcome()
 
-      -params
-        - pitcher
-        - hitter
+    def clear_content(self):
+        for widget in self.content_frame.winfo_children():
+            widget.destroy()
 
-      - functions
-        - calc_outcome() - For the specific pitch
+    def show_welcome(self):
+        self.clear_content()
+        Label(self.content_frame, text="Welcome to Baseball Simulation\nSelect an option from the toolbar.").pack(expand=True)
 
-    '''
+    # ------------------------- GAME VIEW (with simulation) -------------------------
+    def show_game(self):
+        self.current_mode = 'game'
+        self.clear_content()
 
-    return
+        # Initialize a fresh game engine using current rosters (which may have been edited)
+        away_team = self.team_rosters[0]  # away = Yankees index 0? check order: rosters['away_team'] first
+        home_team = self.team_rosters[1]
+        self.game_engine = GameEngine(home_team, away_team, self.team_names[1], self.team_names[0])
 
-def init_game():
-    return print("Play Ball!")
+        # UI elements
+        self.game_info_label = Label(self.content_frame, text="", font=("Courier", 12), justify=tk.LEFT)
+        self.game_info_label.pack(pady=10)
 
-def print_option(option):
-    '''
-    Docstring for printOption
-    - Will call the specific function based on option
-    - DIFFERENT OPTIONS:
-      1. Play Ball!
-      2. Check Lineups ->
-      3. Adjust defensive positioning -> setup_field()
-      4. Settings
-      5. Quit
+        self.pitch_button = Button(self.content_frame, text="Throw Pitch", command=self.throw_pitch)
+        self.pitch_button.pack(pady=5)
 
-    :param option: Input of what was chosen from main()
-    '''        
-    team_rosters = [rosters['away_team'], rosters['home_team']] # List of two dictionaries
-    team_names = ["New York Yankees", "New York Mets"]
+        self.reset_button = Button(self.content_frame, text="Reset Game", command=self.reset_game)
+        self.reset_button.pack(pady=5)
 
+        self.update_game_display()
 
-    if option == 1:
-        init_game()
-    elif option == 2:
-        [team['position_players'] for team in team_rosters]
-        for i, team in enumerate(batters):
-            print(f"\n--- {team_names[i]} Lineup ---")
-            display_lineups(team)
+    def throw_pitch(self):
+        if self.game_engine.game_over:
+            messagebox.showinfo("Game Over", "The game is over. Press Reset Game to play again.")
+            return
+        result, (outs, balls, strikes) = self.game_engine.pitch()
+        # Show result in a temporary status bar or messagebox? Use a label.
+        if not hasattr(self, 'result_label'):
+            self.result_label = Label(self.content_frame, text="", fg="blue")
+            self.result_label.pack(pady=5)
+        self.result_label.config(text=f"Last pitch: {result}")
+        self.update_game_display()
 
-            while True:
-                try:
-                    raw1 = input("Choose 1st player to switch or type 'done': ")
-                    if raw1.lower() == 'done':
-                        break
-                    raw2 = input("Choose 2nd player to switch with or type 'done': ")
-                    if raw2.lower() == 'done':
-                        break
+    def reset_game(self):
+        # Re-initialize game engine with same rosters
+        away_team = self.team_rosters[0]
+        home_team = self.team_rosters[1]
+        self.game_engine = GameEngine(home_team, away_team, self.team_names[1], self.team_names[0])
+        self.update_game_display()
+        if hasattr(self, 'result_label'):
+            self.result_label.config(text="Game reset.")
 
-                    first_player = int(raw1)
-                    second_player = int(raw2)
+    def update_game_display(self):
+        state_text = self.game_engine.get_game_state_text()
+        self.game_info_label.config(text=state_text)
+        if self.game_engine.game_over:
+            self.pitch_button.config(state=tk.DISABLED)
+        else:
+            self.pitch_button.config(state=tk.NORMAL)
 
+    # ---------- LINEUP UI (same as before) ----------
+    def show_lineups(self):
+        self.current_mode = 'lineup'
+        self.current_team_index = 0
+        self._refresh_lineup_view()
 
-                    if 1 <= first_player <= len(team) and 1 <= second_player <= len(team) and first_player != second_player:
-                        adjust_lineup_order(team, first_player, second_player)
-                        print(f"\n--- {team_names[i]} Updated Lineup ---")
-                        display_lineups(team)
-                    else:
-                        print(f"Enter two different numbers between 1 and {len(team)}")
-                except ValueError:
-                    print(f"Enter two different numbers between 1 and {len(team)}")
+    def _refresh_lineup_view(self):
+        self.clear_content()
+        header_frame = Frame(self.content_frame)
+        header_frame.pack(fill=tk.X, pady=5)
+        Label(header_frame, text=f"Batting Order - {self.team_names[self.current_team_index]}", font=("Arial", 14)).pack(side=tk.LEFT)
+        def next_team():
+            self.current_team_index = (self.current_team_index + 1) % 2
+            self._refresh_lineup_view()
+        Button(header_frame, text="Next Team", command=next_team).pack(side=tk.RIGHT)
 
-    elif option == 3:
-        starting_pitchers = [team['pitchers']['starters'] for team in team_rosters]
-        for i, team in enumerate(starting_pitchers):  
-            print(f"\n--- {team_names[i]} Rotation ---")
-            display_rotations(team)
+        self.lineup_listbox = Listbox(self.content_frame, width=50, height=15, selectmode=MULTIPLE)
+        self.lineup_listbox.pack(pady=10)
 
-            while True:
-                try:
-                    raw1 = input("Choose 1st player to switch or type 'done': ")
-                    if raw1.lower() == 'done':
-                        break
-                    raw2 = input("Choose 2nd player to switch with or type 'done': ")
-                    if raw2.lower() == 'done':
-                        break
+        batters = self.team_rosters[self.current_team_index]['position_players']
+        lines = display_lineups(batters)
+        for line in lines:
+            self.lineup_listbox.insert(tk.END, line)
 
-                    first_player = int(raw1)
-                    second_player = int(raw2)
+        def swap_selected():
+            selected = self.lineup_listbox.curselection()
+            if len(selected) != 2:
+                messagebox.showwarning("Selection", "Please select exactly two players to swap.")
+                return
+            pos1 = selected[0] + 1
+            pos2 = selected[1] + 1
+            adjust_lineup_order(batters, pos1, pos2)
+            self.lineup_listbox.delete(0, tk.END)
+            new_lines = display_lineups(batters)
+            for line in new_lines:
+                self.lineup_listbox.insert(tk.END, line)
+        Button(self.content_frame, text="Swap Selected Players", command=swap_selected).pack(pady=5)
 
-                    if 1 <= first_player <= len(team) and 1 <= second_player <= len(team) and first_player != second_player:
-                        adjust_lineup_order(team, first_player, second_player)
-                        print(f"\n--- {team_names[i]} Updated Lineup ---")
-                        display_rotations(team)
-                    else:
-                        print(f"Enter two different numbers between 1 and {len(team)}")
-                except ValueError:
-                    print(f"Enter two different numbers between 1 and {len(team)}")
+    # ---------- ROTATION UI ----------
+    def show_rotation(self):
+        self.current_mode = 'rotation'
+        self.current_team_index = 0
+        self._refresh_rotation_view()
 
-    elif option == 5:
-        quit()
-        
-    # return/cleanup after intended function
+    def _refresh_rotation_view(self):
+        self.clear_content()
+        header_frame = Frame(self.content_frame)
+        header_frame.pack(fill=tk.X, pady=5)
+        Label(header_frame, text=f"Starting Rotation - {self.team_names[self.current_team_index]}", font=("Arial", 14)).pack(side=tk.LEFT)
+        def next_team():
+            self.current_team_index = (self.current_team_index + 1) % 2
+            self._refresh_rotation_view()
+        Button(header_frame, text="Next Team", command=next_team).pack(side=tk.RIGHT)
 
-def main():
-    """Main loop - Pitching, Hitting, Results"""
-    print("WELCOME TO MY BASEBALL SIMULATION")
-    print("1. Play Ball!")
-    print("2. Adjust Lineups") # Lineups / Positioning -> Line 123
-    print("3. Adjust Rotation")
-    print("4. Settings")
-    print("5. Quit")
+        self.rotation_listbox = Listbox(self.content_frame, width=50, height=15, selectmode=MULTIPLE)
+        self.rotation_listbox.pack(pady=10)
 
+        pitchers = self.team_rosters[self.current_team_index]['pitchers']['starters']
+        lines = display_rotations(pitchers)
+        for line in lines:
+            self.rotation_listbox.insert(tk.END, line)
 
-    while True:
-        try:
-            option=int(input("Choose an option (1-5): ")) # waits for string input -> converts into integer
-            if 1 <= option <= 5: # boundary conditions: 1 & 5
-                print_option(option)
-        except ValueError:
-            print("Enter a number")
+        def swap_selected():
+            selected = self.rotation_listbox.curselection()
+            if len(selected) != 2:
+                messagebox.showwarning("Selection", "Select exactly two pitchers to swap.")
+                return
+            pos1 = selected[0] + 1
+            pos2 = selected[1] + 1
+            adjust_lineup_order(pitchers, pos1, pos2)
+            self.rotation_listbox.delete(0, tk.END)
+            new_lines = display_rotations(pitchers)
+            for line in new_lines:
+                self.rotation_listbox.insert(tk.END, line)
+        Button(self.content_frame, text="Swap Selected Pitchers", command=swap_selected).pack(pady=5)
 
+    def show_settings(self):
+        self.current_mode = 'settings'
+        self.clear_content()
+        Label(self.content_frame, text="SETTINGS (not implemented yet)").pack(pady=10)
 
+# ------------------------- MAIN ENTRY POINT -------------------------
 if __name__ == '__main__':
-    '''
-      This block makes sure that the main() function only runs when this
-      file is ran directly, not when imported
-    '''
-    main()
+    root = tk.Tk()
+    app = BaseballApp(root)
+    root.mainloop()
