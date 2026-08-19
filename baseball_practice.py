@@ -22,8 +22,6 @@ def display_rotations(rotation):
     for order, player in enumerate(rotation, start=1):
         lines.append(f"{order}. {player.name} - {player.position}")
     return lines
-# -------------------------------------------------------------------------
-
 
 # ------------------------- MAIN UI (SINGLE WINDOW) -------------------------
 class BaseballApp:
@@ -37,9 +35,9 @@ class BaseballApp:
         self.team_names = ["New York Yankees", "New York Mets"]
 
         # Current state
-        self.current_team_index = 0
-        self.current_mode = None
-        self.game_engine = None
+        self.current_team_index = 0 # which team is being edited
+        self.current_mode = None # game", "lineup", "rotation", or "settings"
+        self.game_engine = None # Holds game logic once playing starts
 
         # Toolbar
         toolbar = Frame(root)
