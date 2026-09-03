@@ -178,18 +178,4 @@ baseball/
 
 ---
 
-## How to Run
-
-Requires Python 3.
-
-```bash
-# 1. Initialize the SQLite database and seed test players
-python -c "from backend.database.db import init_db; init_db()"
-
-# 2. Run the application
-python main.py
-```
-
----
-
 *Built as a learning project — tracking progress, architectural decisions, and dev history in `logs/`.*
