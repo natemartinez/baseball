@@ -5,3 +5,11 @@ __pycache__/
 .venv/
 yahoo_api.py
 yahoo_auth.py
+.kilo
+
+node_modules/
+backend/database/*.db
+backend/database/*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm

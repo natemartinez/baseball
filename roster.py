@@ -1,93 +1,145 @@
+
+
+
 class Player:
-    def __init__(self, name, number, field_rating):
+    def __init__(self, id, name, number, field_rating, handedness=None):
+        self.id = id
         self.name = name
         self.number = number
         self.field_rating = field_rating
+        self.handedness = handedness
       
 
+# Shared pitch archetype table (per-pitch: role, handedness bias, target)
+# Breaking balls (Slider/Cutter/Curveball) carry an "in_target": a pitch breaking
+# IN to the opposite-handed batter is high-risk/high-reward.
+PITCH_PROFILES = {
+    "Slider": {
+        "role": "chase",                              # works outside the zone
+        "handedness_bias": "same",                    # effective same-handed
+        "target": {"RHP vs RHB": "down_away",
+                   "RHP vs LHB": "down_away"},   # RELATIVE labels, not absolute coords
+        "in_target": "down_in",                         # breaking IN vs opposite hand
+        "effectiveness": {"control": 70, "movement": 85, "break": 90, "velocity": (85, 89)},
+    },
+    "Cutter": {
+        "role": "catch_zone",                         # late break, attacks the zone
+        "handedness_bias": "same",
+        "target": {"RHP vs RHB": "up_in",
+                   "RHP vs LHB": "down_away"},
+        "in_target": "up_in",                         # breaking IN vs opposite hand
+        "effectiveness": {"control": 75, "movement": 75, "break": 55, "velocity": (91, 95)},
+    },
+    "Curveball": {
+        "role": "chase",
+        "handedness_bias": "same",
+        "target": {"RHP vs RHB": "down_away",
+                   "RHP vs LHB": "down_away"},
+        "in_target": "down_in",                       # hammering IN vs opposite hand
+        "effectiveness": {"control": 65, "movement": 80, "break": 95, "velocity": (77, 82)},
+    },
+    "Fastball": {
+        "role": "catch_zone",                         # attacks the zone
+        "handedness_bias": "any",
+        "target": {"*": "up_in"},
+        "effectiveness": {"control": 75, "movement": 60, "break": 10, "velocity": (93, 97)},  # mph range (min, max)
+    },
+    "Changeup": {
+        "role": "chase",
+        "handedness_bias": "same",
+        "target": {"*": "down_away"},
+        "effectiveness": {"control": 75, "movement": 85, "break": 70, "velocity": (82, 87)},
+    },
+}
+
+# A concrete pitch in a pitcher's arsenal: the archetype (from PITCH_PROFILES)
+# plus THIS pitcher's unique per-pitch effectiveness (control, movement, break,
+# velocity).
+
+class Pitch:
+    def __init__(self, name, profile, effectiveness=None):
+        self.name = name
+        self.profile = profile
+        defaults = profile.get("effectiveness", {})
+        self.effectiveness = {**defaults, **(effectiveness or {})}
+
+    @property
+    def role(self):
+        return self.profile["role"]
+
+    def __str__(self):
+        parts = []
+        for k, v in self.effectiveness.items():
+            if isinstance(v, tuple):
+                parts.append(f"{k}:{v[0]}-{v[1]}")
+            else:
+                parts.append(f"{k}:{v}")
+        return f"{self.name} {' '.join(parts)}"
+
+
 class Pitcher(Player): 
-    def __init__(self, name, number, position, pitch_rating, field_rating):
-        super().__init__(name, number, field_rating)
+    def __init__(self, name, number, position, pitch_rating, control_rating,
+                 field_rating, pitch_zones, arsenal=None, handedness="RHP"):
+        super().__init__(name, number, field_rating, handedness)
         self.position = position
         self.pitch_rating = pitch_rating
+        self.control_rating = control_rating
+        self.pitch_zones = pitch_zones
+        # Need to have some kind of generator for random arsenals
+        self.arsenal = arsenal
 
     def __str__(self):
-        return f"#{self.number} {self.name} - {self.position} / Pitcher Ratings: Pitch: {self.pitch_rating} Fielding: {self.field_rating}"   
+        return (f"#{self.number} {self.name} - {self.position} "
+                f"\n Pitcher Ratings: Pitch: {self.pitch_rating} "
+                f"Control: {self.control_rating} Fielding: {self.field_rating}"
+                f"Pitch Zones: {self.pitch_zones}"
+                f"\n Arsenal: {self.arsenal}")
     
 class PositionPlayer(Player): 
-    def __init__(self, name, number, position, hit_rating, field_rating):
-        super().__init__(name, number, field_rating) # super() passes into the parent class(inheritance) so need to have 
-        self.position = position                     # same parameters as the parent class besides 'self'
+    def __init__(self, name, number, position, hit_rating, field_rating, hitter_zones, handedness="RHB"):
+        super().__init__(name, number, field_rating, handedness) # Takes from the parent class(inheritance from 'Player' class)
+        self.position = position    # same parameters as the parent class besides 'self'
         self.hit_rating = hit_rating
+        self.hitter_zones = hitter_zones
 
     def __str__(self):
-        return f"#{self.number} {self.name} Pos: {self.position} / Ratings: Hitting: {self.hit_rating} Fielding: {self.field_rating}"   
+        return f"#{self.number} {self.name} Pos: {self.position} / Ratings: Hitting: {self.hit_rating} Fielding: {self.field_rating} Zones: {self.hitter_zones}"   
     
 
-# 
+# Eventually I want to move all rosters to a database
+
+# MOCK ROSTERS
 rosters = {
     "home_team" : {
         "position_players": [
-            PositionPlayer("Francisco Lindor", 12, "SS", 84, 88),
-            PositionPlayer("Juan Soto", 22, "RF", 97, 76),
-            PositionPlayer("Bo Bichette", 19, "3B", 84, 70),
-            PositionPlayer("Jorge Polanco", 11, "1B", 80, 76),
-            PositionPlayer("Marcus Semien", 2, "2B", 84, 82),
-            PositionPlayer("Brett Baty", 10, "DH", 76, 72),
-            PositionPlayer("Francisco Alvarez", 4, "C", 82, 84),
-            PositionPlayer("Luis Robert Jr.", 88, "CF", 82, 88),
-            PositionPlayer("Carson Benge", 34, "LF", 73, 78),
-            PositionPlayer("Mark Vientos", 27, "INF", 82, 72),
-            PositionPlayer("Jeff McNeil", 1, "2B", 79, 82),
-            PositionPlayer("Luis Torrens", 13, "C", 68, 74),
-            PositionPlayer("DJ Stewart", 29, "OF", 70, 72),
+            PositionPlayer("Juan Soto", 22, "RF", 97, 76, [
+
+            ], 
+            handedness="LHB"),
         ],
         "pitchers": {
             "starters": [
-                Pitcher("Freddy Peralta", 51, "SP", 87, 78),
-                Pitcher("Nolan Mclean", 26, "SP", 87, 84),
-                Pitcher("David Peterson", 23, "SP", 78, 75),
-                Pitcher("Christian Scott", 45, "SP", 76, 63),
-                Pitcher("Jonah Tong", 21, "SP", 78, 61),
+                Pitcher("Nolan Mclean", 28, "SP", 87, 77, 78,
+                        arsenal=({"Fastball": {"effectiveness": {"velocity": (96, 98), "control": 78}}})),
             ],
             "relievers": [
-                Pitcher("Devin Williams", 38, "CP", 84, 78),
-                Pitcher("Edwin Diaz", 39, "RP", 90, 74),
-                Pitcher("Adam Ottavino", 0, "RP", 79, 73),
-                Pitcher("Phil Maton", 32, "RP", 76, 75),
-                Pitcher("Drew Smith", 40, "RP", 78, 76),
-                Pitcher("Jake Diekman", 35, "RP", 74, 71),
-                Pitcher("Reed Garrett", 75, "RP", 74, 72),
-                Pitcher("Sean Reid-Foley", 64, "RP", 73, 70),
+                Pitcher("Devin Williams", 38, "CP", 84, 79, 78,
+                        arsenal=({"Slider": {"effectiveness": {"break": 96, "movement": 90}}})),
             ]
         }
     },
     "away_team": {
         "position_players": [
-           PositionPlayer("Aaron Judge", 99, "RF", 98, 92),
-           PositionPlayer("Cody Bellinger", 35, "CF", 88, 88),
-           PositionPlayer("Giancarlo Stanton", 27, "DH", 81, 60),
-           PositionPlayer("Jazz Chisholm Jr.", 13, "3B", 82, 78),
-           PositionPlayer("Anthony Volpe", 11, "SS", 75, 85),
-           PositionPlayer("Austin Wells", 28, "C", 78, 76),
-           PositionPlayer("Paul Goldschmidt", 46, "1B", 88, 82),
-           PositionPlayer("Oswaldo Cabrera", 95, "2B", 72, 75),
-           PositionPlayer("Trent Grisham", 12, "LF", 68, 88),
-           PositionPlayer("Jose Trevino", 39, "C", 65, 85),
-           PositionPlayer("DJ LeMahieu", 26, "INF", 80, 82),
-           PositionPlayer("Oswaldo Peraza", 91, "INF", 70, 80),
-           PositionPlayer("Ben Rice", 93, "1B", 74, 72),
+           PositionPlayer("Aaron Judge", 99, "RF", 98, 92, [
+               
+           ]),
         ],
         "pitchers": {
             "starters": [
-                Pitcher("Max Fried", 54, "SP", 87, 78),
-                Pitcher("Cam Schlittler", 31, "SP", 87, 84),
-                Pitcher("Will Warren", 29, "SP", 82, 75),
-                Pitcher("Carlos Rodon", 55, "SP", 83, 63),
-                Pitcher("Ryan Weathers", 40, "SP", 76, 61),
+                Pitcher("Max Fried", 54, "SP", 87, 83, 78, handedness="LHP"),
             ],
             "relievers": [
-                Pitcher("David Bednar", 53, "CP", 84, 78)
+                Pitcher("David Bednar", 53, "CP", 84, 80, 78)
             ]
         }        
     }
