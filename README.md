@@ -65,4 +65,4 @@ Both rosters reflect 2026 player data.
 
 ---
 
-*Built as a learning project — tracking what I implement myself vs. what I delegate in `logs/development_log.md`.*
+*Built as a learning project — tracking what I implement myself vs. what I delegate in `logs/`.*
