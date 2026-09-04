@@ -1,14 +1,20 @@
-# game_engine.py
+import os
+import sys
 import random
 
+# Ensure repository root is in sys.path so backend package imports work in all contexts
+_repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
+
 try:
-    from backend.pitch_strategy import PitchStrategyMVP
-    from backend.batter_strategy import BatterStrategy
-    from backend.strike_zone import StrikeZone
+    from backend.engine.pitch_strategy import PitchStrategyMVP
+    from backend.engine.batter_strategy import BatterStrategy
+    from backend.engine.strike_zone import StrikeZone
 except ImportError:
     from pitch_strategy import PitchStrategyMVP
-    from strike_zone import StrikeZone
     from batter_strategy import BatterStrategy
+    from backend.engine.strike_zone import StrikeZone
 # expects to work with home_roster, away_roster, home_name, away_name as dict
 class GameEngine:
     def __init__(self, home_roster, away_roster, home_name, away_name):
@@ -30,7 +36,7 @@ class GameEngine:
         # Strike Zone defined by coordinates
         # Split into two different dictionaries
         # CATCHER'S POV = Pitch Up & In should land on the (0,0):Top-Left
-        self.pitch_strategy = PitchStrategyMVP()
+        self.pitch_strategy = self.strategy = PitchStrategyMVP()
         self.batter_strategy = BatterStrategy()
 
         # Bases: 0=empty, 1=runner on 1st, 2=2nd, 3=3rd, 4=1st&2nd, 5=1st&3rd, 6=2nd&3rd, 7=loaded
@@ -54,6 +60,9 @@ class GameEngine:
         else:
             return self.home_lineup[self.current_batter_index]
 
+    def current_batter(self):
+        return self.current_batter_obj()
+
     def current_pitcher_obj(self):
         if self.top_bottom == "top":
             return self.home_pitcher
@@ -61,7 +70,9 @@ class GameEngine:
             return self.away_pitcher
 
     def advance_batter(self):
-        self.current_batter_index = (self.current_batter_index + 1) % 9
+        lineup = self.away_lineup if self.top_bottom == "top" else self.home_lineup
+        lineup_len = len(lineup) if lineup else 9
+        self.current_batter_index = (self.current_batter_index + 1) % lineup_len
 
     def _reset_count(self):
         self.balls = 0
@@ -532,8 +543,13 @@ class GameEngine:
     
 if __name__ == "__main__":
     import os, sys, random
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    from roster import rosters
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    try:
+        from backend.engine.roster import rosters # I think this where I receive Judge & Mclean
+    except ImportError:
+        from backend.engine.roster import rosters
 
     random.seed(4)  # reproducible debugging with the same pitch/hit sequence over and over again
 

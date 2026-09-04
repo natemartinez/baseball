@@ -1,0 +1,15 @@
+body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+.nav { margin-bottom: 20px; }
+.nav button { margin-right: 10px; padding: 8px 16px; cursor: pointer; font-size: 14px; }
+.tab { display: none; }
+.tab.active { display: block; }
+.button-inactive{display: none}
+
+
+.game-box { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 10px; white-space: pre-wrap; font-family: monospace; }
+.roster-list { list-style: none; padding: 0; }
+.roster-list li { padding: 5px; border-bottom: 1px solid #ddd; }
+.swap-controls { margin-top: 10px; }
+.swap-controls input { width: 60px; margin-right: 5px; padding: 4px; }
+button { cursor: pointer; }
+.hint { color: #666; font-size: 12px; margin-top: 10px; }

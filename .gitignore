@@ -13,3 +13,5 @@ backend/database/*.sqlite3
 *.db-journal
 *.db-wal
 *.db-shm
+
+docs/

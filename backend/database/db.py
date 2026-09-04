@@ -1,8 +1,34 @@
 import json
+from pathlib import Path
 import sqlite3
-from typing import Any
+import sys
+from typing import Any, Optional
 
-DB_PATH = "backend/database/mlb.db"
+# Ensure repository root is on sys.path when script is executed directly
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from backend.models import Player
+
+# Resolves to backend/database/mlb.db regardless of execution directory
+DB_DIR = Path(__file__).resolve().parent
+DB_PATH = DB_DIR / "mlb.db"
+
+
+def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+    """Helper to deserialize raw JSON columns into standard Python objects."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "position": row["position"],
+        "number": row["number"],
+        "vitals": json.loads(row["vitals"]),
+        "stats": json.loads(row["stats"]),
+        "zones": json.loads(row["zones"]),
+        "ratings": json.loads(row["ratings"]),
+        "traits": json.loads(row["traits"]),
+    }
 
 
 def init_db():
@@ -119,7 +145,7 @@ def add_player(
 
 def get_team_roster(
     team_name: str, season: int = 2026
-) -> list[dict[str, Any]]: # Expecting a team string -> returning a list of objects (players)
+) -> list[dict[str, Any]]:
     """Instant B-tree lookup for all active players on a team."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
@@ -139,109 +165,44 @@ def get_team_roster(
             (team_name, season),
         )
 
-        rows = cursor.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "name": row["name"],
-                "position": row["position"],
-                "number": row["number"],
-                "vitals": json.loads(row["vitals"]),
-                "stats": json.loads(row["stats"]),
-                "zones": json.loads(row["zones"]),
-                "ratings": json.loads(row["ratings"]),
-                "traits": json.loads(row["traits"]),
-            }
-            for row in rows
-        ]
-
-'''
-nolan_data = {
-    "name": "Nolan McLean",
-    "position": "SP",
-    "number": "26",
-    "vitals": {
-        "age": 25,
-        "experience": 2,
-        "height": "6'2\"",
-        "weight": 214,
-        "team": "New York Mets",
-    },
-    # If tracking his pitching metrics (since he transitioned full-time to the mound):
-    "stats": [
-        {"season": 2025, "w": 5, "l": 1, "era": 2.84, "so": 57, "whip": 1.08},
-        {"season": 2026, "w": 10, "l": 8, "era": 3.06, "so": 172, "whip": 1.12},
-    ],
-    # Slugging allowed across pitch locations
-    "zones": [
-        {"zone": "low-away", "slugging": 0.190},
-        {"zone": "upper-in", "slugging": 0.280},
-    ],
-    "ratings": [
-        {"category": "Break", "rating": 99},
-        {"category": "Velocity", "rating": 98},
-        {"category": "Arm Strength", "rating": 97},
-        {"category": "Control", "rating": 68},
-        {"category": "Stamina", "rating": 78},
-    ],
-    "traits": [
-        {
-            "name": "Spin Monster Sweeper",
-            "tier": "Diamond",
-            "description": "Elite 3,000+ RPM horizontal sweep with extreme whiff rates",
-        },
-        {
-            "name": "Power Fastball",
-            "tier": "Gold",
-            "description": "Mid-to-high 90s heater with heavy arm-side run from a low slot",
-        },
-        {
-            "name": "Two-Way Heritage",
-            "tier": "Silver",
-            "description": "Former collegiate two-way star possessing 80-grade raw hitting power",
-        },
-    ],
-}
-
-judge_data = {
-    "name": "Aaron Judge",
-    "position": "RF",
-    "number": "99",
-    "vitals": {
-        "age": 34,
-        "experience": 10,
-        "height": "6'7\"",
-        "weight": 282,
-        "team": "New York Yankees",  # <-- The function detects this
-    },
-    "stats": [
-        {"season": 2024, "hr": 58, "rbi": 144, "avg": 0.322, "ops": 1.159},
-        {"season": 2025, "hr": 45, "rbi": 115, "avg": 0.301, "ops": 1.050},
-    ],
-    "zones": [
-        {"zone": "upper-in", "slugging": 0.650},
-        {"zone": "heart", "slugging": 0.820},
-    ],
-    "ratings": [
-        {"category": "Power", "rating": 99},
-        {"category": "Contact", "rating": 88},
-    ],
-    "traits": [
-        {
-            "name": "Home Run Threat",
-            "tier": "Diamond",
-            "description": "Elite exit velocity",
-        }
-    ],
-}
+        return [_row_to_dict(row) for row in cursor.fetchall()]
 
 
-'''
+def get_player(player_id: int) -> Optional[Player]:
+    """Fetches a player by ID and hydrates them into a domain Player object."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
 
-#init_db()
+        cursor.execute("SELECT * FROM players WHERE id = ?", (player_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
 
-#player_id = add_player(**nolan_data, season=2026)
-judge = get_team_roster("New York Yankees") # Aaron Judge - Only Yankee in database
-mclean = get_team_roster("New York Mets")  # Nolan Mclean - Only Met in database
-print(f"Received Yankee: {judge}")
-print(f"Received Met: {mclean}")
+        raw_data = _row_to_dict(row)
+        return Player.from_db(raw_data)
+
+def get_team_roster_players(
+    team_name: str, season: int = 2026
+) -> list[Player]:
+    """Fetch active players for a team and hydrate them into domain Player objects."""
+    raw_players = get_team_roster(team_name, season)
+    return [Player.from_db(p) for p in raw_players]
+
+
+if __name__ == "__main__":
+    # Smoke test: inspect DB output and object hydration
+    judge = get_player(1)
+    mclean = get_player(2)
+
+    if judge:
+        print(f"Hydrated: {judge}")
+        print(f"Power: {judge.get_rating('Power')} | Has Trait: {judge.has_trait('Home Run Threat')}")
+    else:
+        print("Player ID 1 not found.")
+
+    if mclean:
+        print(f"Hydrated: {mclean}")
+        print(f"Break: {mclean.get_rating('Break')} | Has Trait: {mclean.has_trait('Spin Monster Sweeper')}")
+    else:
+        print("Player ID 2 not found.")

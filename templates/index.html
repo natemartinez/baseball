@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Baseball Simulation</title>
+
+</head>
+<body>
+    <h1>Baseball Simulation</h1>
+    <div class="nav">
+        <button onclick="showTab('game')">Game</button>
+        <button onclick="showTab('lineups')">Lineups</button>
+        <button onclick="showTab('rotation')">Rotation</button>
+    </div>
+
+    <div id="game" class="tab active">
+        <div class="game-box" id="game-state">Press "Start Game" to begin.</div>
+        <button id="start-game" onclick="startGame()">Start Game</button>
+        <button onclick="throwPitch()">Throw Pitch</button>
+        <button id="reset-game" class="button-inactive" onclick="resetGame()">Reset Game</button>
+        <p id="pitch-result"></p>
+    </div>
+
+    <div id="lineups" class="tab">
+        <div id="lineups-content"></div>
+    </div>
+
+    <div id="rotation" class="tab">
+        <div id="rotations-content"></div>
+    </div>
+
+    <p class="hint">Run <code>python main.py</code> and open <a href="http://localhost:5000" target="_blank">http://localhost:5000</a>. Press Ctrl+C in the terminal to stop.</p>
+
+    <script>
+        function showTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(tab).classList.add('active');
+            if (tab === 'lineups') renderLineups();
+            if (tab === 'rotation') renderRotations();
+            if (tab === 'game'){
+                renderGame();
+            }
+        }
+
+        async function api(url, options = {}) {
+            const res = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json' } });
+            return res.json();
+        }
+
+        async function renderGame() {
+            const data = await api('/api/state');
+            if (!data.game) {
+                document.getElementById('game-state').textContent = 'Press "Start Game" to begin.';
+                return;
+            }
+          
+            const g = data.game;
+            const bases = `1B: ${g.bases[1] ? 'X' : '_'}  2B: ${g.bases[2] ? 'X' : '_'}  3B: ${g.bases[3] ? 'X' : '_'}`;
+            const score = Object.entries(g.score).map(([k, v]) => `${k}: ${v}`).join(' | ');
+            const text = `Inning: ${g.inning} (${g.top_bottom.toUpperCase()})\nScore: ${score}\nOuts: ${g.outs}   Balls: ${g.balls}   Strikes: ${g.strikes}\nBases: ${bases}\nBatter: ${g.batter}\nPitcher: ${g.pitcher}\n${g.game_over ? 'GAME OVER' : ''}`;
+            document.getElementById('game-state').textContent = text;
+        }
+
+        async function startGame() {
+            await api('/api/start_game', { method: 'POST' });
+            document.getElementById('start-game').classList.toggle('button-inactive');
+            document.getElementById('reset-game').classList.toggle('button-inactive');
+            renderGame();
+        }
+
+        async function throwPitch() {
+            const data = await api('/api/pitch', { method: 'POST' });
+            const resultEl = document.getElementById('pitch-result');
+            if (data.error) {
+                resultEl.textContent = data.error;
+            } else {
+                resultEl.textContent = data.result;
+                renderGame();
+            }
+        }
+
+        async function resetGame() {
+            await api('/api/reset', { method: 'POST' });
+            document.getElementById('start-game').classList.toggle('button-inactive');
+            document.getElementById('reset-game').classList.toggle('button-inactive');
+            document.getElementById('pitch-result').textContent = 'Game reset.';
+            renderGame();
+        }
+
+        function renderLineups() {
+            const container = document.getElementById('lineups-content');
+            container.innerHTML = '';
+            fetch('/api/state').then(r => r.json()).then(data => {
+                data.lineups.forEach((team, idx) => {
+                    const div = document.createElement('div');
+                    div.innerHTML = `<h3>${team.name}</h3><ul class="roster-list">${team.players.map((p, i) => `<li>${i + 1}. ${p}</li>`).join('')}</ul>
+                    <div class="swap-controls">
+                        <input type="number" id="lineup-pos1-${idx}" min="1" max="9" placeholder="Pos 1">
+                        <input type="number" id="lineup-pos2-${idx}" min="1" max="9" placeholder="Pos 2">
+                        <button onclick="swapLineup(${idx})">Swap</button>
+                    </div>`;
+                    container.appendChild(div);
+                });
+            });
+        }
+
+        async function swapLineup(teamIdx) {
+            const pos1 = parseInt(document.getElementById(`lineup-pos1-${teamIdx}`).value);
+            const pos2 = parseInt(document.getElementById(`lineup-pos2-${teamIdx}`).value);
+            if (!pos1 || !pos2 || pos1 === pos2) { alert('Select two different positions'); return; }
+            await api('/api/swap_lineup', { method: 'POST', body: JSON.stringify({ team: teamIdx, pos1, pos2 }) });
+            renderLineups();
+        }
+
+        function renderRotations() {
+            const container = document.getElementById('rotations-content');
+            container.innerHTML = '';
+            fetch('/api/state').then(r => r.json()).then(data => {
+                data.rotations.forEach((team, idx) => {
+                    const count = team.pitchers.length;
+                    const div = document.createElement('div');
+                    div.innerHTML = `<h3>${team.name}</h3><ul class="roster-list">${team.pitchers.map((p, i) => `<li>${i + 1}. ${p}</li>`).join('')}</ul>
+                    <div class="swap-controls">
+                        <input type="number" id="rot-pos1-${idx}" min="1" max="${count}" placeholder="Pos 1">
+                        <input type="number" id="rot-pos2-${idx}" min="1" max="${count}" placeholder="Pos 2">
+                        <button onclick="swapRotation(${idx})">Swap</button>
+                    </div>`;
+                    container.appendChild(div);
+                });
+            });
+        }
+
+        async function swapRotation(teamIdx) {
+            const pos1 = parseInt(document.getElementById(`rot-pos1-${teamIdx}`).value);
+            const pos2 = parseInt(document.getElementById(`rot-pos2-${teamIdx}`).value);
+            if (!pos1 || !pos2 || pos1 === pos2) { alert('Select two different positions'); return; }
+            await api('/api/swap_rotation', { method: 'POST', body: JSON.stringify({ team: teamIdx, pos1, pos2 }) });
+            renderRotations();
+        }
+
+        renderGame();
+    </script>
+</body>
+</html>

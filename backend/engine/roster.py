@@ -2,7 +2,7 @@
 
 
 class Player:
-    def __init__(self, id, name, number, field_rating, handedness=None):
+    def __init__(self, name, number, field_rating, handedness=None, id=None):
         self.id = id
         self.name = name
         self.number = number
@@ -79,7 +79,7 @@ class Pitch:
 
 class Pitcher(Player): 
     def __init__(self, name, number, position, pitch_rating, control_rating,
-                 field_rating, pitch_zones, arsenal=None, handedness="RHP"):
+                 field_rating, pitch_zones=None, arsenal=None, handedness="RHP"):
         super().__init__(name, number, field_rating, handedness)
         self.position = position
         self.pitch_rating = pitch_rating
@@ -96,7 +96,7 @@ class Pitcher(Player):
                 f"\n Arsenal: {self.arsenal}")
     
 class PositionPlayer(Player): 
-    def __init__(self, name, number, position, hit_rating, field_rating, hitter_zones, handedness="RHB"):
+    def __init__(self, name, number, position, hit_rating, field_rating, hitter_zones=None, handedness="RHB"):
         super().__init__(name, number, field_rating, handedness) # Takes from the parent class(inheritance from 'Player' class)
         self.position = position    # same parameters as the parent class besides 'self'
         self.hit_rating = hit_rating
