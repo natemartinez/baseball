@@ -8,13 +8,13 @@ if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
 try:
-    from backend.engine.pitch_strategy import PitchStrategyMVP
+    from backend.engine.pitch_strategy import PitchStrategy
     from backend.engine.batter_strategy import BatterStrategy
     from backend.engine.strike_zone import StrikeZone
 except ImportError:
-    from pitch_strategy import PitchStrategyMVP
+    from pitch_strategy import PitchStrategy
     from batter_strategy import BatterStrategy
-    from backend.engine.strike_zone import StrikeZone
+    from strike_zone import StrikeZone
 # expects to work with home_roster, away_roster, home_name, away_name as dict
 class GameEngine:
     def __init__(self, home_roster, away_roster, home_name, away_name):
@@ -33,14 +33,6 @@ class GameEngine:
         self.strikes = 0
         self.game_over = False
         self.strike_zone = StrikeZone()
-        # Strike Zone defined by coordinates
-        # Split into two different dictionaries
-        # CATCHER'S POV = Pitch Up & In should land on the (0,0):Top-Left
-        self.pitch_strategy = self.strategy = PitchStrategyMVP()
-        self.batter_strategy = BatterStrategy()
-
-        # Bases: 0=empty, 1=runner on 1st, 2=2nd, 3=3rd, 4=1st&2nd, 5=1st&3rd, 6=2nd&3rd, 7=loaded
-        # Using a simple dict for clarity
         self.bases = {1: False, 2: False, 3: False}
 
         # Batting order
@@ -52,6 +44,7 @@ class GameEngine:
         # Starting pitchers
         self.away_pitcher = away_roster['pitchers']['starters'][0]
         self.home_pitcher = home_roster['pitchers']['starters'][0]
+
 
 
     def current_batter_obj(self):
@@ -120,7 +113,6 @@ class GameEngine:
             runs += 1
         return runs
 
-
     # ====================================================================
     # PITCH INTENT / DECISION-MAKING LAYER
     #   pitch_choice          -> WHICH pitch (a Pitch instance)
@@ -133,56 +125,6 @@ class GameEngine:
     # coordinate — the intent dict they produce is handed to pitch_to_zone
     # (EXECUTION) below.
     # ====================================================================
-
-    def pitch_choice(self):
-        """Strategic pitch selection: count leverage -> weights -> category -> Pitch."""
-        # WEIGHTS ARE STORED IN _init_ function inside pitch_strategy.py
-        def _pitch_randomizer(strategy):
-            # Return string after randomizer -> direct lookup to the pitch object
-              pitch_selection = list(strategy["weights"].keys())
-              weights = list(strategy["weights"].values()) 
-
-              return random.choices(pitch_selection, weights=weights, k=1)[0]
-
-        leverage, probs = self.strategy.calculate_probabilities(
-            self.balls, self.strikes,
-            double_play_situation=(self.outs < 2 and self.bases[1]))
-        
-        chosen_type = self.strategy.select_pitch(probs)
-
-        self._last_strategy = {"leverage": leverage, "weights": probs, "category": chosen_type}
-
-        # last_strategy -> Randomizer -> Chosen Pitch
-        #print('LAST STRATEGY:',self._last_strategy)
-
-        return _pitch_randomizer(self._last_strategy)
-
-
-
-    def pitch_intent_manager(self, pitch, pitch_info):
-        '''
-          Pitch Argument: Pitch String to use for direct lookup. Example: 'Fastball'
-          Now this is where LOCATION is determined from pitch_strategy.py module.
-          Heavily influenced by pitch effectiveness + batter's weaknesses
-        '''
-        batter_info = self.current_batter_obj()
-        # 1. create batter weakness -> roster.py
-
-        # If pitch matches weakness, boosts probability to put the pitch there
-        # Example: 'High Fastball', pitcher most likely uses their fastball to the top of the zone
-
-        #zone = self.strike_zone["INNER" if pitch.role == "catch_zone" else "OUTER"] # Is the pitch meant to land in the zone or out of the zone?
- 
-        print('PITCH PICK INTENT:', pitch)
-
-
-        # control decides whether the intent lands in the zone
-        
-        # If roll ended up as 'Perfect' & 'Solid', then intended needs to match execution
-
-
-       # return zone, label
-
 
     def pitch_to_zone(self, chosen_pitch, location_choice):
         """EXECUTION orchestrator.
@@ -198,9 +140,19 @@ class GameEngine:
             "effective": bool,               # did the pitch play as intended
             "velocity": float,               # thrown mph, sampled from the pitch's range
           }
-        """
+
         # Intent vs Execution: the intent says where it SHOULD go; the
         # execution decides where it ACTUALLY goes.
+            STATCAST DATASETS (OVERALL):
+            Balls: 35.9%
+            Called Strikes: 17.1%
+            Swinging Strikes: 9.9%
+            Foul Balls: 17.9%
+            Hit Into Play (Contact): 18.2% 
+
+            80.8% Strike/Ball
+            18.2% for Contact  
+        """
 
 
 
@@ -210,7 +162,6 @@ class GameEngine:
             chosen_pitch, zone, location_choice["intended_label"], chosen_pitch.effectiveness,
             location_choice["dice"]["control"], location_choice["velocity_mph"])
         return executed
-
 
     def _label_to_coord(self, zone, label, batter_hand):
           """Relative label ("down_away", "up_in") -> (x, y) coordinate.
@@ -317,7 +268,6 @@ class GameEngine:
             "velocity": velocity_mph,
         }
 
-
     def _apply_drift(self, intended, tier, zone):
         """Shift the intended coordinate by the accuracy tier, clamped to the grid."""
         drift_map = {
@@ -345,56 +295,18 @@ class GameEngine:
   
     def pitch(self):
         """Simulate a pitch, update game state, return (result_string, (outs, balls, strikes))."""
-        """ STATCAST DATASETS (OVERALL):
-            Balls: 35.9%
-            Called Strikes: 17.1%
-            Swinging Strikes: 9.9%
-            Foul Balls: 17.9%
-            Hit Into Play (Contact): 18.2% 
 
-            80.8% Strike/Ball
-            18.2% for Contact  
-        """
         if self.game_over:
             return "Game already over. Reset to play again.", (self.outs, self.balls, self.strikes)
-        
 
-        pitcher = self.current_pitcher_obj()# Pitcher object
-        pitch_strategy = self.pitch_choice()   # Strategy -> Returns pitch string -> For Pitch intent (LOCATION, movement)
-       # print('CHOSEN PITCH:', pitch_strategy)  # Pitch instance w/ effectiveness
-        pitch_intent = self.pitch_intent_manager(pitch_strategy, pitcher.arsenal[pitch_strategy])                  # intent + dice rolls
-        # Above happens before the pitch is THROWN
-       # pitch_to_zone = self.pitch_to_zone(pitch, location_choice)
-        # pitch_to_zone is the intent vs. execution, what pitcher wants vs. what REALLY happens
+        pitcher = self.current_pitcher_obj() # Pitcher object
+        batter  = self.current_batter_obj()
 
-        outcome = self.resolve_pitch_outcome()
-
-        s = self._last_strategy
-      #  print(f"Strategy: {s['leverage']} {s['weights']} -> {s['category']}")
-       # print(f"Intent: {location_choice['intended_label']} -> {location_choice['location_result']} {location_choice['dice']}") # source of issue
-        # OUTPUT EXAMPLE: Intent: up_in -> in_zone {'control': True, 'movement': False, 'break': True, 'velocity': True}
-      #  print('PITCH TO ZONE', pitch_to_zone) # ---> display_pitch(), animation
-        # OUTPUT EXAMPLE: Needs in or out_of_zone
-        #  {'pitch': 'Cutter', 'coordinate': (0, 1), 'zone_label': ('INNER', 'Top-Middle'), 'accuracy': 'Inaccurate', 
-        #  'movement': 'Live', 'effective': True} -> if in-accurate, move coordinate
+        PitchStrategy(pitcher, batter)
 
 
-        # outcome = self.resolve_pitch_outcome(...)  ← commented out
-
-
-        # outcome is ALWAYS ''
-        ''' Takes in pitch type, pitch rating and location result -> returns 
-            - Pitch Location
-            - Pitch Accuracy
-            - Pitch Movement -> resolve_pitch_outcome
-        '''
-        # Above takes place before the batter reacts
-
-        # resolve_pitch_outcome
-
-        # IF execution is solid or above, it should always match with what was intented
-        
-        return outcome, (self.outs, self.balls, self.strikes)
+      #  outcome = self.resolve_pitch_outcome()
+      #  return outcome, (self.outs, self.balls, self.strikes)
 
 
     def resolve_pitch_outcome(self):
@@ -540,27 +452,3 @@ class GameEngine:
             winner = self.away_name if self.score[self.away_name] > self.score[self.home_name] else self.home_name
             lines.append(f"GAME OVER - {winner} wins!")
         return "\n".join(lines)
-    
-if __name__ == "__main__":
-    import os, sys, random
-    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    if repo_root not in sys.path:
-        sys.path.insert(0, repo_root)
-    try:
-        from backend.engine.roster import rosters # I think this where I receive Judge & Mclean
-    except ImportError:
-        from backend.engine.roster import rosters
-
-    random.seed(4)  # reproducible debugging with the same pitch/hit sequence over and over again
-
-    away = rosters["away_team"]
-    home = rosters["home_team"]
-    game = GameEngine(home, away, "Home", "Away")
-
-    print(game.get_game_state_text())
-    for i in range(1):          # cap so a full 9-inning game doesn't run forever - 2 full top-bottom innings
-        result, _ = game.pitch()
-        print(f"[{i:>2}] {result}")
-        if game.game_over:
-            break
-    print(game.get_game_state_text())

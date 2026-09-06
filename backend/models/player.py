@@ -16,6 +16,7 @@ class Player:
         traits: Optional[list[dict[str, str]]] = None,
         vitals: Optional[dict[str, Any]] = None,
         stats: Optional[list[dict[str, Any]]] = None,
+        pitch_arsenal: Optional[list[dict[str, Any]]] = None,
     ):
         self.id = id
         self.name = name
@@ -30,6 +31,7 @@ class Player:
         self.traits = traits or []
         self.vitals = vitals or {}
         self.stats = stats or []
+        self.pitch_arsenal = pitch_arsenal or []
 
     @classmethod
     def from_db(cls, raw: dict[str, Any]) -> "Player":
@@ -70,6 +72,7 @@ class Player:
             traits=raw.get("traits", []),
             vitals=vitals,
             stats=raw.get("stats", []),
+            pitch_arsenal=raw.get("pitch_arsenal", []),
         )
 
     def get_rating(self, category: str, default: int = 50) -> int:
@@ -79,6 +82,13 @@ class Player:
     def has_trait(self, trait_name: str) -> bool:
         """Check if a player possesses a specific badge or trait."""
         return any(t.get("name") == trait_name for t in self.traits)
+
+    def get_pitch(self, pitch_name: str) -> Optional[dict[str, Any]]:
+        """Fetch pitch details from the player's pitch arsenal by pitch name."""
+        for p in self.pitch_arsenal:
+            if p.get("pitch", "").lower() == pitch_name.lower():
+                return p
+        return None
 
     def __repr__(self) -> str:
         return f"<Player #{self.number} {self.name} ({self.position})>"

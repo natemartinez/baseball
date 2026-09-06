@@ -18,6 +18,8 @@ DB_PATH = DB_DIR / "mlb.db"
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     """Helper to deserialize raw JSON columns into standard Python objects."""
+    keys = row.keys()
+    pitch_arsenal_raw = row["pitch_arsenal"] if "pitch_arsenal" in keys else None
     return {
         "id": row["id"],
         "name": row["name"],
@@ -28,6 +30,7 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "zones": json.loads(row["zones"]),
         "ratings": json.loads(row["ratings"]),
         "traits": json.loads(row["traits"]),
+        "pitch_arsenal": json.loads(pitch_arsenal_raw) if pitch_arsenal_raw else [],
     }
 
 
@@ -56,9 +59,16 @@ def init_db():
                 stats TEXT NOT NULL,
                 zones TEXT NOT NULL,
                 ratings TEXT NOT NULL,
-                traits TEXT NOT NULL
+                traits TEXT NOT NULL,
+                pitch_arsenal TEXT DEFAULT '[]'
             )
         """)
+
+        # Migration: ensure pitch_arsenal column exists if table was previously created without it
+        cursor.execute("PRAGMA table_info(players);")
+        existing_cols = [col[1] for col in cursor.fetchall()]
+        if "pitch_arsenal" not in existing_cols:
+            cursor.execute("ALTER TABLE players ADD COLUMN pitch_arsenal TEXT DEFAULT '[]';")
 
         # 3. Junction table (depends on 1 & 2 above)
         cursor.execute("""
@@ -103,32 +113,66 @@ def add_player(
     zones: list[dict[str, Any]],
     ratings: list[dict[str, Any]],
     traits: list[dict[str, Any]],
+    pitch_arsenal: Optional[list[dict[str, Any]]] = None,
     season: int = 2026,
-) -> int:
+    **kwargs: Any,
+) -> tuple[int, bool]:
+    """Inserts a new player or updates an existing record matched by name.
+
+    Returns:
+        tuple[int, bool]: (player_id, is_created)
+    """
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
 
-        # Insert player document
-        cursor.execute(
-            """
-            INSERT INTO players (name, vitals, position, number, stats, zones, ratings, traits)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                name,
-                json.dumps(vitals),
-                position,
-                number,
-                json.dumps(stats),
-                json.dumps(zones),
-                json.dumps(ratings),
-                json.dumps(traits),
-            ),
-        )
-        player_id = cursor.lastrowid
+        # 1. Check if the player already exists
+        cursor.execute("SELECT id FROM players WHERE name = ?", (name,))
+        row = cursor.fetchone()
 
-        # Relate player to team in the junction table
+        if row:
+            player_id = row[0]
+            is_created = False
+            cursor.execute(
+                """
+                UPDATE players
+                SET vitals = ?, position = ?, number = ?, stats = ?, zones = ?, ratings = ?, traits = ?, pitch_arsenal = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(vitals),
+                    position,
+                    number,
+                    json.dumps(stats),
+                    json.dumps(zones),
+                    json.dumps(ratings),
+                    json.dumps(traits),
+                    json.dumps(pitch_arsenal or []),
+                    player_id,
+                ),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO players (name, vitals, position, number, stats, zones, ratings, traits, pitch_arsenal)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    name,
+                    json.dumps(vitals),
+                    position,
+                    number,
+                    json.dumps(stats),
+                    json.dumps(zones),
+                    json.dumps(ratings),
+                    json.dumps(traits),
+                    json.dumps(pitch_arsenal or []),
+                ),
+            )
+            player_id = cursor.lastrowid
+            is_created = True
+
+        # 2. Relate player to team in rosters table (replaces status if exists)
         team_name = vitals.get("team")
         if team_name:
             team_id = get_or_create_team(cursor, team_name)
@@ -140,8 +184,7 @@ def add_player(
                 (player_id, team_id, season),
             )
 
-        return player_id
-
+        return player_id, is_created
 
 def get_team_roster(
     team_name: str, season: int = 2026
@@ -166,7 +209,6 @@ def get_team_roster(
         )
 
         return [_row_to_dict(row) for row in cursor.fetchall()]
-
 
 def get_player(player_id: int) -> Optional[Player]:
     """Fetches a player by ID and hydrates them into a domain Player object."""
@@ -204,5 +246,7 @@ if __name__ == "__main__":
     if mclean:
         print(f"Hydrated: {mclean}")
         print(f"Break: {mclean.get_rating('Break')} | Has Trait: {mclean.has_trait('Spin Monster Sweeper')}")
+        if mclean.pitch_arsenal:
+            print(f"Arsenal: {len(mclean.pitch_arsenal)} pitches | Primary: {mclean.pitch_arsenal[0]['pitch']} ({mclean.pitch_arsenal[0]['usage_pct']}%)")
     else:
         print("Player ID 2 not found.")

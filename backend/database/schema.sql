@@ -70,6 +70,21 @@ CREATE TABLE IF NOT EXISTS player_zones (
     UNIQUE(player_id, zone)
 );
 
+CREATE TABLE IF NOT EXISTS player_pitch_arsenal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    player_id INTEGER NOT NULL,
+    pitch TEXT NOT NULL,
+    pitches INTEGER NOT NULL,
+    usage_pct REAL NOT NULL,
+    usage_pct_vs_lhb REAL,
+    usage_pct_vs_rhb REAL,
+    avg_velo_mph REAL,
+    max_velo_mph REAL,
+    avg_spin_rpm REAL,
+    FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+    UNIQUE(player_id, pitch)
+);
+
 -- Index critical foreign key lookups
 CREATE INDEX IF NOT EXISTS idx_rosters_team_season ON rosters(team_id, season);
 CREATE INDEX IF NOT EXISTS idx_rosters_player ON rosters(player_id);

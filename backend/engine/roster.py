@@ -79,7 +79,7 @@ class Pitch:
 
 class Pitcher(Player): 
     def __init__(self, name, number, position, pitch_rating, control_rating,
-                 field_rating, pitch_zones=None, arsenal=None, handedness="RHP"):
+                 field_rating, pitch_zones=None, arsenal=None, handedness="RHP", pitch_arsenal=None):
         super().__init__(name, number, field_rating, handedness)
         self.position = position
         self.pitch_rating = pitch_rating
@@ -87,6 +87,7 @@ class Pitcher(Player):
         self.pitch_zones = pitch_zones
         # Need to have some kind of generator for random arsenals
         self.arsenal = arsenal
+        self.pitch_arsenal = pitch_arsenal or []
 
     def __str__(self):
         return (f"#{self.number} {self.name} - {self.position} "
