@@ -1,0 +1,5 @@
+/* Minimal reset — keep it basic */
+body {
+  margin: 0;
+  background: #f5f5f5;
+}
