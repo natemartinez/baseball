@@ -211,7 +211,10 @@ def get_team_roster(
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
 def get_player(player_id: int) -> Optional[Player]:
-    """Fetches a player by ID and hydrates them into a domain Player object."""
+    """
+    Fetches a player from SQLite by primary key ID and hydrates them into
+    an authoritative domain Player object.
+    """
     with sqlite3.connect(DB_PATH) as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -222,14 +225,17 @@ def get_player(player_id: int) -> Optional[Player]:
             return None
 
         raw_data = _row_to_dict(row)
-        return Player.from_db(raw_data)
+        return Player.from_dict(raw_data)
 
 def get_team_roster_players(
     team_name: str, season: int = 2026
 ) -> list[Player]:
-    """Fetch active players for a team and hydrate them into domain Player objects."""
+    """
+    Primary Domain Loader: Fetches active roster players for a given team
+    and hydrates them into domain Player objects.
+    """
     raw_players = get_team_roster(team_name, season)
-    return [Player.from_db(p) for p in raw_players]
+    return [Player.from_dict(p) for p in raw_players]
 
 
 if __name__ == "__main__":
