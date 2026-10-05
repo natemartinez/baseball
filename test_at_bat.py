@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 from pathlib import Path
 import random
 import sys
+
 
 # Ensure repository root is on sys.path
 ROOT_DIR = Path(__file__).resolve().parent
@@ -19,15 +21,16 @@ def run_single_at_bat(seed: int = 4):
   random.seed(seed)
 
   # 1. Fetch hydrated domain objects directly from SQLite
-  judge = get_player(1)  # Batter (ID 1 - Aaron Judge)
-  mclean = get_player(2)  # Pitcher (ID 2 - Nolan McLean)
+  mclean = get_player(1)  # Pitcher (ID 1 - Nolan McLean)
+  judge = get_player(2)   # Batter (ID 2 - Aaron Judge)
 
   if not judge or not mclean:
     print(
-        "Error: Make sure both players are seeded in mlb.db (ID 1: Judge, ID 2:"
-        " McLean)."
+        "Error: Make sure both players are seeded in mlb.db (ID 1: McLean, ID 2:"
+        " Judge)."
     )
     return
+
 
   # 2. Package into minimal roster payloads expected by GameEngine
   away_team = {
@@ -53,7 +56,10 @@ def run_single_at_bat(seed: int = 4):
   # 3. Step pitch-by-pitch until plate appearance concludes
   while True:
     pitch_num += 1
-    result, (outs, balls, strikes) = game.pitch()
+    res = game.pitch()
+    details = res['pitch_details']
+    result = details['description']
+    balls, strikes, outs = game.balls, game.strikes, game.outs
 
     print(f"Pitch {pitch_num:>2}: {result:<28} | Count: {balls}-{strikes}")
 
