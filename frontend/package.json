@@ -1,18 +1,13 @@
 {
-  "name": "frontend",
+  "name": "baseball-simulation-client",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "parcel index.html",
-    "build": "parcel build index.html",
-    "preview": "parcel build index.html && npx serve dist"
+    "dev": "./dev.sh",
+    "start": "./dev.sh",
+    "dev:backend": "cd .. && .venv/bin/python main.py",
+    "dev:frontend": "cd assets && npx expo start --web"
   },
-  "dependencies": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
-  },
-  "devDependencies": {
-    "parcel": "^2.16.4"
-  }
+  "dependencies": {}
 }

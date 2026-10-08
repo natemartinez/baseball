@@ -1,0 +1,58 @@
+{
+  "name": "Pitching Logic & Physics Documentation",
+  "version": "1.0.0",
+  "lastUpdated": "2026-09-12T15:00:00Z",
+  "description": "Interactive documentation explaining pitching mechanics, Statcast aerodynamics, strategic AI intent, strike zone command, front-end React/JS rendering, and persistent database statistics.",
+  "documents": [
+    {
+      "id": "overview",
+      "filename": "01_HIGH_LEVEL_OVERVIEW.md",
+      "title": "01. High-Level Pitching Logic Overview",
+      "summary": "End-to-end simulation lifecycle, from pitcher intent to UI delivery and database update.",
+      "category": "Architecture"
+    },
+    {
+      "id": "physics",
+      "filename": "02_STATCAST_PHYSICS_AND_ARSENAL.md",
+      "title": "02. Statcast Aerodynamics & Pitch Repertoire",
+      "summary": "Velocity bands, spin rates, aerodynamic break, Stuff+ ratings, and pitch profiles.",
+      "category": "Physics"
+    },
+    {
+      "id": "strategy",
+      "filename": "03_INTENT_AND_STRATEGY_MATRIX.md",
+      "title": "03. Intent & Strategy Decision Matrix",
+      "summary": "Leverage calculations, count context (ahead/behind/full), double-play hunts, and hot-zone avoidance.",
+      "category": "AI Strategy"
+    },
+    {
+      "id": "strike_zone",
+      "filename": "04_STRIKE_ZONE_COMMAND_AND_TARGETING.md",
+      "title": "04. Strike Zone Command & 13-Zone Coordinate Model",
+      "summary": "Inner strike zone, shadow/chase rings, Gaussian command jitter, and umpire call determination.",
+      "category": "Geometry & Command"
+    },
+    {
+      "id": "frontend",
+      "filename": "05_REACT_JS_FRONTEND_INTEGRATION.md",
+      "title": "05. React & JS Front-End Integration",
+      "summary": "Reactive state updates, SVG strike zone coordinate mapping, and flight path rendering.",
+      "category": "Frontend"
+    },
+    {
+      "id": "database",
+      "filename": "06_DATABASE_PERSISTENCE_INTEGRATION.md",
+      "title": "06. Database Persistence & Live Statistics Engine",
+      "summary": "Atomic recalculation of ERA, WHIP, AVG, and OPS across mock and PostgreSQL adapters.",
+      "category": "Database"
+    }
+  ],
+  "interactiveEndpoints": {
+    "getDocumentationMetadata": "GET /api/docs",
+    "getDocumentationFile": "GET /api/docs/file?name={filename}",
+    "stepByStepPitchCalculator": "POST /api/docs/simulate-step-by-step",
+    "livePitchExecution": "POST /api/pitch",
+    "liveAtBatSimulation": "POST /api/sim_at_bat",
+    "databaseStatus": "GET /api/db/status"
+  }
+}

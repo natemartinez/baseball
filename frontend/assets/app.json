@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Baseball Sim",
+    "slug": "baseball-simulation-client",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.example.baseballsim"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0F15"
+      },
+      "package": "com.example.baseballsim"
+    }
+  }
+}
