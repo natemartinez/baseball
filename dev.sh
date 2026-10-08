@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # Baseball Simulation: Unified Dev Startup Script
-# Boots both the Python backend and React Native Expo web frontend concurrently.
+# Boots the Python Flask backend and the Expo web client concurrently.
 # Cleanly shuts down both processes on Ctrl+C (SIGINT).
+#
+# The Expo client is vendored in this repo at frontend/assets.
+# Override with: FRONTEND_DIR=/path/to/assets ./dev.sh
 # ==============================================================================
 
-BACKEND_DIR="/Users/ljmartinez/Downloads/dev-projects/baseball"
-FRONTEND_DIR="/Users/ljmartinez/antigravity/Baseball-Simulation-Client/mobile"
+set -u
+
+BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRONTEND_DIR="${FRONTEND_DIR:-$BACKEND_DIR/frontend/assets}"
 
 # Color formatting
 CYAN='\033[0;36m'
@@ -19,15 +24,61 @@ echo -e "${CYAN}================================================================
 echo -e "${GREEN}⚾  STARTING BASEBALL SIMULATION FULL DEV ENVIRONMENT${NC}"
 echo -e "${CYAN}======================================================================${NC}"
 
-# Check virtual environment
-if [ ! -f "$BACKEND_DIR/.venv/bin/python" ]; then
-  echo -e "${RED}Error: Python virtual environment not found at $BACKEND_DIR/.venv/bin/python${NC}"
+# Resolve a Python interpreter from the backend virtualenv
+if [ -x "$BACKEND_DIR/.venv/bin/python" ]; then
+  PYTHON="$BACKEND_DIR/.venv/bin/python"
+elif [ -x "$BACKEND_DIR/venv/bin/python" ]; then
+  PYTHON="$BACKEND_DIR/venv/bin/python"
+else
+  echo -e "${RED}Error: no Python virtualenv found at $BACKEND_DIR/.venv${NC}"
+  echo -e "${YELLOW}Create one with: python3 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt${NC}"
   exit 1
 fi
 
+# Node/npx must be available for Expo
+if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
+  # Try to load nvm if Node is installed but not on PATH
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "$HOME/.nvm/nvm.sh"
+  elif [ -s "$HOME/.var/app/com.visualstudio.code/config/nvm/nvm.sh" ]; then
+    # shellcheck disable=SC1090
+    . "$HOME/.var/app/com.visualstudio.code/config/nvm/nvm.sh"
+  fi
+fi
+
+if ! command -v node >/dev/null 2>&1 || ! command -v npx >/dev/null 2>&1; then
+  echo -e "${RED}Error: Node.js (node/npx) was not found on PATH.${NC}"
+  echo -e "${YELLOW}Install Node.js or load nvm before running this script.${NC}"
+  exit 1
+fi
+
+if [ ! -d "$FRONTEND_DIR" ]; then
+  echo -e "${RED}Error: Expo client not found at $FRONTEND_DIR${NC}"
+  echo -e "${YELLOW}Expected the vendored client at $BACKEND_DIR/frontend/assets.${NC}"
+  echo -e "${YELLOW}Install its dependencies first: cd frontend/assets && npm install${NC}"
+  exit 1
+fi
+
+if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
+  echo -e "${YELLOW}⚠  No node_modules at $FRONTEND_DIR. Run: cd frontend/assets && npm install${NC}"
+fi
+
+kill_tree() {
+  local pid="$1"
+  for child in $(pgrep -P "$pid" 2>/dev/null); do
+    kill_tree "$child"
+  done
+  kill "$pid" 2>/dev/null
+}
+
 cleanup() {
+  trap - SIGINT SIGTERM EXIT
   echo -e "\n${YELLOW}🛑 Shutting down backend and frontend dev servers...${NC}"
-  kill $(jobs -p) 2>/dev/null
+  # Kill each job's full process tree (npx/expo spawn detached node children)
+  for pid in $(jobs -p); do
+    kill_tree "$pid"
+  done
   wait 2>/dev/null
   echo -e "${GREEN}✅ All dev servers stopped cleanly.${NC}"
   exit 0
@@ -38,7 +89,7 @@ trap cleanup SIGINT SIGTERM EXIT
 
 echo -e "\n${GREEN}[1/2] Launching Python Flask Backend on http://localhost:5000...${NC}"
 (
-  cd "$BACKEND_DIR" && "$BACKEND_DIR/.venv/bin/python" main.py
+  cd "$BACKEND_DIR" && "$PYTHON" main.py
 ) &
 BACKEND_PID=$!
 

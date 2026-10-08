@@ -13,25 +13,26 @@
 | **Current Focus** | Building visual workbench with Debug Menu to replace terminal test loops |
 | **Active Branches** | `main` |
 | **Authoritative Backend** | Python `backend/` (`engine/game_engine.py`, `database/`) |
-| **Test Suites Covered** | `test_pitching_engine.py`, `test_at_bat.py`, `test_player_hydration.py`, `test_statcast_engine.py` |
+| **Test Suites Covered** | `tests/test_pitching_engine.py`, `tests/test_at_bat.py`, `tests/test_player_hydration.py`, `tests/test_statcast_engine.py` |
 
 ### 🎯 Last Completed Work
-- [x] Verified Python authoritative backend in `/Users/ljmartinez/Downloads/dev-projects/baseball`:
+- [x] Verified Python authoritative backend:
   - Flask API already implemented in `backend/api/app.py` & `routes.py` (runs via `python main.py` on port `5000`).
   - Endpoints matching frontend contract: `/api/health`, `/api/state`, `/api/start_game`, `/api/pitch`, `/api/sim_at_bat`, `/api/reset`, `/api/swap_lineup`, `/api/rosters`.
-  - All 4 consolidated test suites passing 100%: `test_pitching_engine.py`, `test_at_bat.py`, `test_player_hydration.py`, and `test_statcast_engine.py` (end-to-end API & 100-pitch simulation).
-- [x] Configured `Baseball-Simulation-Client` (`mobile/`):
+  - All 4 consolidated test suites organized in `tests/` and passing 100% concurrently via `./run_tests.sh` / `pytest -n auto tests`: `tests/test_pitching_engine.py`, `tests/test_at_bat.py`, `tests/test_player_hydration.py`, and `tests/test_statcast_engine.py`.
+- [x] Vendored `Baseball-Simulation-Client` into `frontend/` (`frontend/assets/` is the Expo app):
   - Updated `GameRepository.ts` to default to `http://localhost:5000` for seamless connection to the Python Flask backend.
   - Built-in Gameday Dev Menu & Calibration Suite (`Shift+D` or tap `DEV`).
 
 ### 🚧 In-Progress Work
-- [ ] Running the interactive frontend dev client (`mobile/`) against the live Python backend (`http://localhost:5000`).
+- [ ] Running the interactive frontend dev client (`frontend/assets/`) against the live Python backend (`http://localhost:5000`).
 - [ ] Verifying Dev Menu calibration controls (tweaking pitch intent, custom coordinates, at-bat outcomes) live on screen.
 
 ### 🚀 Immediate Next Steps (Pick up here next session!)
 1. **[ ] Launch the Dev Pair**:
-   - Terminal 1: Run Python backend: `cd /Users/ljmartinez/Downloads/dev-projects/baseball && .venv/bin/python main.py`
-   - Terminal 2: Run Frontend: `cd /Users/ljmartinez/antigravity/Baseball-Simulation-Client/mobile && npx expo start --web`
+   - One command: `./dev.sh` (or `npm run dev`) boots backend + Expo web together.
+   - Or manually — Terminal 1: `.venv/bin/python main.py` (backend, port 5000)
+   - Terminal 2: `cd frontend/assets && npx expo start --web` (Expo web, port 8081)
 2. **[ ] Switch to Live Mode in UI**: Tap `DEV` or press `Shift+D` in the frontend, verify `isMockMode` is toggled to Live Backend (`http://localhost:5000`).
 3. **[ ] Calibrate Visually**: Throw pitches and simulate at-bats from the UI, observing live Statcast physics and zone resolution without needing to re-run test scripts in the terminal!
 
@@ -45,23 +46,27 @@ When returning after a pause, run this single command to boot everything:
 # ⚡ ONE COMMAND: Boots Python backend + Expo web frontend together:
 ./dev.sh
 # (or `npm run dev`)
-# -> Python backend starts on http://127.0.0.1:5000
+# -> Python backend starts on http://localhost:5000
 # -> Expo Web frontend opens at http://localhost:8081
 # -> Pressing Ctrl+C cleanly stops both servers!
+# (The client is vendored at frontend/assets)
 
 # Alternatively, manual separate terminals:
-# Terminal 1: cd /Users/ljmartinez/Downloads/dev-projects/baseball && .venv/bin/python main.py
-# Terminal 2: cd /Users/ljmartinez/antigravity/Baseball-Simulation-Client/mobile && npx expo start --web
+# Terminal 1: .venv/bin/python main.py
+# Terminal 2: cd frontend/assets && npx expo start --web
 # 2. Sanity Health Check (Optional)
-curl -s http://127.0.0.1:5000/api/health
+curl -s http://localhost:5000/api/health
 # -> {"active_game":false,"engine":"python-statcast-v4.8","port":5000,"status":"ok"}
 
-# 3. Run Python baseline test suite in terminal (if verifying offline)
-cd /Users/ljmartinez/Downloads/dev-projects/baseball
-.venv/bin/python test_statcast_engine.py
-.venv/bin/python test_pitching_engine.py
-.venv/bin/python test_at_bat.py
-.venv/bin/python test_player_hydration.py
+# 3. Run Python baseline test suite concurrently in terminal
+./run_tests.sh
+# or via pytest directly:
+pytest -n auto tests/
+# or run individually:
+.venv/bin/python tests/test_statcast_engine.py
+.venv/bin/python tests/test_pitching_engine.py
+.venv/bin/python tests/test_at_bat.py
+.venv/bin/python tests/test_player_hydration.py
 ```
 
 ---
@@ -158,7 +163,7 @@ Phase 4: Trajectory & Spray Visuals  ──>  Phase 5: Box Scores & Season Mode 
 | Date | Decision | Context & Rationale | Status |
 | :--- | :--- | :--- | :--- |
 | **2026-10** | **Python as Authoritative Backend** | The Python codebase (`backend/`) contains the true simulation engine (`game_engine.py`) and database layer. All core simulation logic lives here. | **Accepted** |
-| **2026-10** | **Decommission / Deprecate `server.js`** | `server.js` was a temporary, monolithic Node prototype server. It will be replaced by a clean, lightweight Python API (FastAPI) that exposes the actual Python engine. | **Accepted** |
+| **2026-10** | **Remove `server.js` prototype** | `server.js`/`db.js` were a temporary, monolithic Node prototype. Removed from `frontend/`; the Flask Python API in this repo is authoritative. | **Done** |
 | **2026-10** | **Frontend Dev Build as Interactive Test Harness** | Instead of constantly running terminal unit tests (`pytest`), the frontend with its built-in Debug Menu serves as a visual, real-time calibration harness for the 4 engine domains. | **Accepted** |
 | **2026-09** | **13-Zone Coordinate Model** | 9 inner zones + 4 chase corridors allow discrete count leverage and batter vulnerability matrices. | **Accepted** |
 | **2026-09** | **Bivariate Gaussian Jitter** | Miss displacement scaled by pitcher control rating for Statcast-grade command dispersion. | **Accepted** |
@@ -180,7 +185,7 @@ Phase 4: Trajectory & Spray Visuals  ──>  Phase 5: Box Scores & Season Mode 
    ```
 
 ### 🟢 When You're Resuming (Takes 2 minutes)
-1. Open [TODO.md](file:///Users/ljmartinez/antigravity/Baseball-Simulation-Client/TODO.md).
+1. Open [logs/TODO.md](logs/TODO.md).
 2. Read the **Session Resume Anchor** at the top.
 3. Run the **Quick-Start Sanity Commands** to confirm everything boots.
 4. Jump straight into task #1 under **Immediate Next Steps**.
@@ -189,7 +194,7 @@ Phase 4: Trajectory & Spray Visuals  ──>  Phase 5: Box Scores & Season Mode 
 
 ## ⚠️ Known Quirks & Tech Debt
 
-- **`server.js` Deprecation**: `server.js` will be retired once Python API endpoints are in place. Do not add new engine logic to `server.js`.
-- **Target Backend Port**: Python FastAPI defaults to port `8000` (Node was on `3000`). Ensure client config `API_BASE_URL` is updated.
-- **Android Emulator Loopback**: Remember Android emulators use `http://10.0.2.2:8000` to reach `localhost:8000` on the host machine.
+- **Node prototype removed**: the old standalone `server.js`/`db.js` client prototype (and the native Android app) were removed from `frontend/`. All engine logic stays in the Python `backend/`.
+- **Backend Port**: The Python Flask backend runs on port `5000` (the Node prototype used `3000`). The Expo client defaults to `http://localhost:5000` on web.
+- **Android Emulator Loopback**: Remember Android emulators use `http://10.0.2.2:5000` to reach `localhost:5000` on the host machine.
 

@@ -1,5 +1,8 @@
 {
-  "devDependencies": {
-    "parcel": "^2.16.4"
+  "scripts": {
+    "dev": "./dev.sh",
+    "dev:backend": ".venv/bin/python main.py",
+    "dev:frontend": "cd frontend/assets && npx expo start --web",
+    "test": "pytest -n auto tests"
   }
 }

@@ -14,7 +14,7 @@ backend/database/*.sqlite3
 *.db-wal
 *.db-shm
 
-docs/
+/docs/
 
 yahoo_api.py
 yahoo_auth.py
