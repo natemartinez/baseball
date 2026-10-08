@@ -16,20 +16,20 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.database.db import DB_PATH, add_player, init_db
 
-CLIENT_MOCK_DB_PATH = Path('/Users/ljmartinez/antigravity/Baseball-Simulation-Client/data/mock_baseball_db.json')
+MOCK_DB_PATH = ROOT_DIR / 'backend' / 'mock' / 'mock_baseball_db.json'
 
 
 def load_players_seed() -> list:
     """Loads players from mock_baseball_db.json if available, or returns standard seed list."""
-    if CLIENT_MOCK_DB_PATH.exists():
+    if MOCK_DB_PATH.exists():
         try:
-            with open(CLIENT_MOCK_DB_PATH, 'r') as f:
+            with open(MOCK_DB_PATH, 'r') as f:
                 data = json.load(f)
             players = data.get('players', [])
             if players:
                 return players
         except Exception as e:
-            print(f'Warning: Failed to load from {CLIENT_MOCK_DB_PATH}: {e}')
+            print(f'Warning: Failed to load from {MOCK_DB_PATH}: {e}')
 
     return []
 
@@ -52,6 +52,11 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
     init_db()
 
     raw_players = load_players_seed()
+    if not raw_players:
+        raise RuntimeError(
+            f'No player seed data found at {MOCK_DB_PATH}. '
+            'Ensure the seed data file (backend/mock/mock_baseball_db.json) is present.'
+        )
     print(f'Seeding {len(raw_players)} players for season {season}...')
 
     team_name_map = {

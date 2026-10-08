@@ -1,0 +1,550 @@
+{
+  "timestamp": "2026-09-12T21:08:31.356Z",
+  "version": "1.0.0",
+  "players": [
+    {
+      "id": 101,
+      "name": "Nolan McLean",
+      "team": "NYM",
+      "position": "P",
+      "role": "pitcher",
+      "jersey_number": 56,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "velocity_rating": 98,
+        "break_rating": 94,
+        "arm_strength": 97,
+        "control": 82,
+        "stamina": 88
+      },
+      "arsenal": [
+        {
+          "name": "Four-Seam Fastball",
+          "velocity_mph": 97.4,
+          "spin_rpm": 2480,
+          "break_in": -14.2,
+          "control": 84
+        },
+        {
+          "name": "Spin Monster Sweeper",
+          "velocity_mph": 83.5,
+          "spin_rpm": 2980,
+          "break_in": -32,
+          "control": 80
+        },
+        {
+          "name": "Power Sinker",
+          "velocity_mph": 95.8,
+          "spin_rpm": 2310,
+          "break_in": -19.5,
+          "control": 85
+        },
+        {
+          "name": "Spike Curveball",
+          "velocity_mph": 81.2,
+          "spin_rpm": 2840,
+          "break_in": -42,
+          "control": 78
+        }
+      ],
+      "season_stats": {
+        "games": 18,
+        "games_started": 18,
+        "innings_pitched": 108.86,
+        "hits_allowed": 91,
+        "runs_allowed": 48,
+        "earned_runs": 44,
+        "walks_allowed": 29,
+        "strikeouts": 135,
+        "era": 3.64,
+        "whip": 1.1,
+        "pitches_thrown": 1644,
+        "strikes": 1109,
+        "balls": 535,
+        "saves": 0,
+        "wins": 11,
+        "losses": 4
+      },
+      "live_game_stats": {
+        "pitch_count": 18,
+        "strikes": 13,
+        "balls": 5,
+        "innings_pitched": 0.86,
+        "hits": 3,
+        "earned_runs": 6,
+        "walks": 0,
+        "strikeouts": 2
+      }
+    },
+    {
+      "id": 201,
+      "name": "Aaron Judge",
+      "team": "NYY",
+      "position": "RF",
+      "role": "batter",
+      "jersey_number": 99,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "power": 99,
+        "contact": 88,
+        "vision": 92,
+        "speed": 72,
+        "fielding": 89
+      },
+      "traits": [
+        "DEAD_RED_PULL",
+        "PINPOINT_ZONE_DISCIPLINE",
+        "BARREL_MONSTER"
+      ],
+      "hot_zones": [
+        {
+          "zone": 4,
+          "name": "middle-in",
+          "label": "Hot",
+          "slg_multiplier": 1.45,
+          "color": "#EF4444"
+        },
+        {
+          "zone": 5,
+          "name": "heart",
+          "label": "Cold",
+          "slg_multiplier": 0.85,
+          "color": "#3B82F6"
+        },
+        {
+          "zone": 7,
+          "name": "lower-in",
+          "label": "Hot",
+          "slg_multiplier": 1.55,
+          "color": "#EF4444"
+        }
+      ],
+      "season_stats": {
+        "games": 115,
+        "at_bats": 427,
+        "runs": 98,
+        "hits": 122,
+        "doubles": 26,
+        "triples": 1,
+        "home_runs": 40,
+        "rbis": 104,
+        "walks": 88,
+        "strikeouts": 122,
+        "avg": 0.286,
+        "obp": 0.408,
+        "slg": 0.632,
+        "ops": 1.04
+      },
+      "live_game_stats": {
+        "at_bats": 6,
+        "hits": 3,
+        "home_runs": 3,
+        "rbis": 6,
+        "walks": 0,
+        "strikeouts": 1,
+        "current_line": "3-for-6, 3 HR, 6 RBI"
+      }
+    },
+    {
+      "id": 202,
+      "name": "Juan Soto",
+      "team": "NYY",
+      "position": "RF",
+      "role": "batter",
+      "jersey_number": 22,
+      "throws": "R",
+      "bats": "L",
+      "ratings": {
+        "power": 94,
+        "contact": 96,
+        "vision": 99,
+        "speed": 68,
+        "fielding": 78
+      },
+      "traits": [
+        "ELITE_EYE",
+        "OPPO_TACO",
+        "TWO_STRIKE_SPOILER"
+      ],
+      "season_stats": {
+        "games": 118,
+        "at_bats": 416,
+        "runs": 98,
+        "hits": 129,
+        "doubles": 24,
+        "triples": 3,
+        "home_runs": 32,
+        "rbis": 89,
+        "walks": 96,
+        "strikeouts": 84,
+        "avg": 0.31,
+        "obp": 0.438,
+        "slg": 0.598,
+        "ops": 1.036
+      },
+      "live_game_stats": {
+        "at_bats": 0,
+        "hits": 0,
+        "home_runs": 0,
+        "rbis": 0,
+        "walks": 0,
+        "strikeouts": 0,
+        "current_line": "0-for-0"
+      }
+    },
+    {
+      "id": 199,
+      "name": "Gleyber Torres",
+      "team": "NYY",
+      "position": "2B",
+      "role": "batter",
+      "jersey_number": 25,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "power": 78,
+        "contact": 82,
+        "vision": 80,
+        "speed": 70,
+        "fielding": 79
+      },
+      "season_stats": {
+        "games": 112,
+        "at_bats": 432,
+        "runs": 62,
+        "hits": 111,
+        "doubles": 21,
+        "triples": 0,
+        "home_runs": 14,
+        "rbis": 52,
+        "walks": 50,
+        "strikeouts": 98,
+        "avg": 0.257,
+        "obp": 0.334,
+        "slg": 0.403,
+        "ops": 0.737
+      },
+      "live_game_stats": {
+        "at_bats": 1,
+        "hits": 1,
+        "home_runs": 0,
+        "rbis": 0,
+        "walks": 0,
+        "strikeouts": 0,
+        "current_line": "1-for-1 (Single, on 1B)"
+      }
+    },
+    {
+      "id": 203,
+      "name": "Giancarlo Stanton",
+      "team": "NYY",
+      "position": "DH",
+      "role": "batter",
+      "jersey_number": 27,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "power": 99,
+        "contact": 72,
+        "vision": 74,
+        "speed": 50,
+        "fielding": 65
+      },
+      "season_stats": {
+        "games": 85,
+        "at_bats": 310,
+        "runs": 48,
+        "hits": 72,
+        "doubles": 14,
+        "triples": 0,
+        "home_runs": 23,
+        "rbis": 61,
+        "walks": 32,
+        "strikeouts": 104,
+        "avg": 0.233,
+        "obp": 0.306,
+        "slg": 0.5,
+        "ops": 0.806
+      },
+      "live_game_stats": {
+        "at_bats": 0,
+        "hits": 0,
+        "home_runs": 0,
+        "rbis": 0,
+        "walks": 0,
+        "strikeouts": 0,
+        "current_line": "0-for-0"
+      }
+    },
+    {
+      "id": 301,
+      "name": "Francisco Lindor",
+      "team": "NYM",
+      "position": "SS",
+      "role": "batter",
+      "jersey_number": 12,
+      "throws": "R",
+      "bats": "S",
+      "ratings": {
+        "power": 86,
+        "contact": 88,
+        "vision": 87,
+        "speed": 85,
+        "fielding": 96
+      },
+      "traits": [
+        "SWITCH_HITTER",
+        "GOLD_GLOVE",
+        "CLUTCH_GENE"
+      ],
+      "season_stats": {
+        "games": 120,
+        "at_bats": 476,
+        "runs": 84,
+        "hits": 130,
+        "doubles": 32,
+        "triples": 2,
+        "home_runs": 26,
+        "rbis": 78,
+        "walks": 48,
+        "strikeouts": 92,
+        "avg": 0.273,
+        "obp": 0.342,
+        "slg": 0.492,
+        "ops": 0.834
+      },
+      "live_game_stats": {
+        "at_bats": 1,
+        "hits": 0,
+        "home_runs": 0,
+        "rbis": 0,
+        "walks": 0,
+        "strikeouts": 1,
+        "current_line": "0-for-1"
+      }
+    },
+    {
+      "id": 302,
+      "name": "Pete Alonso",
+      "team": "NYM",
+      "position": "1B",
+      "role": "batter",
+      "jersey_number": 20,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "power": 97,
+        "contact": 76,
+        "vision": 81,
+        "speed": 52,
+        "fielding": 74
+      },
+      "season_stats": {
+        "games": 121,
+        "at_bats": 452,
+        "runs": 74,
+        "hits": 112,
+        "doubles": 25,
+        "triples": 0,
+        "home_runs": 30,
+        "rbis": 82,
+        "walks": 56,
+        "strikeouts": 116,
+        "avg": 0.248,
+        "obp": 0.332,
+        "slg": 0.502,
+        "ops": 0.834
+      },
+      "live_game_stats": {
+        "at_bats": 0,
+        "hits": 0,
+        "home_runs": 0,
+        "rbis": 0,
+        "walks": 0,
+        "strikeouts": 0,
+        "current_line": "0-for-0"
+      }
+    },
+    {
+      "id": 401,
+      "name": "Gerrit Cole",
+      "team": "NYY",
+      "position": "P",
+      "role": "pitcher",
+      "jersey_number": 45,
+      "throws": "R",
+      "bats": "R",
+      "ratings": {
+        "velocity_rating": 97,
+        "break_rating": 92,
+        "arm_strength": 98,
+        "control": 91,
+        "stamina": 92
+      },
+      "arsenal": [
+        {
+          "name": "Four-Seam Fastball",
+          "velocity_mph": 97.2,
+          "spin_rpm": 2520,
+          "break_in": -13.8,
+          "control": 92
+        },
+        {
+          "name": "Slider",
+          "velocity_mph": 88.4,
+          "spin_rpm": 2710,
+          "break_in": -24.5,
+          "control": 88
+        },
+        {
+          "name": "Knuckle Curve",
+          "velocity_mph": 82.8,
+          "spin_rpm": 2890,
+          "break_in": -46,
+          "control": 86
+        }
+      ],
+      "season_stats": {
+        "games": 15,
+        "games_started": 15,
+        "innings_pitched": 92,
+        "hits_allowed": 71,
+        "runs_allowed": 33,
+        "earned_runs": 29,
+        "walks_allowed": 24,
+        "strikeouts": 118,
+        "era": 2.84,
+        "whip": 1.03,
+        "pitches_thrown": 1420,
+        "strikes": 980,
+        "balls": 440,
+        "saves": 0,
+        "wins": 9,
+        "losses": 3
+      },
+      "live_game_stats": {
+        "pitch_count": 0,
+        "strikes": 0,
+        "balls": 0,
+        "innings_pitched": 0,
+        "hits": 0,
+        "earned_runs": 0,
+        "walks": 0,
+        "strikeouts": 0
+      }
+    }
+  ],
+  "pitchHistory": [
+    {
+      "id": "pitch_1789247311356_652",
+      "timestamp": "2026-09-12T21:08:31.356Z",
+      "pitcher_id": 101,
+      "batter_id": 201,
+      "pitch_type": "Spin Monster Sweeper",
+      "velocity_mph": 84.6,
+      "spin_rate_rpm": 2992,
+      "is_strike": true,
+      "outcome": "Strikeout Swinging!",
+      "zone": "lower-away",
+      "command_quality": "PINPOINT"
+    },
+    {
+      "id": "pitch_1789247311355_176",
+      "timestamp": "2026-09-12T21:08:31.355Z",
+      "pitcher_id": 101,
+      "batter_id": 201,
+      "pitch_type": "Spin Monster Sweeper",
+      "velocity_mph": 83.2,
+      "spin_rate_rpm": 2975,
+      "is_strike": true,
+      "outcome": "Called Strike",
+      "zone": "middle-away",
+      "command_quality": "TARGET_EXECUTED"
+    },
+    {
+      "id": "pitch_1789247311355_7",
+      "timestamp": "2026-09-12T21:08:31.355Z",
+      "pitcher_id": 101,
+      "batter_id": 201,
+      "pitch_type": "Spin Monster Sweeper",
+      "velocity_mph": 84.7,
+      "spin_rate_rpm": 2963,
+      "is_strike": true,
+      "outcome": "Swinging Strike",
+      "zone": "middle-away",
+      "command_quality": "TARGET_EXECUTED"
+    },
+    {
+      "id": "pitch_1789247311352_882",
+      "timestamp": "2026-09-12T21:08:31.352Z",
+      "pitcher_id": 101,
+      "batter_id": 201,
+      "pitch_type": "Four-Seam Fastball",
+      "velocity_mph": 97.5,
+      "spin_rate_rpm": 2457,
+      "is_strike": true,
+      "outcome": "DOUBLE PLAY! 6-4-3 Twin Killing!",
+      "zone": "lower-away",
+      "command_quality": "PINPOINT"
+    }
+  ],
+  "atBatHistory": [
+    {
+      "id": "ab_1789247311356_754",
+      "timestamp": "2026-09-12T21:08:31.356Z",
+      "batter_id": 201,
+      "pitcher_id": 101,
+      "outcome": "STRIKEOUT",
+      "rbis": 0,
+      "runs_scored": 0,
+      "inning": 1,
+      "pitch_count": 1
+    },
+    {
+      "id": "ab_1789247311352_430",
+      "timestamp": "2026-09-12T21:08:31.352Z",
+      "batter_id": 201,
+      "pitcher_id": 101,
+      "outcome": "GROUNDOUT",
+      "rbis": 0,
+      "runs_scored": 0,
+      "inning": 1,
+      "pitch_count": 1
+    },
+    {
+      "id": "ab_1789247311347_876",
+      "timestamp": "2026-09-12T21:08:31.347Z",
+      "batter_id": 201,
+      "pitcher_id": 101,
+      "outcome": "HOME_RUN",
+      "rbis": 2,
+      "runs_scored": 2,
+      "inning": 1,
+      "pitch_count": 1
+    },
+    {
+      "id": "ab_1789247293853_378",
+      "timestamp": "2026-09-12T21:08:13.853Z",
+      "batter_id": 201,
+      "pitcher_id": 101,
+      "outcome": "HOME_RUN",
+      "rbis": 2,
+      "runs_scored": 2,
+      "inning": 1,
+      "pitch_count": 1
+    },
+    {
+      "id": "ab_1789246937537_693",
+      "timestamp": "2026-09-12T21:02:17.537Z",
+      "batter_id": 201,
+      "pitcher_id": 101,
+      "outcome": "HOME_RUN",
+      "rbis": 2,
+      "runs_scored": 2,
+      "inning": 1,
+      "pitch_count": 1
+    }
+  ]
+}
