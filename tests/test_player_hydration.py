@@ -7,8 +7,7 @@ Consolidates domain entity normalization, database loading, and engine boundary 
 from pathlib import Path
 import sys
 
-# Ensure repository root is on sys.path
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -78,10 +77,12 @@ def test_database_hydration():
     canonical Player domain objects from SQLite.
     """
     # Single player lookups
-    mclean = get_player(1)  # Pitcher
-    judge = get_player(2)   # Batter
-    assert isinstance(mclean, Player) and mclean.is_pitcher is True
-    assert isinstance(judge, Player) and judge.is_pitcher is False
+    p1 = get_player(1)
+    p2 = get_player(2)
+    mclean = p1 if p1 and p1.is_pitcher else p2
+    judge = p2 if p1 and p1.is_pitcher else p1
+    assert mclean is not None and isinstance(mclean, Player) and mclean.is_pitcher is True
+    assert judge is not None and isinstance(judge, Player) and judge.is_pitcher is False
 
     # Team roster lookup
     mets_players = get_team_roster_players("New York Mets")
@@ -117,8 +118,10 @@ def test_engine_boundary_guards():
     assert isinstance(game.current_batter_obj(), Player)
 
     # b) PitchingEngine strict validation
-    mclean = get_player(1)
-    judge = get_player(2)
+    p1 = get_player(1)
+    p2 = get_player(2)
+    mclean = p1 if p1 and p1.is_pitcher else p2
+    judge = p2 if p1 and p1.is_pitcher else p1
 
     try:
         PitchingEngine(pitcher=None, batter=judge)

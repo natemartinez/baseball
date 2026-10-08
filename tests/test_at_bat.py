@@ -5,7 +5,7 @@ import sys
 
 
 # Ensure repository root is on sys.path
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
   sys.path.insert(0, str(ROOT_DIR))
 
@@ -21,15 +21,14 @@ def run_single_at_bat(seed: int = 4):
   random.seed(seed)
 
   # 1. Fetch hydrated domain objects directly from SQLite
-  mclean = get_player(1)  # Pitcher (ID 1 - Nolan McLean)
-  judge = get_player(2)   # Batter (ID 2 - Aaron Judge)
+  p1 = get_player(1)
+  p2 = get_player(2)
+  mclean = p1 if p1 and p1.is_pitcher else p2
+  judge = p2 if p1 and p1.is_pitcher else p1
 
-  if not judge or not mclean:
-    print(
-        "Error: Make sure both players are seeded in mlb.db (ID 1: McLean, ID 2:"
-        " Judge)."
-    )
-    return
+  assert judge is not None and mclean is not None, (
+      "Make sure both players are seeded in mlb.db (McLean and Judge)."
+  )
 
 
   # 2. Package into minimal roster payloads expected by GameEngine
@@ -89,7 +88,14 @@ def run_single_at_bat(seed: int = 4):
       print(f"Final Outcome: {result.strip()}")
       print(f"Total Pitches: {pitch_num}")
       print("=" * 55)
+      assert pitch_num > 0, "At least one pitch must be thrown."
+      assert len(result.strip()) > 0, "Outcome description must not be empty."
       break
+
+
+def test_single_at_bat():
+  """Test entrypoint for pytest discovering at-bat simulation."""
+  run_single_at_bat(seed=4)
 
 
 if __name__ == "__main__":

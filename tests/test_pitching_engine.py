@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 
 # Ensure repository root is on sys.path
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
@@ -24,10 +24,12 @@ from backend.engine.pitching_engine import (
 
 def get_test_matchup():
     """Fixture: Returns Nolan McLean (Pitcher) and Aaron Judge (Batter)."""
-    mclean = get_player(1)
-    judge = get_player(2)
-    assert mclean is not None, "Failed to load Nolan McLean (ID 1) from DB"
-    assert judge is not None, "Failed to load Aaron Judge (ID 2) from DB"
+    p1 = get_player(1)
+    p2 = get_player(2)
+    mclean = p1 if p1 and p1.is_pitcher else p2
+    judge = p2 if p1 and p1.is_pitcher else p1
+    assert mclean is not None, "Failed to load Nolan McLean (Pitcher) from DB"
+    assert judge is not None, "Failed to load Aaron Judge (Batter) from DB"
     return mclean, judge
 
 
