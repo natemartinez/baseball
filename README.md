@@ -10,7 +10,7 @@ This repository is the **authoritative simulation backend** and also vendors the
 
 ```text
 [ frontend/ — Expo client ]                 [ backend — this repo ]
-  assets/  React Native Expo                  main.py  →  Python Flask
+  app/     React Native Expo                  main.py  →  Python Flask
   (Web / iOS / Android, port 8081)            (REST API, port 5000)
             │                                          │
             └────────── HTTP REST (CORS enabled) ──────┘
@@ -51,7 +51,7 @@ Backend runs on `http://localhost:5000`. Health check: `curl http://localhost:50
 ### 2. Client: Run the Expo Web Frontend
 
 ```bash
-cd frontend/assets
+cd frontend/app
 npm install
 npx expo start --web
 ```
@@ -62,7 +62,7 @@ npx expo start --web
 
 ### 3. One Command: Boot Both Together
 
-The vendored client lives at `frontend/assets`, so the root dev script starts both servers and shuts them down cleanly on `Ctrl+C`:
+The vendored client lives at `frontend/app`, so the root dev script starts both servers and shuts them down cleanly on `Ctrl+C`:
 
 ```bash
 ./dev.sh
@@ -107,7 +107,7 @@ pytest -n auto tests/
 ```text
 baseball/
 ├── main.py                      # Flask entrypoint (port 5000)
-├── dev.sh                       # boots backend + frontend/assets
+├── dev.sh                       # boots backend + frontend/app
 ├── backend/
 │   ├── api/                     # Flask app factory, REST routes
 │   ├── database/                # SQLite schema, seed, hydration
@@ -117,8 +117,8 @@ baseball/
 ├── tests/                       # consolidated pytest suites
 ├── templates/ + static/         # minimal Flask-served page
 └── frontend/                    # vendored Expo client
-    ├── assets/                  # Expo app root (scoreboard, strike zone, pitch UI)
-    │   └── static/              # static resources (images, fonts, app icon)
+    ├── app/                     # Expo app (scoreboard, strike zone, pitch UI)
+    │   └── assets/              # static resources (images, fonts, app icon)
     ├── docs/                    # pitching-logic physics spec
     └── dev.sh                   # client dev script (backend is one level up)
 ```

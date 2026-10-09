@@ -11,9 +11,9 @@ The authoritative simulation engine and REST API live in the repository root
 
 ```text
 frontend/
-├── assets/                     # Expo app root (TypeScript)
+├── app/                        # Expo app root (TypeScript)
 │   ├── App.tsx / index.ts
-│   ├── static/                 # static resources (images, fonts, app icon)
+│   ├── assets/                 # static resources (images, fonts, app icon)
 │   └── src/
 │       ├── components/         # Scorebug, Diamond, MatchupCard, StrikeZoneGrid,
 │       │                       # PitchSelector, PitchOutcomeFeed, LineupDialog, ...
@@ -31,10 +31,8 @@ frontend/
 ### Static resources
 
 All static resources (images, fonts, the future app icon/splash) live under
-`frontend/assets/static/`. In `app.json`, reference them project-root-relative as
-`./static/…` (for example `"icon": "./static/icon.png"`). Never use `./assets/…`,
-because the app root is itself named `assets`, so that would resolve to
-`frontend/assets/assets/…`.
+`frontend/app/assets/`. In `app.json`, reference them project-root-relative as
+`./assets/…` (for example `"icon": "./assets/icon.png"`).
 
 ## Run
 
@@ -43,7 +41,7 @@ because the app root is itself named `assets`, so that would resolve to
 ./dev.sh            # or: npm run dev
 
 # Or just this client:
-cd frontend/assets
+cd frontend/app
 npm install
 npx expo start --web     # http://localhost:8081
 ```
@@ -51,7 +49,7 @@ npx expo start --web     # http://localhost:8081
 In the app header, open the **Gameday Dev Menu** (`Shift+D` / tap **DEV**) and use
 the **Backend Switcher** to toggle between the live **Python Flask (5000)** backend
 and the in-client **Mock Engine**. On web the HTTP client defaults to
-`http://localhost:5000` (see `assets/.env.example`).
+`http://localhost:5000` (see `app/.env.example`).
 
 ## Physics & Documentation
 

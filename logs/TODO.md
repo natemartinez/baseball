@@ -20,19 +20,19 @@
   - Flask API already implemented in `backend/api/app.py` & `routes.py` (runs via `python main.py` on port `5000`).
   - Endpoints matching frontend contract: `/api/health`, `/api/state`, `/api/start_game`, `/api/pitch`, `/api/sim_at_bat`, `/api/reset`, `/api/swap_lineup`, `/api/rosters`.
   - All 4 consolidated test suites organized in `tests/` and passing 100% concurrently via `./run_tests.sh` / `pytest -n auto tests`: `tests/test_pitching_engine.py`, `tests/test_at_bat.py`, `tests/test_player_hydration.py`, and `tests/test_statcast_engine.py`.
-- [x] Vendored `Baseball-Simulation-Client` into `frontend/` (`frontend/assets/` is the Expo app):
+- [x] Vendored `Baseball-Simulation-Client` into `frontend/` (`frontend/app/` is the Expo app):
   - Updated `GameRepository.ts` to default to `http://localhost:5000` for seamless connection to the Python Flask backend.
   - Built-in Gameday Dev Menu & Calibration Suite (`Shift+D` or tap `DEV`).
 
 ### 🚧 In-Progress Work
-- [ ] Running the interactive frontend dev client (`frontend/assets/`) against the live Python backend (`http://localhost:5000`).
+- [ ] Running the interactive frontend dev client (`frontend/app/`) against the live Python backend (`http://localhost:5000`).
 - [ ] Verifying Dev Menu calibration controls (tweaking pitch intent, custom coordinates, at-bat outcomes) live on screen.
 
 ### 🚀 Immediate Next Steps (Pick up here next session!)
 1. **[ ] Launch the Dev Pair**:
    - One command: `./dev.sh` (or `npm run dev`) boots backend + Expo web together.
    - Or manually — Terminal 1: `.venv/bin/python main.py` (backend, port 5000)
-   - Terminal 2: `cd frontend/assets && npx expo start --web` (Expo web, port 8081)
+   - Terminal 2: `cd frontend/app && npx expo start --web` (Expo web, port 8081)
 2. **[ ] Switch to Live Mode in UI**: Tap `DEV` or press `Shift+D` in the frontend, verify `isMockMode` is toggled to Live Backend (`http://localhost:5000`).
 3. **[ ] Calibrate Visually**: Throw pitches and simulate at-bats from the UI, observing live Statcast physics and zone resolution without needing to re-run test scripts in the terminal!
 
@@ -49,11 +49,11 @@ When returning after a pause, run this single command to boot everything:
 # -> Python backend starts on http://localhost:5000
 # -> Expo Web frontend opens at http://localhost:8081
 # -> Pressing Ctrl+C cleanly stops both servers!
-# (The client is vendored at frontend/assets)
+# (The client is vendored at frontend/app)
 
 # Alternatively, manual separate terminals:
 # Terminal 1: .venv/bin/python main.py
-# Terminal 2: cd frontend/assets && npx expo start --web
+# Terminal 2: cd frontend/app && npx expo start --web
 # 2. Sanity Health Check (Optional)
 curl -s http://localhost:5000/api/health
 # -> {"active_game":false,"engine":"python-statcast-v4.8","port":5000,"status":"ok"}

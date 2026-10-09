@@ -4,14 +4,14 @@
 # Boots the Python Flask backend and the Expo web client concurrently.
 # Cleanly shuts down both processes on Ctrl+C (SIGINT).
 #
-# The Expo client is vendored in this repo at frontend/assets.
-# Override with: FRONTEND_DIR=/path/to/assets ./dev.sh
+# The Expo client is vendored in this repo at frontend/app.
+# Override with: FRONTEND_DIR=/path/to/app ./dev.sh
 # ==============================================================================
 
 set -u
 
 BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="${FRONTEND_DIR:-$BACKEND_DIR/frontend/assets}"
+FRONTEND_DIR="${FRONTEND_DIR:-$BACKEND_DIR/frontend/app}"
 
 # Color formatting
 CYAN='\033[0;36m'
@@ -55,13 +55,13 @@ fi
 
 if [ ! -d "$FRONTEND_DIR" ]; then
   echo -e "${RED}Error: Expo client not found at $FRONTEND_DIR${NC}"
-  echo -e "${YELLOW}Expected the vendored client at $BACKEND_DIR/frontend/assets.${NC}"
-  echo -e "${YELLOW}Install its dependencies first: cd frontend/assets && npm install${NC}"
+  echo -e "${YELLOW}Expected the vendored client at $BACKEND_DIR/frontend/app.${NC}"
+  echo -e "${YELLOW}Install its dependencies first: cd frontend/app && npm install${NC}"
   exit 1
 fi
 
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
-  echo -e "${YELLOW}⚠  No node_modules at $FRONTEND_DIR. Run: cd frontend/assets && npm install${NC}"
+  echo -e "${YELLOW}⚠  No node_modules at $FRONTEND_DIR. Run: cd frontend/app && npm install${NC}"
 fi
 
 kill_tree() {

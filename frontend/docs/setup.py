@@ -15,7 +15,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_DIR = REPO_ROOT
-FRONTEND_DIR = REPO_ROOT / "frontend" / "assets"
+FRONTEND_DIR = REPO_ROOT / "frontend" / "app"
 DEV_SCRIPT = REPO_ROOT / "dev.sh"
 
 BACKEND_CMD = ".venv/bin/python main.py"

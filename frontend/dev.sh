@@ -12,7 +12,7 @@
 set -u
 
 CLIENT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="$CLIENT_ROOT/assets"
+FRONTEND_DIR="$CLIENT_ROOT/app"
 BACKEND_DIR="${BACKEND_DIR:-$(cd "$CLIENT_ROOT/.." && pwd)}"
 
 # Color formatting
