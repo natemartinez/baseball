@@ -784,15 +784,20 @@ class GameEngine:
                 'jersey_number': int(p_num) if str(p_num).isdigit() else 26,
                 'position': p_pos,
                 'team': p_team,
-                'break_rating': 99,
-                'velocity_rating': 98,
-                'arm_strength': 97,
-                'control': 68,
+                'throws': (
+                    'L'
+                    if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
+                    else 'R'
+                ) if cur_p else 'R',
+                'break_rating': int(cur_p.get_rating('break_rating', 99)) if cur_p else 99,
+                'velocity_rating': int(cur_p.get_rating('velocity_rating', 98)) if cur_p else 98,
+                'arm_strength': int(cur_p.get_rating('arm_strength', 97)) if cur_p else 97,
+                'control': int(cur_p.get_rating('control', 68)) if cur_p else 68,
                 'arsenal': [
-                    {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
-                    {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
-                    {'name': 'Power Sinker', 'velocity_mph': 95.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
-                    {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
+                    {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'velocity_min_mph': 95.4, 'velocity_max_mph': 99.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
+                    {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'velocity_min_mph': 81.5, 'velocity_max_mph': 85.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
+                    {'name': 'Power Sinker', 'velocity_mph': 95.8, 'velocity_min_mph': 93.8, 'velocity_max_mph': 97.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
+                    {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'velocity_min_mph': 79.2, 'velocity_max_mph': 83.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
                 ],
                 'stats': {'pitches_thrown': pitch_count, 'strikeouts': 6, 'walks': 1, 'hits_allowed': 3, 'runs_allowed': 1}
             },

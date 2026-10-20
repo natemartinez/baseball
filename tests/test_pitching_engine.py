@@ -167,12 +167,33 @@ def test_game_engine_pitch_integration():
     assert alias_details["adjusted_ratings"]["pitch_count"] == 2
 
 
+def test_current_pitcher_payload_uses_real_control():
+    """The live state payload must expose the pitcher's real control rating."""
+    mclean, judge = get_test_matchup()
+    away_team = {
+        "name": "New York Yankees",
+        "position_players": [judge],
+        "pitchers": {"starters": [mclean], "bullpen": []},
+    }
+    home_team = {
+        "name": "New York Mets",
+        "position_players": [judge],
+        "pitchers": {"starters": [mclean], "bullpen": []},
+    }
+    game = GameEngine(home_team, away_team, "Mets", "Yankees")
+    state = game.get_game_state_payload()
+    expected_control = int(mclean.get_rating("control", 82))
+    assert state["current_pitcher"]["control"] == expected_control
+    assert state["current_pitcher"]["throws"] in ("R", "L")
+
+
 def run_all_tests():
     tests = [
         ("1. Pitcher In-Game Fatigue Ratings", test_pitcher_in_game_fatigue_ratings),
         ("2. Pitch Arsenal & Count Leverage Strategy", test_pitch_arsenal_and_strategy_leverage),
         ("3. Delivery Execution & Bivariate Gaussian Math", test_pitching_delivery_execution),
         ("4. GameEngine Simulation Hand-off & Alias", test_game_engine_pitch_integration),
+        ("5. Live Payload Uses Real Control", test_current_pitcher_payload_uses_real_control),
     ]
 
     print("=" * 65)
