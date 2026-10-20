@@ -14,7 +14,8 @@ try:
         classify_gameday_zone,
         get_zone_nominal_target,
         calculate_execution_sigma,
-        sample_bivariate_gaussian,
+        get_max_error_radius_inches,
+        sample_truncated_gaussian,
         calculate_radial_miss_inches,
         determine_situation_category,
         ZONE_CENTERS,
@@ -25,7 +26,8 @@ except ImportError:
         classify_gameday_zone,
         get_zone_nominal_target,
         calculate_execution_sigma,
-        sample_bivariate_gaussian,
+        get_max_error_radius_inches,
+        sample_truncated_gaussian,
         calculate_radial_miss_inches,
         determine_situation_category,
         ZONE_CENTERS,
@@ -45,7 +47,10 @@ def calculate_pitch_delivery(
     Returns realized coordinates, execution error, zone classification, and miss metrics.
     """
     sigma = calculate_execution_sigma(command_rating, pitch_count, stamina=stamina)
-    realized_x, realized_z = sample_bivariate_gaussian(target_x, target_z, sigma, sigma)
+    max_radius_in = get_max_error_radius_inches(command_rating)
+    realized_x, realized_z = sample_truncated_gaussian(
+        target_x, target_z, sigma, max_radius_in / 12.0
+    )
     realized_zone_cat = classify_gameday_zone(realized_x, realized_z)
     strike_check = is_rulebook_strike(realized_x, realized_z)
 
@@ -62,6 +67,7 @@ def calculate_pitch_delivery(
 
     return {
         'sigma': sigma,
+        'max_radius_inches': max_radius_in,
         'realized_x': round(realized_x, 4),
         'realized_z': round(realized_z, 4),
         'realized_zone_cat': realized_zone_cat,
