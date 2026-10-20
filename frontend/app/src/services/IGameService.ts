@@ -15,4 +15,5 @@ export interface IGameService {
   simAtBat(): Promise<PitchResultResponse>;
   reset(): Promise<InitialStateResponse>;
   swapLineup(team: number, pos1: number, pos2: number): Promise<void>;
+  swapRotation(team: number, pos1: number, pos2: number): Promise<void>;
 }

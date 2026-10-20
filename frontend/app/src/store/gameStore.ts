@@ -70,6 +70,15 @@ export interface GameUiState {
   isMockMode: boolean;
   backendUrl: string;
 
+  // Strategy Menu
+  isStrategyMenuOpen: boolean;
+
+  // Settings Menu
+  isSettingsMenuOpen: boolean;
+  isRotationDialogOpen: boolean;
+  isPitchFeedOpen: boolean;
+  isTrajectoryOpen: boolean;
+
   // Loading / error
   loadingState: LoadingState;
   isPitching: boolean;
@@ -89,6 +98,7 @@ export interface GameActions {
   throwPitch(): Promise<void>;
   simAtBat(): Promise<void>;
   swapLineup(teamId: number, pos1: number, pos2: number): Promise<void>;
+  swapRotation(teamId: number, pos1: number, pos2: number): Promise<void>;
   toggleMockMode(useMock: boolean): Promise<void>;
   setBackendUrl(url: string): Promise<void>;
 
@@ -101,10 +111,20 @@ export interface GameActions {
   clearDebugLog(): void;
   runFastCalibration(commandRating?: number, sampleSize?: number): void;
 
+  // Strategy Menu
+  toggleStrategyMenu(open?: boolean): void
+
+  // Settings Menu
+  toggleSettingsMenu(open?: boolean): void
+  togglePitchFeed(open?: boolean): void
+  toggleTrajectory(open?: boolean): void
+
   // UI mutations
   setSelectedPitchIntent(intent: string): void;
   setSelectedTargetZone(zone: string): void;
+  setGloveTarget(x: number, z: number): void;
   setLineupDialogOpen(open: boolean): void;
+  setRotationDialogOpen(open: boolean): void;
   clearError(): void;
 }
 
@@ -125,6 +145,11 @@ const initialState: GameUiState = {
   selectedPitchPacketIndex: null,
   customTargetCoords: null,
   isDevMenuOpen: false,
+  isStrategyMenuOpen: false,
+  isSettingsMenuOpen: false,
+  isRotationDialogOpen: false,
+  isPitchFeedOpen: false,
+  isTrajectoryOpen: false,
   activeDevTab: 'gameday',
   countFilter: 'ALL',
   situationFilter: 'ALL',
@@ -319,6 +344,31 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     }
   },
 
+  async swapRotation(teamId: number, pos1: number, pos2: number) {
+    set({ isPitching: true });
+    try {
+      await repo.swapRotation(teamId, pos1, pos2);
+      set((s) => ({
+        isPitching: false,
+        rotations: s.rotations.map((tr) => {
+          if (tr.team_id !== teamId) return tr;
+          const newStarters = [...tr.starters];
+          const i1 = pos1 - 1;
+          const i2 = pos2 - 1;
+          if (i1 >= 0 && i1 < newStarters.length && i2 >= 0 && i2 < newStarters.length) {
+            const tmp = newStarters[i1];
+            newStarters[i1] = newStarters[i2];
+            newStarters[i2] = tmp;
+          }
+          return { ...tr, starters: newStarters };
+        }),
+      }));
+    } catch (err: unknown) {
+      const { message, envelope } = parseError(err);
+      set({ isPitching: false, errorMessage: message, errorEnvelope: envelope });
+    }
+  },
+
   async setBackendUrl(url: string) {
     repo.setBackendUrl(url);
     repo.setMockMode(false);
@@ -330,6 +380,22 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   toggleDevMenu(open?: boolean) {
     set((s) => ({ isDevMenuOpen: open !== undefined ? open : !s.isDevMenuOpen }));
+  },
+
+  toggleSettingsMenu(open?: boolean) {
+    set((s) => ({ isSettingsMenuOpen: open !== undefined ? open : !s.isSettingsMenuOpen }));
+  },
+
+  togglePitchFeed(open?: boolean) {
+    set((s) => ({ isPitchFeedOpen: open !== undefined ? open : !s.isPitchFeedOpen }));
+  },
+
+  toggleTrajectory(open?: boolean) {
+    set((s) => ({ isTrajectoryOpen: open !== undefined ? open : !s.isTrajectoryOpen }));
+  },
+
+  toggleStrategyMenu(open?: boolean) {
+    set((s) => ({ isStrategyMenuOpen: open !== undefined ? open : !s.isStrategyMenuOpen }));
   },
 
   setCustomTarget(coords: { x: number; z: number } | null) {
@@ -474,6 +540,10 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   setLineupDialogOpen(open: boolean) {
     set({ isLineupDialogOpen: open });
+  },
+
+  setRotationDialogOpen(open: boolean) {
+    set({ isRotationDialogOpen: open });
   },
 
   clearError() {

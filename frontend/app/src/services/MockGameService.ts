@@ -271,6 +271,10 @@ export class MockGameService implements IGameService {
   private yankeeBatterIndex: number;
   private yankeesLineup: LineupPlayer[];
   private metsLineup: LineupPlayer[];
+  private yankeesRotation: PlayerSummary[];
+  private metsRotation: PlayerSummary[];
+  private yankeesBullpen: PlayerSummary[];
+  private metsBullpen: PlayerSummary[];
   private currentGameState!: GameState;
 
   constructor(seed: number = 42) {
@@ -280,6 +284,22 @@ export class MockGameService implements IGameService {
     this.yankeeBatterIndex = 1; // Start with Aaron Judge
     this.yankeesLineup = makeYankeesLineup();
     this.metsLineup = makeMetsLineup();
+    this.yankeesRotation = [
+      { id: 45, name: 'Gerrit Cole', jersey_number: 45, position: 'SP', team: 'New York Yankees' },
+      { id: 55, name: 'Carlos Rodon', jersey_number: 55, position: 'SP', team: 'New York Yankees' },
+    ];
+    this.metsRotation = [
+      { id: 26, name: 'Nolan McLean', jersey_number: 26, position: 'SP', team: 'New York Mets' },
+      { id: 34, name: 'Kodai Senga', jersey_number: 34, position: 'SP', team: 'New York Mets' },
+    ];
+    this.yankeesBullpen = [
+      { id: 201, name: 'Luke Weaver', jersey_number: 30, position: 'RP', team: 'New York Yankees' },
+      { id: 202, name: 'Clay Holmes', jersey_number: 35, position: 'CP', team: 'New York Yankees' },
+    ];
+    this.metsBullpen = [
+      { id: 203, name: 'Edwin Diaz', jersey_number: 39, position: 'CP', team: 'New York Mets' },
+      { id: 204, name: 'Reed Garrett', jersey_number: 75, position: 'RP', team: 'New York Mets' },
+    ];
     this._initGameState();
   }
 
@@ -330,18 +350,14 @@ export class MockGameService implements IGameService {
         {
           team_id: 1,
           team_name: 'New York Yankees',
-          starters: [
-            { id: 45, name: 'Gerrit Cole', jersey_number: 45, position: 'SP', team: 'New York Yankees' },
-            { id: 55, name: 'Carlos Rodon', jersey_number: 55, position: 'SP', team: 'New York Yankees' },
-          ],
+          starters: [...this.yankeesRotation],
+          bullpen: [...this.yankeesBullpen],
         },
         {
           team_id: 2,
           team_name: 'New York Mets',
-          starters: [
-            { id: 26, name: 'Nolan McLean', jersey_number: 26, position: 'SP', team: 'New York Mets' },
-            { id: 34, name: 'Kodai Senga', jersey_number: 34, position: 'SP', team: 'New York Mets' },
-          ],
+          starters: [...this.metsRotation],
+          bullpen: [...this.metsBullpen],
         },
       ],
     };
@@ -390,6 +406,19 @@ export class MockGameService implements IGameService {
     const p2 = targetList[idx2];
     targetList[idx1] = { ...p1, player: p2.player, ratings: p2.ratings };
     targetList[idx2] = { ...p2, player: p1.player, ratings: p1.ratings };
+  }
+
+  async swapRotation(team: number, pos1: number, pos2: number): Promise<void> {
+    await delay(80);
+    const targetList = team === 1 ? this.yankeesRotation : this.metsRotation;
+    const idx1 = pos1 - 1;
+    const idx2 = pos2 - 1;
+    if (idx1 < 0 || idx1 >= targetList.length || idx2 < 0 || idx2 >= targetList.length) {
+      throw new Error(`Invalid rotation indices: ${pos1}, ${pos2}`);
+    }
+    const tmp = targetList[idx1];
+    targetList[idx1] = targetList[idx2];
+    targetList[idx2] = tmp;
   }
 
   async pitch(

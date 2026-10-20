@@ -273,6 +273,7 @@ export interface TeamRotation {
   team_id: number;
   team_name: string;
   starters: PlayerSummary[];
+  bullpen?: PlayerSummary[];
 }
 
 export interface InitialStateResponse {
@@ -296,6 +297,12 @@ export interface PitchRequest {
 }
 
 export interface SwapLineupRequest {
+  team: number;
+  pos1: number;
+  pos2: number;
+}
+
+export interface SwapRotationRequest {
   team: number;
   pos1: number;
   pos2: number;

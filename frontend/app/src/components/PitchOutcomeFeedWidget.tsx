@@ -42,7 +42,7 @@ export function PitchOutcomeFeedWidget({ pitches }: PitchOutcomeFeedWidgetProps)
 
 // ─── Single Pitch Feed Card ──────────────────────────────────────────────────
 
-function PitchFeedItemCard({ pitch, pitchIndex }: { pitch: PitchDetails; pitchIndex: number }) {
+export function PitchFeedItemCard({ pitch, pitchIndex }: { pitch: PitchDetails; pitchIndex: number }) {
   const badgeColor = resultBadgeColor(pitch.pitch_result);
 
   return (

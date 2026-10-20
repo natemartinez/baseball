@@ -70,4 +70,5 @@ export class GameRepository implements IGameService {
   }
   reset() { return this.activeService.reset(); }
   swapLineup(team: number, pos1: number, pos2: number) { return this.activeService.swapLineup(team, pos1, pos2); }
+  swapRotation(team: number, pos1: number, pos2: number) { return this.activeService.swapRotation(team, pos1, pos2); }
 }
