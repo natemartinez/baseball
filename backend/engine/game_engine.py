@@ -250,10 +250,18 @@ class GameEngine:
 
         # 4. Batter Swing & Reaction
         batter_engine = BatterStrategy(batter)
-        actual_zone_name = target_zone or 'heart'
-        # Closest zone label
+        # Label the realized location inside the category it actually belongs
+        # to. A ball just outside a corner must not inherit the nearest inner
+        # corner (strike) label.
+        candidate_zone_names = [
+            name
+            for name in ZONE_CENTERS
+            if name.startswith('chase-') != bool(strike_check)
+        ]
+        actual_zone_name = candidate_zone_names[0] if candidate_zone_names else 'heart'
         min_dist = 999.0
-        for z_name, (zx, zz) in ZONE_CENTERS.items():
+        for z_name in candidate_zone_names:
+            zx, zz = ZONE_CENTERS[z_name]
             dist = (zx - realized_x) ** 2 + (zz - realized_z) ** 2
             if dist < min_dist:
                 min_dist = dist
