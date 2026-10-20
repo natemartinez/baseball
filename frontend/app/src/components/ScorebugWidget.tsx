@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 import type { GameState, TeamLineup } from '../types/api';
 
@@ -62,6 +62,8 @@ function extractSurname(name?: string, fallback = 'PLAYER'): string {
  *   - Batter Strip (~18px, #FFFFFF): Order + Batter surname + PA stat/split
  */
 export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps) {
+  const [matchupExpanded, setMatchupExpanded] = useState(true);
+
   // ─── Extract Game State Data with Safe Fallbacks ────────────────────────────
 
   const awayTeam = gameState?.away_team ?? 'New York Yankees';
@@ -130,7 +132,8 @@ export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps)
   }
 
   return (
-    <View style={styles.cardContainer}>
+    <View style={styles.scorebugWrap}>
+      <View style={styles.cardContainer}>
       {/* ── Upper Block: Teams & Situation (72px) ─────────────────────────── */}
       <View style={styles.upperBlock}>
         {/* Left Column (50%): Away / Home Team Rows & Scores */}
@@ -249,6 +252,62 @@ export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps)
           </Text>
         </View>
       </View>
+      </View>
+
+        {/* Toggle arrow straddling the scorebug's right border */}
+        <TouchableOpacity
+          style={styles.matchupToggle}
+          onPress={() => setMatchupExpanded((v) => !v)}
+          activeOpacity={0.7}
+          accessibilityLabel={
+            matchupExpanded ? 'Hide plate matchup preview' : 'Show plate matchup preview'
+          }
+        >
+          <Text style={styles.matchupToggleText}>{matchupExpanded ? '‹' : '›'}</Text>
+        </TouchableOpacity>
+
+      {/* ── Compact Plate Matchup • Statcast Preview (right of scorebug) ──── */}
+      {matchupExpanded && (
+      <View style={styles.matchupPreview}>
+        <Text style={styles.matchupLabel}>PLATE MATCHUP</Text>
+        <Text style={styles.matchupSubLabel}>STATCAST PREVIEW</Text>
+
+        <View style={styles.matchupSide}>
+          <Text style={styles.matchupRole}>BAT</Text>
+          <Text style={styles.matchupName} numberOfLines={1}>
+            {extractSurname(currentBatter?.name, 'BATTER')}
+          </Text>
+          <View style={styles.matchupStatRow}>
+            <MatchupStat label="PWR" value={currentBatter?.power} />
+            <MatchupStat label="CON" value={currentBatter?.contact} />
+            <MatchupStat label="VIS" value={currentBatter?.vision} />
+          </View>
+        </View>
+
+        <View style={styles.matchupDivider} />
+
+        <View style={styles.matchupSide}>
+          <Text style={styles.matchupRole}>PIT</Text>
+          <Text style={styles.matchupName} numberOfLines={1}>
+            {extractSurname(currentPitcher?.name, 'PITCHER')}
+          </Text>
+          <View style={styles.matchupStatRow}>
+            <MatchupStat label="VEL" value={currentPitcher?.velocity_rating} />
+            <MatchupStat label="BRK" value={currentPitcher?.break_rating} />
+            <MatchupStat label="CTL" value={currentPitcher?.control} />
+          </View>
+        </View>
+      </View>
+      )}
+    </View>
+  );
+}
+
+function MatchupStat({ label, value }: { label: string; value?: number }) {
+  return (
+    <View style={styles.matchupStat}>
+      <Text style={styles.matchupStatValue}>{value ?? '--'}</Text>
+      <Text style={styles.matchupStatLabel}>{label}</Text>
     </View>
   );
 }
@@ -256,22 +315,129 @@ export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps)
 // ─── Stylesheet ───────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  scorebugWrap: {
+    position: 'relative',
+  },
+  matchupToggle: {
+    position: 'absolute',
+    top: '50%',
+    right: -13,
+    marginTop: -13,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: TOKENS.upperBg,
+    borderWidth: 1,
+    borderColor: TOKENS.activeGold,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 10,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+  },
+  matchupToggleText: {
+    color: TOKENS.activeGold,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 17,
+    includeFontPadding: false,
+  },
   cardContainer: {
-    width: 250,
+    // 10rem at a 16px root font-size
+    width: 160,
     height: 110,
     backgroundColor: TOKENS.upperBg,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: TOKENS.cardBorder,
     overflow: 'hidden',
-    alignSelf: 'center',
-    marginTop: 2,
-    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.35,
     shadowRadius: 5,
     elevation: 6,
+  },
+  // ─── Compact Plate Matchup • Statcast Preview ───────────────────────────────
+  matchupPreview: {
+    position: 'absolute',
+    left: 176, // scoreboard width (160) + 16px gap
+    top: 0,
+    width: 112,
+    height: 110,
+    backgroundColor: TOKENS.upperBg,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: TOKENS.cardBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 6,
+    overflow: 'hidden',
+  },
+  matchupLabel: {
+    color: '#94A3B8',
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  matchupSubLabel: {
+    color: TOKENS.statsMuted,
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    marginTop: -3,
+  },
+  matchupSide: {
+    gap: 2,
+    marginTop: 4,
+  },
+  matchupRole: {
+    color: TOKENS.activeGold,
+    fontSize: 7,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  matchupName: {
+    color: TOKENS.upperText,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  matchupStatRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  matchupStat: {
+    flex: 1,
+    backgroundColor: '#0B0E12',
+    borderRadius: 4,
+    paddingVertical: 2,
+    alignItems: 'center',
+  },
+  matchupStatValue: {
+    color: '#E2E8F0',
+    fontSize: 10,
+    fontWeight: '900',
+    fontVariant: ['tabular-nums'],
+    includeFontPadding: false,
+  },
+  matchupStatLabel: {
+    color: '#64748B',
+    fontSize: 6,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  matchupDivider: {
+    height: 1,
+    backgroundColor: TOKENS.gridBorder,
+    marginVertical: 3,
   },
 
   // ─── Upper Block (72px) ────────────────────────────────────────────────────

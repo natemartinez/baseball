@@ -6,53 +6,38 @@ import { Colors } from '../theme/colors';
 interface StrategyDeciderWidgetProps {
   strategyIntent: StrategyIntentDecision;
   selectedPitchIntent?: string;
-  selectedTargetZone?: string;
   onSelectPitchIntent?: (name: string) => void;
-  onSelectTargetZone?: (zone: string) => void;
 }
 
 /**
  * StrategyDeciderWidget
  *
- * Full-fidelity AI Strategy & Pitch Decider widget.
- * Displays situational game leverage, AI strategic rationale,
- * ranked pitch selection weights with visual probability bars,
- * the "#1 Most Likely / Primary Weapon" highlight, Statcast metrics,
- * and the recommended target zone.
+ * AI Strategy & Pitch Decider widget.
+ * Displays count context, the AI strategic rationale, and ranked pitch
+ * selection weights with the "#1 Most Likely / Primary Weapon" highlight.
+ * Situation leverage, recommended target, pitch percentages, and Statcast
+ * rates now live in the Pitch Selector widget.
  */
 export function StrategyDeciderWidget({
   strategyIntent,
   selectedPitchIntent,
-  selectedTargetZone,
   onSelectPitchIntent,
-  onSelectTargetZone,
 }: StrategyDeciderWidgetProps) {
   const {
     strategy_name,
-    situation_tag,
     count_context,
     rationale,
-    recommended_pitch,
-    recommended_zone,
     pitch_weights = [],
-    zone_weights = [],
     command_quality,
   } = strategyIntent;
 
-  // Find zone details for recommended zone
-  const recZoneItem = zone_weights.find((z) => z.zone === recommended_zone);
-  const zoneType = recZoneItem?.zone_type ?? 'COLD_ZONE';
-
   return (
     <View style={styles.container}>
-      {/* ─── Top Header: Situation & Count Context ─────────────────────────── */}
+      {/* ─── Top Header: Count Context ─────────────────────────────────────── */}
       <View style={styles.headerRow}>
         <View style={styles.headerLeft}>
           <View style={styles.radarDot} />
           <Text style={styles.headerTitle}>AI STRATEGY & PITCH DECIDER</Text>
-        </View>
-        <View style={styles.situationBadge}>
-          <Text style={styles.situationText}>{situation_tag.replace(/_/g, ' ')}</Text>
         </View>
       </View>
 
@@ -98,28 +83,6 @@ export function StrategyDeciderWidget({
           ))}
         </View>
       </View>
-
-      {/* ─── Recommended Target Zone ──────────────────────────────────────── */}
-      <TouchableOpacity
-        activeOpacity={0.8}
-        onPress={() => onSelectTargetZone?.(recommended_zone)}
-        style={[
-          styles.recommendedZoneCard,
-          selectedTargetZone === recommended_zone && styles.recommendedZoneSelected,
-        ]}
-      >
-        <View style={styles.recZoneLeft}>
-          <Text style={styles.recZoneLabel}>Recommended Target:</Text>
-          <Text style={styles.recZoneName}>{recommended_zone}</Text>
-          <View style={[styles.zoneTypeBadge, getZoneTypeStyle(zoneType)]}>
-            <Text style={[styles.zoneTypeText, getZoneTypeTextStyle(zoneType)]}>{zoneType}</Text>
-          </View>
-        </View>
-
-        <View style={styles.recPitchPill}>
-          <Text style={styles.recPitchText}>{recommended_pitch}</Text>
-        </View>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -172,27 +135,12 @@ function PitchWeightCard({
             </View>
           )}
 
-          {pw.is_least_likely && !isSelected && (
+           {pw.is_least_likely && !isSelected && (
             <View style={styles.deprioritizedPill}>
               <Text style={styles.deprioritizedPillText}>DEPRIORITIZED</Text>
             </View>
           )}
         </View>
-
-        <Text style={[styles.probabilityText, isMostLikely ? styles.probPrimary : styles.probSecondary]}>
-          {pw.probability_pct}%
-        </Text>
-      </View>
-
-      {/* Visual Probability Progress Bar */}
-      <View style={styles.progressBarTrack}>
-        <View
-          style={[
-            styles.progressBarFill,
-            isMostLikely ? styles.progressFillPrimary : styles.progressFillSecondary,
-            { width: `${Math.min(100, Math.max(3, pw.probability_pct))}%` },
-          ]}
-        />
       </View>
 
       {/* Reasoning & Statcast Telemetry */}
@@ -211,41 +159,14 @@ function PitchWeightCard({
   );
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getZoneTypeStyle(type: string) {
-  switch (type) {
-    case 'COLD_ZONE':
-      return { backgroundColor: 'rgba(2, 136, 209, 0.2)', borderColor: 'rgba(2, 136, 209, 0.4)' };
-    case 'HOT_ZONE':
-      return { backgroundColor: 'rgba(211, 47, 47, 0.2)', borderColor: 'rgba(211, 47, 47, 0.4)' };
-    case 'CHASE_ZONE':
-      return { backgroundColor: 'rgba(142, 36, 170, 0.2)', borderColor: 'rgba(142, 36, 170, 0.4)' };
-    default:
-      return { backgroundColor: 'rgba(84, 110, 122, 0.2)', borderColor: 'rgba(84, 110, 122, 0.4)' };
-  }
-}
-
-function getZoneTypeTextStyle(type: string) {
-  switch (type) {
-    case 'COLD_ZONE':
-      return { color: '#40C4FF' };
-    case 'HOT_ZONE':
-      return { color: '#FF5252' };
-    case 'CHASE_ZONE':
-      return { color: '#BA68C8' };
-    default:
-      return { color: '#B0BEC5' };
-  }
-}
-
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     backgroundColor: Colors.bgSurface,
     borderRadius: 14,
-    padding: 14,
+    marginTop: 10,
+    padding: 34,
     gap: 10,
     borderWidth: 1,
     borderColor: Colors.borderPrimary,
@@ -276,20 +197,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: Colors.textSecondary,
     letterSpacing: 1.0,
-  },
-  situationBadge: {
-    backgroundColor: 'rgba(255, 179, 0, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 179, 0, 0.4)',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  situationText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Colors.amber,
-    letterSpacing: 0.5,
   },
   countContextRow: {
     marginTop: -2,
@@ -478,33 +385,6 @@ const styles = StyleSheet.create({
     color: '#64748B',
     letterSpacing: 0.2,
   },
-  probabilityText: {
-    fontSize: 12,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-  },
-  probPrimary: {
-    color: '#34D399',
-  },
-  probSecondary: {
-    color: '#94A3B8',
-  },
-  progressBarTrack: {
-    height: 5,
-    backgroundColor: '#1E293B',
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  progressFillPrimary: {
-    backgroundColor: '#10B981',
-  },
-  progressFillSecondary: {
-    backgroundColor: '#475569',
-  },
   pitchCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -521,60 +401,5 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     color: '#64748B',
     fontWeight: '600',
-  },
-  recommendedZoneCard: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#0D131A',
-    borderWidth: 1,
-    borderColor: '#1E293B',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  recommendedZoneSelected: {
-    borderColor: Colors.blue,
-  },
-  recZoneLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
-  },
-  recZoneLabel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '600',
-  },
-  recZoneName: {
-    fontSize: 11,
-    fontFamily: 'monospace',
-    fontWeight: '800',
-    color: Colors.amber,
-  },
-  zoneTypeBadge: {
-    borderWidth: 1,
-    paddingHorizontal: 5,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  zoneTypeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  recPitchPill: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.3)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  recPitchText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#34D399',
   },
 });

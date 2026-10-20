@@ -12,12 +12,15 @@ import { useGameStore } from '../store/gameStore';
 import { ErrorEnvelopeBanner } from '../components/ErrorEnvelopeBanner';
 import { ScoreboardControlsWidget } from '../components/ScoreboardControlsWidget';
 import { StrikeZoneGridWidget } from '../components/StrikeZoneGridWidget';
-import { MatchupCardWidget } from '../components/MatchupCardWidget';
-import { PitchOutcomeFeedWidget } from '../components/PitchOutcomeFeedWidget';
 import { LineupDialogWidget } from '../components/LineupDialogWidget';
+import { RotationBullpenDialogWidget } from '../components/RotationBullpenDialogWidget';
 import { PitchSelectorWidget } from '../components/PitchSelectorWidget';
-import { StrategyDeciderWidget } from '../components/StrategyDeciderWidget';
+import { StrategyMenuModal } from '../components/StrategyMenuModal';
+import { PitchFeedModal } from '../components/PitchFeedModal';
+import { PitchTrajectoryModal } from '../components/PitchTrajectoryModal';
+import { SettingsMenuModal } from '../components/SettingsMenuModal';
 import { GamedayDevMenuModal } from '../components/debug/GamedayDevMenuModal';
+import { getZoneNominalTarget } from '../services/gamedayMath';
 import { Colors } from '../theme/colors';
 
 /**
@@ -32,13 +35,16 @@ export function BaseballSimScreen() {
     // Data
     gameState,
     pitchFeed,
+    currentAtBatPitches,
     latestPitch,
     lineups,
+    rotations,
     selectedPitchIntent,
     selectedTargetZone,
+    customTargetCoords,
     isLineupDialogOpen,
+    isRotationDialogOpen,
     isMockMode,
-    gamedayLog,
     loadingState,
     isPitching,
     errorMessage,
@@ -46,15 +52,16 @@ export function BaseballSimScreen() {
     // Actions
     loadInitialState,
     startNewGame,
-    resetGame,
     throwPitch,
-    simAtBat,
     swapLineup,
+    swapRotation,
     toggleMockMode,
-    toggleDevMenu,
+    toggleSettingsMenu,
     setSelectedPitchIntent,
     setSelectedTargetZone,
+    setGloveTarget,
     setLineupDialogOpen,
+    setRotationDialogOpen,
     clearError,
   } = useGameStore();
 
@@ -75,6 +82,9 @@ export function BaseballSimScreen() {
 
   const currentBatter = gameState?.current_batter;
   const currentPitcher = gameState?.current_pitcher;
+  const defaultGlove = getZoneNominalTarget(selectedTargetZone || 'heart');
+  const gloveTarget = customTargetCoords ?? { x: defaultGlove.x, z: defaultGlove.z };
+  const commandRating = currentPitcher?.control ?? 82;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -98,63 +108,48 @@ export function BaseballSimScreen() {
         <ScoreboardControlsWidget
           gameState={gameState}
           lineups={lineups}
-          isActionPending={isPitching || loadingState === 'loading'}
+          latestPitch={latestPitch}
           isMockMode={isMockMode}
-          selectedPitchIntent={selectedPitchIntent}
-          selectedTargetZone={selectedTargetZone}
-          gamedayCount={gamedayLog.length}
-          onThrowPitch={throwPitch}
-          onSimAtBat={simAtBat}
-          onResetGame={resetGame}
-          onOpenLineup={() => setLineupDialogOpen(true)}
-          onOpenDevMenu={() => toggleDevMenu(true)}
+          onOpenSettings={() => toggleSettingsMenu(true)}
           onToggleMock={toggleMockMode}
         />
 
-        {/* Step 3: AI Strategy & Pitch Decider below scoreboard controls */}
-        {gameState?.strategy_intent && (
-          <StrategyDeciderWidget
-            strategyIntent={gameState.strategy_intent}
-            selectedPitchIntent={selectedPitchIntent}
-            selectedTargetZone={selectedTargetZone}
-            onSelectPitchIntent={setSelectedPitchIntent}
-            onSelectTargetZone={setSelectedTargetZone}
-          />
-        )}
+        <View style={styles.bottomPad} />
+      </ScrollView>
 
-        {/* Step 1: Pitch Selector above strike zone box */}
-        {currentPitcher && (
-          <PitchSelectorWidget
-            pitcher={currentPitcher}
-            selectedPitchIntent={selectedPitchIntent}
-            recommendedPitch={gameState?.strategy_intent?.recommended_pitch}
-            onSelectPitchIntent={setSelectedPitchIntent}
-          />
-        )}
-
-        {/* Strike Zone Grid */}
-        {currentBatter && (
+      {/* Strike Zone — dead-centered in the viewport so the HEART cell is centered */}
+      {currentBatter && (
+        <View style={styles.strikeZoneOverlay} pointerEvents="box-none">
           <StrikeZoneGridWidget
             selectedZone={selectedTargetZone ?? ''}
             onSelectZone={setSelectedTargetZone}
             currentBatter={currentBatter}
             latestPitch={latestPitch ?? pitchFeed[0]}
+            atBatPitches={currentAtBatPitches}
+            gloveTarget={gloveTarget}
+            commandRating={commandRating}
+            onSetGloveTarget={setGloveTarget}
+            showZoneLabels={false}
+            chaseTransparent
+            showPitchSummary={false}
           />
-        )}
+        </View>
+      )}
 
-        {/* Pitch Outcome Feed */}
-        <PitchOutcomeFeedWidget pitches={pitchFeed} />
-
-        {/* Step 2: Plate Matchup Container at bottom of screen */}
-        {currentBatter && currentPitcher && (
-          <MatchupCardWidget
-            batter={currentBatter}
+      {/* Pitch Selector — pinned to the bottom of the screen */}
+      {currentPitcher && (
+        <View style={styles.pitchFooter}>
+          <PitchSelectorWidget
             pitcher={currentPitcher}
+            selectedPitchIntent={selectedPitchIntent}
+            recommendedPitch={gameState?.strategy_intent?.recommended_pitch}
+            strategyIntent={gameState?.strategy_intent}
+            onSelectPitchIntent={setSelectedPitchIntent}
+            onThrowPitch={throwPitch}
+            isActionPending={isPitching || loadingState === 'loading'}
           />
-        )}
-
-        <View style={styles.bottomPad} />
-      </ScrollView>
+        </View>
+      )}
 
       {/* Lineup Dialog */}
       <LineupDialogWidget
@@ -163,6 +158,26 @@ export function BaseballSimScreen() {
         onSwapLineup={swapLineup}
         onDismiss={() => setLineupDialogOpen(false)}
       />
+
+      {/* Rotation & Bullpen Dialog */}
+      <RotationBullpenDialogWidget
+        rotations={rotations}
+        visible={isRotationDialogOpen}
+        onSwapRotation={swapRotation}
+        onDismiss={() => setRotationDialogOpen(false)}
+      />
+
+      {/* Settings Menu */}
+      <SettingsMenuModal />
+
+      {/* AI Strategy & Pitch Decider page */}
+      <StrategyMenuModal />
+
+      {/* Pitch-by-Pitch Feed page */}
+      <PitchFeedModal />
+
+      {/* Pitch Trajectory (3D) page */}
+      <PitchTrajectoryModal />
 
       {/* Gameday Dev Menu Modal */}
       <GamedayDevMenuModal />
@@ -178,5 +193,15 @@ const styles = StyleSheet.create({
   loadingText: { color: Colors.textSecondary, fontSize: 14 },
   scroll: { flex: 1 },
   scrollContent: { padding: 12, gap: 12 },
-  bottomPad: { height: 24 },
+  bottomPad: { height: 12 },
+  strikeZoneOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pitchFooter: { paddingHorizontal: 12, paddingBottom: 8 },
 });
