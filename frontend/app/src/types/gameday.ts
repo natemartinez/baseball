@@ -31,7 +31,11 @@ export interface Gameday2DPitchPacket {
     batterName: string;
     batterId: number;
     situationCategory: SituationCategory;
+    pitcherHand?: 'R' | 'L';
   };
+
+  /** Release slot in feet (plate-centered frame, +y toward the mound). */
+  release?: { x: number; y: number; z: number };
 
   strategy: {
     repertoireProbabilities: Record<string, number>; // e.g. { "4-Seam Fastball": 0.35, "Spin Monster Sweeper": 0.45 }
@@ -53,6 +57,11 @@ export interface Gameday2DPitchPacket {
     realizedX: number; // Statcast feet
     realizedZ: number; // Statcast feet
     realizedSpeedMph: number;
+    releaseSpeedMph?: number;
+    horizontalBreakInches?: number; // RHP convention: + = glove side
+    inducedVerticalBreakInches?: number; // + = ride, - = drop
+    /** Hard maximum miss radius for the spray cloud (inches). */
+    maxRadiusInches?: number;
     radialMissInches: number;
     deltaXInches: number;
     deltaZInches: number;

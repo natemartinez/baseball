@@ -23,6 +23,7 @@ export const HEART_Z_TOP = 3.00; // Inner 50% vertical
 
 export const BALL_DIAMETER_FT = 2.9 / 12; // ~0.2417 ft
 export const SHADOW_BORDER_FT = 3.4 / 12; // 0.2833 ft (1 ball width border)
+export const CHASE_BORDER_FT = 2 * SHADOW_BORDER_FT; // 0.5667 ft (2 ball widths)
 
 // Viewport boundaries for SVG rendering (Statcast Feet)
 export const VIEWPORT_X_MIN = -2.0;
@@ -30,45 +31,100 @@ export const VIEWPORT_X_MAX = 2.0;
 export const VIEWPORT_Z_MIN = 0.0; // Ground level
 export const VIEWPORT_Z_MAX = 4.5; // High waste area
 
-export const SIGMA_MAX_FT = 0.50; // 6.0 inches (40 Command)
-export const SIGMA_MIN_FT = 0.15; // 1.8 inches (99 Command)
+export const SIGMA_MAX_FT = 0.50; // Legacy; the radius table is authoritative.
+export const SIGMA_MIN_FT = 0.15; // Legacy; the radius table is authoritative.
+
+/** Fatigue is off while the spray-cloud model is being validated. */
+export const FATIGUE_ENABLED = false;
+
+/**
+ * Command -> hard maximum error radius (inches). Diameter = 2 * radius.
+ * Interpolated linearly between tiers and clamped outside the range.
+ */
+export const MAX_ERROR_RADIUS_TIERS: Array<[number, number]> = [
+  [99, 1.0],
+  [90, 1.25],
+  [82, 1.5],
+  [68, 3.0],
+  [55, 4.5],
+  [40, 7.0],
+];
+
+/** sigma = radius / divisor for the truncated Gaussian cloud. */
+export const SIGMA_RADIUS_DIVISOR = 2.5;
+
+export function getMaxErrorRadiusInches(commandRating: number): number {
+  const command = Math.max(40, Math.min(99, commandRating));
+  for (let i = 0; i < MAX_ERROR_RADIUS_TIERS.length - 1; i++) {
+    const [highCmd, highRadius] = MAX_ERROR_RADIUS_TIERS[i];
+    const [lowCmd, lowRadius] = MAX_ERROR_RADIUS_TIERS[i + 1];
+    if (command >= lowCmd && command <= highCmd) {
+      const span = highCmd - lowCmd;
+      if (span <= 0) return highRadius;
+      const t = (highCmd - command) / span;
+      return highRadius + (lowRadius - highRadius) * t;
+    }
+  }
+  return MAX_ERROR_RADIUS_TIERS[MAX_ERROR_RADIUS_TIERS.length - 1][1];
+}
 
 // ─── Pre-computed Empirical Baselines (from 10,000-pitch calibration protocol) ─
 
 export const EMPIRICAL_BASELINES: Record<number, CalibrationBaseline> = {
   40: {
     commandRating: 40,
-    expectedShadowAccuracy: 68.2,
-    expectedHeartLeaks: 9.7,
-    expectedMissRadiusInches: 6.22,
+    expectedShadowAccuracy: 80.8,
+    expectedHeartLeaks: 14.9,
+    expectedMissRadiusInches: 3.29,
     expectedAheadOffspeedPct: 58.4,
+  },
+  55: {
+    commandRating: 55,
+    expectedShadowAccuracy: 84.1,
+    expectedHeartLeaks: 13.0,
+    expectedMissRadiusInches: 2.12,
+    expectedAheadOffspeedPct: 61.5,
   },
   68: {
     commandRating: 68,
-    expectedShadowAccuracy: 81.0,
-    expectedHeartLeaks: 7.7,
-    expectedMissRadiusInches: 4.49,
+    expectedShadowAccuracy: 86.1,
+    expectedHeartLeaks: 11.4,
+    expectedMissRadiusInches: 1.42,
     expectedAheadOffspeedPct: 65.1,
+  },
+  82: {
+    commandRating: 82,
+    expectedShadowAccuracy: 92.5,
+    expectedHeartLeaks: 6.15,
+    expectedMissRadiusInches: 0.71,
+    expectedAheadOffspeedPct: 67.5,
   },
   85: {
     commandRating: 85,
-    expectedShadowAccuracy: 88.2,
-    expectedHeartLeaks: 6.0,
-    expectedMissRadiusInches: 3.51,
+    expectedShadowAccuracy: 93.1,
+    expectedHeartLeaks: 5.66,
+    expectedMissRadiusInches: 0.66,
     expectedAheadOffspeedPct: 68.3,
+  },
+  90: {
+    commandRating: 90,
+    expectedShadowAccuracy: 94.6,
+    expectedHeartLeaks: 4.44,
+    expectedMissRadiusInches: 0.59,
+    expectedAheadOffspeedPct: 69.9,
   },
   99: {
     commandRating: 99,
-    expectedShadowAccuracy: 94.1,
-    expectedHeartLeaks: 3.3,
-    expectedMissRadiusInches: 2.63,
+    expectedShadowAccuracy: 96.8,
+    expectedHeartLeaks: 2.63,
+    expectedMissRadiusInches: 0.47,
     expectedAheadOffspeedPct: 71.9,
   },
 };
 
 /** Get closest empirical baseline for a given pitcher Command rating */
 export function getBaselineForCommand(commandRating: number): CalibrationBaseline {
-  const tiers = [40, 68, 85, 99];
+  const tiers = Object.keys(EMPIRICAL_BASELINES).map(Number).sort((a, b) => a - b);
   let closest = tiers[0];
   let minDiff = Math.abs(commandRating - closest);
   for (const t of tiers) {
@@ -92,11 +148,40 @@ export function calculateExecutionSigma(
   pitchCount: number = 0,
   stamina: number = 70,
 ): number {
-  const clampedCommand = Math.max(20, Math.min(99, commandRating));
-  const baseSigma =
-    SIGMA_MAX_FT - (clampedCommand / 100) * (SIGMA_MAX_FT - SIGMA_MIN_FT);
+  const radiusFt = getMaxErrorRadiusInches(commandRating) / 12;
+  const baseSigma = radiusFt / SIGMA_RADIUS_DIVISOR;
+  if (!FATIGUE_ENABLED) return baseSigma;
   const fatigueMultiplier = Math.max(0, (pitchCount - stamina) / 30);
   return baseSigma * (1 + fatigueMultiplier);
+}
+
+/**
+ * Samples a 2D Gaussian location truncated to a hard max radius using the
+ * closed-form truncated Rayleigh radial distribution. The result can never
+ * leave the circle and no rejection loop is required.
+ */
+export function sampleTruncatedGaussian(
+  targetX: number,
+  targetZ: number,
+  sigma: number,
+  maxRadiusFt: number,
+  rng: () => number = Math.random,
+): { x: number; z: number } {
+  if (maxRadiusFt <= 0 || sigma <= 0) {
+    return { x: targetX, z: targetZ };
+  }
+  const u = rng();
+  const expTerm = Math.exp(-(maxRadiusFt * maxRadiusFt) / (2 * sigma * sigma));
+  const oneMinus = 1 - u * (1 - expTerm);
+  const r = Math.min(
+    sigma * Math.sqrt(-2 * Math.log(Math.max(1e-12, oneMinus))),
+    maxRadiusFt,
+  );
+  const theta = 2 * Math.PI * rng();
+  return {
+    x: targetX + r * Math.cos(theta),
+    z: targetZ + r * Math.sin(theta),
+  };
 }
 
 /**
@@ -124,25 +209,105 @@ export function executeDelivery(
   realizedX: number;
   realizedZ: number;
   sigmaFeet: number;
+  maxRadiusInches: number;
   radialMissInches: number;
   deltaXInches: number;
   deltaZInches: number;
 } {
   const sigma = calculateExecutionSigma(commandRating, pitchCount, stamina);
-  const realizedX = sampleGaussian(targetX, sigma, rng);
-  const realizedZ = sampleGaussian(targetZ, sigma, rng);
+  const maxRadiusInches = getMaxErrorRadiusInches(commandRating);
+  const sample = sampleTruncatedGaussian(
+    targetX,
+    targetZ,
+    sigma,
+    maxRadiusInches / 12,
+    rng,
+  );
 
-  const deltaXFeet = realizedX - targetX;
-  const deltaZFeet = realizedZ - targetZ;
+  const deltaXFeet = sample.x - targetX;
+  const deltaZFeet = sample.z - targetZ;
   const radialMissFeet = Math.sqrt(deltaXFeet * deltaXFeet + deltaZFeet * deltaZFeet);
 
   return {
-    realizedX: +realizedX.toFixed(3),
-    realizedZ: +realizedZ.toFixed(3),
+    realizedX: +sample.x.toFixed(3),
+    realizedZ: +sample.z.toFixed(3),
     sigmaFeet: +sigma.toFixed(3),
+    maxRadiusInches: +maxRadiusInches.toFixed(3),
     radialMissInches: +(radialMissFeet * 12).toFixed(1),
     deltaXInches: +(deltaXFeet * 12).toFixed(1),
     deltaZInches: +(deltaZFeet * 12).toFixed(1),
+  };
+}
+
+// ─── Spray cloud (deterministic Monte Carlo) ─────────────────────────────────
+
+function mulberry32(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let z = Math.imul(s ^ (s >>> 15), 1 | s);
+    z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z;
+    return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function sprayCloudSeed(
+  targetX: number,
+  targetZ: number,
+  commandRating: number,
+): number {
+  return (
+    (Math.round((targetX + 2) * 1000) * 73856093) ^
+    (Math.round((targetZ + 0.5) * 1000) * 19349663) ^
+    Math.round(commandRating * 83492791)
+  ) >>> 0;
+}
+
+export interface SprayCloudPoint {
+  x: number;
+  z: number;
+  zone: GamedayZoneCategory;
+}
+
+export interface SprayCloud {
+  points: SprayCloudPoint[];
+  radiusInches: number;
+  sigmaInches: number;
+}
+
+/**
+ * Builds a deterministic spray cloud around the glove target using the same
+ * truncated command model as the pitch engine. The cloud is stable for a given
+ * target/command, so it does not jitter on re-render.
+ */
+export function buildSprayCloud(
+  targetX: number,
+  targetZ: number,
+  commandRating: number,
+  sampleCount: number = 150,
+  seed?: number,
+): SprayCloud {
+  const sigma = calculateExecutionSigma(commandRating);
+  const radiusInches = getMaxErrorRadiusInches(commandRating);
+  const radiusFt = radiusInches / 12;
+  const rng = mulberry32(
+    seed ?? sprayCloudSeed(targetX, targetZ, commandRating),
+  );
+  const points: SprayCloudPoint[] = [];
+
+  for (let i = 0; i < sampleCount; i++) {
+    const sample = sampleTruncatedGaussian(targetX, targetZ, sigma, radiusFt, rng);
+    points.push({
+      x: sample.x,
+      z: sample.z,
+      zone: classifyGamedayZone(sample.x, sample.z),
+    });
+  }
+
+  return {
+    points,
+    radiusInches,
+    sigmaInches: +(sigma * 12).toFixed(2),
   };
 }
 
@@ -169,27 +334,27 @@ export function classifyGamedayZone(x: number, z: number): GamedayZoneCategory {
     return 'HEART';
   }
 
-  // Distance from strike zone rectangle
-  const dx = Math.max(0, ZONE_X_MIN - x, x - ZONE_X_MAX);
-  const dz = Math.max(0, ZONE_Z_BOT - z, z - ZONE_Z_TOP);
-  const distFromZone = Math.sqrt(dx * dx + dz * dz);
-
-  // If inside rulebook zone (but outside Heart), it's Shadow
-  if (distFromZone === 0) {
+  // Rectangular bands, matching the backend classifier exactly. This is
+  // important at the four corners: a diagonal point just outside both edges is
+  // in the chase band, not the waste band.
+  if (
+    x >= ZONE_X_MIN - SHADOW_BORDER_FT &&
+    x <= ZONE_X_MAX + SHADOW_BORDER_FT &&
+    z >= ZONE_Z_BOT - SHADOW_BORDER_FT &&
+    z <= ZONE_Z_TOP + SHADOW_BORDER_FT
+  ) {
     return 'SHADOW';
   }
 
-  // 2. Shadow border extends ~1 ball width (0.283 ft) outside zone
-  if (distFromZone <= SHADOW_BORDER_FT) {
-    return 'SHADOW';
-  }
-
-  // 3. Chase: 1-2 ball widths outside (0.283 to 0.50 ft)
-  if (distFromZone <= 0.50) {
+  if (
+    x >= ZONE_X_MIN - CHASE_BORDER_FT &&
+    x <= ZONE_X_MAX + CHASE_BORDER_FT &&
+    z >= ZONE_Z_BOT - CHASE_BORDER_FT &&
+    z <= ZONE_Z_TOP + CHASE_BORDER_FT
+  ) {
     return 'CHASE';
   }
 
-  // 4. Waste: > 6 inches (0.50 ft) outside zone
   return 'WASTE';
 }
 

@@ -1,13 +1,26 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, GestureResponderEvent } from 'react-native';
-import Svg, { Rect, Line, Circle, Polygon, Text as SvgText, G } from 'react-native-svg';
+import Svg, {
+  Rect,
+  Line,
+  Circle,
+  Polygon,
+  Text as SvgText,
+  G,
+  Image as SvgImage,
+} from 'react-native-svg';
 import type { Gameday2DPitchPacket } from '../../types/gameday';
 import { Colors } from '../../theme/colors';
+
+const GLOVE_ICON = require('../../../assets/glove-icon.png');
 import {
   statcastToSvg,
   svgToStatcast,
   getPitchTypeColor,
   getResultRingColor,
+  buildSprayCloud,
+  VIEWPORT_X_MIN,
+  VIEWPORT_X_MAX,
   ZONE_X_MIN,
   ZONE_X_MAX,
   ZONE_Z_BOT,
@@ -85,6 +98,19 @@ export function GamedayVisualizerColumn({
   const pitchColor = packet ? getPitchTypeColor(packet.strategy.selectedPitch) : Colors.cyan;
   const ringColor = packet ? getResultRingColor(packet.result.call) : Colors.blue;
 
+  const commandRating = packet?.meta.commandRating ?? 82;
+  const sprayCloud = useMemo(
+    () => buildSprayCloud(activeTargetX, activeTargetZ, commandRating),
+    [activeTargetX, activeTargetZ, commandRating],
+  );
+  const pxPerInch =
+    (SVG_WIDTH / (VIEWPORT_X_MAX - VIEWPORT_X_MIN)) / 12;
+  // The asset has ~9% padding; compensate so the glove fills the error area.
+  const gloveSize = Math.max(
+    16,
+    (2 * sprayCloud.radiusInches * pxPerInch) / 0.81,
+  );
+
   // Handle interactive touch to set custom target
   function handleSvgTouch(event: GestureResponderEvent) {
     const { locationX, locationY } = event.nativeEvent;
@@ -107,8 +133,9 @@ export function GamedayVisualizerColumn({
       </View>
 
       {/* SVG Canvas Cross Section */}
-      <TouchableOpacity activeOpacity={0.95} onPress={handleSvgTouch} style={styles.svgWrapper}>
-        <Svg width={SVG_WIDTH} height={SVG_HEIGHT}>
+      <View style={styles.svgWrapper}>
+        <TouchableOpacity activeOpacity={0.95} onPress={handleSvgTouch} style={styles.svgTouchable}>
+          <Svg width={SVG_WIDTH} height={SVG_HEIGHT}>
           {/* Ground Baseline Z = 0 */}
           <Line x1={0} y1={statcastToSvg(0, 0, SVG_WIDTH, SVG_HEIGHT).svgY} x2={SVG_WIDTH} y2={statcastToSvg(0, 0, SVG_WIDTH, SVG_HEIGHT).svgY} stroke="rgba(144,164,174,0.3)" strokeWidth={1} />
 
@@ -162,6 +189,19 @@ export function GamedayVisualizerColumn({
             HEART (50%)
           </SvgText>
 
+          {/* Spray Cloud + hard error ring around the glove target */}
+          {sprayCloud.points.map((point, index) => {
+            const p = statcastToSvg(point.x, point.z, SVG_WIDTH, SVG_HEIGHT);
+            return (
+              <Circle
+                key={`spray-${index}`}
+                cx={p.svgX}
+                cy={p.svgY}
+                r={1.6}
+                fill={cloudDotColor(point.zone)}
+              />
+            );
+          })}
           {/* Execution Vector Line (Target -> Realized) */}
           {realizedSvg && (
             <G>
@@ -187,15 +227,18 @@ export function GamedayVisualizerColumn({
             </G>
           )}
 
-          {/* Intended Target Reticle (Dashed Circle + Crosshairs) */}
-          <G>
-            <Circle cx={targetSvg.svgX} cy={targetSvg.svgY} r={11} fill="none" stroke="#FFD54F" strokeWidth={1.5} strokeDasharray="3,2" />
-            <Line x1={targetSvg.svgX - 14} y1={targetSvg.svgY} x2={targetSvg.svgX + 14} y2={targetSvg.svgY} stroke="#FFD54F" strokeWidth={1.2} />
-            <Line x1={targetSvg.svgX} y1={targetSvg.svgY - 14} x2={targetSvg.svgX} y2={targetSvg.svgY + 14} stroke="#FFD54F" strokeWidth={1.2} />
-            <SvgText x={targetSvg.svgX} y={targetSvg.svgY - 16} fill="#FFD54F" fontSize="9" fontWeight="800" textAnchor="middle">
-              {customTarget ? '○ CUSTOM' : '○ TARGET'}
-            </SvgText>
-          </G>
+          {/* Catcher's glove asset — fills the old error-circle area */}
+          <SvgImage
+            href={GLOVE_ICON}
+            x={targetSvg.svgX - gloveSize / 2}
+            y={targetSvg.svgY - gloveSize / 2}
+            width={gloveSize}
+            height={gloveSize}
+            preserveAspectRatio="xMidYMid meet"
+          />
+          <SvgText x={targetSvg.svgX} y={targetSvg.svgY - gloveSize / 2 - 6} fill="#FFD54F" fontSize="9" fontWeight="800" textAnchor="middle">
+            {customTarget ? 'CUSTOM' : 'TARGET'}
+          </SvgText>
 
           {/* Realized Delivery Pitch Dot */}
           {realizedSvg && (
@@ -220,8 +263,9 @@ export function GamedayVisualizerColumn({
               </SvgText>
             </G>
           )}
-        </Svg>
-      </TouchableOpacity>
+          </Svg>
+        </TouchableOpacity>
+      </View>
 
       {/* Coordinate & Execution Telemetry Readout */}
       <View style={styles.telemetryCard}>
@@ -229,6 +273,13 @@ export function GamedayVisualizerColumn({
           <Text style={styles.telemetryKey}>Target (X*, Z*):</Text>
           <Text style={[styles.telemetryVal, { color: Colors.amberLight }]}>
             ({activeTargetX > 0 ? `+${activeTargetX.toFixed(2)}` : activeTargetX.toFixed(2)}, {activeTargetZ.toFixed(2)} ft)
+          </Text>
+        </View>
+
+        <View style={styles.telemetryRow}>
+          <Text style={styles.telemetryKey}>Spray Cloud:</Text>
+          <Text style={[styles.telemetryVal, { color: Colors.cyan }]}>
+            CMD {commandRating} • σ {sprayCloud.sigmaInches}" • R {sprayCloud.radiusInches.toFixed(1)}"
           </Text>
         </View>
 
@@ -267,6 +318,13 @@ export function GamedayVisualizerColumn({
   );
 }
 
+function cloudDotColor(zone: string): string {
+  if (zone === 'HEART') return 'rgba(239, 68, 68, 0.55)';
+  if (zone === 'SHADOW') return 'rgba(64, 196, 255, 0.45)';
+  if (zone === 'CHASE') return 'rgba(255, 179, 0, 0.5)';
+  return 'rgba(148, 163, 184, 0.4)';
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgDeep, padding: 10, gap: 10 },
   headerBox: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -282,6 +340,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 6,
+  },
+  svgTouchable: {
+    width: SVG_WIDTH,
+    height: SVG_HEIGHT,
   },
   telemetryCard: {
     backgroundColor: Colors.bgSurface,

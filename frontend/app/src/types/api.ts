@@ -128,9 +128,14 @@ export interface StatcastMetrics {
 export interface PitchArsenalItem {
   name: string;
   velocity_mph: number;
+  velocity_min_mph?: number;
+  velocity_max_mph?: number;
   spin_rpm: number;
   break_rating: number;
   control_rating: number;
+  /** Statcast movement (inches). Positive HB = glove side (RHP convention). */
+  horizontal_break_in?: number;
+  induced_vertical_break_in?: number;
   statcast: StatcastMetrics;
 }
 
@@ -148,6 +153,10 @@ export interface PitcherInfo {
   jersey_number: number;
   position: string;
   team: string;
+  /** Throwing hand. */
+  throws?: 'R' | 'L';
+  /** Release slot in feet (optional per-pitcher override). */
+  release?: { x: number; y: number; z: number };
   break_rating: number;
   velocity_rating: number;
   arm_strength: number;
