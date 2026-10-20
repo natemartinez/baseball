@@ -368,10 +368,26 @@ class GameEngine:
         batter_name = getattr(batter, 'name', 'Batter') if batter else 'Batter'
         batter_id = getattr(batter, 'id', 1) if batter else 1
 
+        pitcher_hand = (
+            'L'
+            if str(getattr(pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
+            else 'R'
+        )
+        release = {
+            'x': -2.1 if pitcher_hand == 'R' else 2.1,
+            'y': 54.5,
+            'z': 5.9,
+        }
+        horizontal_break_in = delivery.get('horizontal_break_in', 0.0)
+        induced_vertical_break_in = delivery.get('induced_vertical_break_in', 0.0)
+        release_speed_mph = delivery.get('release_speed_mph', velocity_mph)
+        max_radius_inches = delivery.get('max_radius_inches', 0.0)
+
         gameday_packet = {
             'meta': {
                 'pitchNumber': self.session_pitch_count,
                 'pitcherName': pitcher_name,
+                'pitcherHand': pitcher_hand,
                 'pitcherOvr': 85,
                 'commandRating': int(command_rating),
                 'staminaPct': max(10, 100 - cur_pitch_count),
@@ -388,6 +404,7 @@ class GameEngine:
                 'batterId': batter_id,
                 'situationCategory': sit_category,
             },
+            'release': release,
             'strategy': {
                 'repertoireProbabilities': strat_result['repertoire_probabilities'],
                 'selectedPitch': selected_pitch_name,
@@ -406,6 +423,10 @@ class GameEngine:
                 'realizedX': realized_x,
                 'realizedZ': realized_z,
                 'realizedSpeedMph': velocity_mph,
+                'releaseSpeedMph': release_speed_mph,
+                'horizontalBreakInches': horizontal_break_in,
+                'inducedVerticalBreakInches': induced_vertical_break_in,
+                'maxRadiusInches': max_radius_inches,
                 'radialMissInches': radial_miss_in,
                 'deltaXInches': delta_x_in,
                 'deltaZInches': delta_z_in,

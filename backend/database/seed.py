@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.database.db import DB_PATH, add_player, init_db
+from backend.engine.pitching_engine.pitch_objects import movement_for
 
 MOCK_DB_PATH = ROOT_DIR / 'backend' / 'mock' / 'mock_baseball_db.json'
 
@@ -107,11 +108,14 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         raw_arsenal = p.get('arsenal', [])
         pitch_arsenal = []
         for a in raw_arsenal:
+            movement = movement_for(a.get('name', ''))
             pitch_arsenal.append({
                 'pitch': a.get('name', '4-Seam Fastball'),
                 'name': a.get('name', '4-Seam Fastball'),
                 'avg_velo_mph': a.get('velocity_mph', 95.0),
                 'velocity_mph': a.get('velocity_mph', 95.0),
+                'velocity_min_mph': a.get('velocity_min_mph', a.get('velocity_mph', 95.0) - 2.0),
+                'velocity_max_mph': a.get('velocity_max_mph', a.get('velocity_mph', 95.0) + 2.0),
                 'max_velo_mph': a.get('velocity_mph', 95.0) + 2.0,
                 'avg_spin_rpm': a.get('spin_rpm', 2400),
                 'spin_rpm': a.get('spin_rpm', 2400),
@@ -120,6 +124,8 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
                 'usage_pct_vs_lhb': 0.35,
                 'break_rating': a.get('break_rating', 85),
                 'control_rating': a.get('control_rating', 80),
+                'horizontal_break_in': a.get('horizontal_break_in', movement['hb']),
+                'induced_vertical_break_in': a.get('induced_vertical_break_in', movement['ivb']),
             })
 
         traits_list = []

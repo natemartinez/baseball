@@ -7,7 +7,7 @@ and in-game pitcher rating adjustments for a baseball game instance.
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 
-from .pitch_objects import PitchArsenal, PITCH_CATEGORIES
+from .pitch_objects import PitchArsenal, PITCH_CATEGORIES, movement_for
 from .strategy import PitchStrategy
 from .pitchers import PitcherInstanceManager, InGamePitcherRatings
 from .calculations import calculate_pitch_delivery
@@ -135,11 +135,23 @@ class PitchingEngine:
 
         pitch_category = PITCH_CATEGORIES.get(selected_pitch_name, 'Fastball')
 
+        selected_pitch_obj = self.arsenal.get(selected_pitch_name)
+        if selected_pitch_obj is not None:
+            horizontal_break_in = selected_pitch_obj.horizontal_break_in
+            induced_vertical_break_in = selected_pitch_obj.induced_vertical_break_in
+        else:
+            movement = movement_for(selected_pitch_name)
+            horizontal_break_in = movement['hb']
+            induced_vertical_break_in = movement['ivb']
+
         return {
             'selected_pitch': selected_pitch_name,
             'pitch_category': pitch_category,
             'velocity_mph': round(velocity_mph, 1),
+            'release_speed_mph': round(velocity_mph, 1),
             'spin_rpm': spin_rpm,
+            'horizontal_break_in': horizontal_break_in,
+            'induced_vertical_break_in': induced_vertical_break_in,
             'nominal_zone': nominal_zone,
             'target_x': target_x,
             'target_z': target_z,
@@ -150,6 +162,7 @@ class PitchingEngine:
             'realized_zone_cat': delivery_math['realized_zone_cat'],
             'is_strike': delivery_math['is_strike'],
             'sigma': delivery_math['sigma'],
+            'max_radius_inches': delivery_math['max_radius_inches'],
             'delta_x_in': delivery_math['delta_x_in'],
             'delta_z_in': delivery_math['delta_z_in'],
             'radial_miss_in': delivery_math['radial_miss_in'],

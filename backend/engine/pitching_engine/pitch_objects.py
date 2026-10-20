@@ -32,6 +32,33 @@ DEFAULT_ARSENAL: List[Dict[str, Any]] = [
 ]
 
 
+# Statcast movement fallback, in inches.
+# Horizontal break uses the RHP convention: positive = glove side (catcher's right).
+# Induced vertical break: positive = ride, negative = drop.
+DEFAULT_PITCH_MOVEMENT: List[Dict[str, Any]] = [
+    {'match': 'sweeper', 'hb': 18.2, 'ivb': 4.5},
+    {'match': 'gyro', 'hb': 5.5, 'ivb': -1.0},
+    {'match': 'slider', 'hb': 5.5, 'ivb': -1.0},
+    {'match': 'four', 'hb': -7.5, 'ivb': 16.0},
+    {'match': '4-seam', 'hb': -7.5, 'ivb': 16.0},
+    {'match': 'curve', 'hb': -8.0, 'ivb': -12.0},
+    {'match': 'sinker', 'hb': -14.0, 'ivb': 6.0},
+    {'match': 'change', 'hb': -12.0, 'ivb': 2.0},
+    {'match': 'split', 'hb': -6.0, 'ivb': -2.0},
+    {'match': 'cutter', 'hb': 4.0, 'ivb': 6.0},
+]
+DEFAULT_MOVEMENT: Dict[str, float] = {'hb': -7.5, 'ivb': 16.0}
+
+
+def movement_for(pitch_name: str) -> Dict[str, float]:
+    """Resolve fallback HB/IVB (inches) for a pitch name via substring matching."""
+    name = (pitch_name or '').lower()
+    for entry in DEFAULT_PITCH_MOVEMENT:
+        if entry['match'] in name:
+            return {'hb': float(entry['hb']), 'ivb': float(entry['ivb'])}
+    return dict(DEFAULT_MOVEMENT)
+
+
 @dataclass
 class Pitch:
     """Represents a single pitch type in a pitcher's arsenal."""
@@ -42,6 +69,8 @@ class Pitch:
     usage_pct: float = 0.25
     break_rating: float = 80.0
     control_rating: float = 75.0
+    horizontal_break_in: float = 0.0
+    induced_vertical_break_in: float = 0.0
     statcast_metrics: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -54,6 +83,19 @@ class Pitch:
         break_r = float(data.get('break_rating', 80.0))
         ctrl_r = float(data.get('control_rating', 75.0))
         metrics = data.get('statcast', {})
+
+        fallback = movement_for(name)
+        hb = data.get('horizontal_break_in')
+        if hb is None:
+            hb = data.get('horizontalBreakInches')
+        if hb is None:
+            hb = fallback['hb']
+        ivb = data.get('induced_vertical_break_in')
+        if ivb is None:
+            ivb = data.get('inducedVerticalBreakInches')
+        if ivb is None:
+            ivb = fallback['ivb']
+
         return cls(
             name=name,
             category=category,
@@ -62,6 +104,8 @@ class Pitch:
             usage_pct=usage,
             break_rating=break_r,
             control_rating=ctrl_r,
+            horizontal_break_in=float(hb),
+            induced_vertical_break_in=float(ivb),
             statcast_metrics=metrics
         )
 
@@ -107,6 +151,8 @@ class PitchArsenal:
                 'usage_pct': p.usage_pct,
                 'break_rating': p.break_rating,
                 'control_rating': p.control_rating,
+                'horizontal_break_in': p.horizontal_break_in,
+                'induced_vertical_break_in': p.induced_vertical_break_in,
             }
             for p in self.pitches
         ]

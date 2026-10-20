@@ -123,6 +123,9 @@ def test_pitching_delivery_execution():
     assert "pitch_effectiveness" in delivery
     assert "adjusted_ratings" in delivery
     assert delivery["adjusted_ratings"]["pitch_count"] == 45
+    assert "horizontal_break_in" in delivery
+    assert "induced_vertical_break_in" in delivery
+    assert "release_speed_mph" in delivery
 
 
 def test_game_engine_pitch_integration():
@@ -149,6 +152,13 @@ def test_game_engine_pitch_integration():
     details = pitch_res["pitch_details"]
     assert details["adjusted_ratings"]["pitch_count"] == 1
     assert "gameday_packet" in details
+
+    packet = details["gameday_packet"]
+    assert packet["meta"]["pitcherHand"] in ("R", "L")
+    assert set(packet["release"].keys()) == {"x", "y", "z"}
+    assert "horizontalBreakInches" in packet["execution"]
+    assert "inducedVerticalBreakInches" in packet["execution"]
+    assert "releaseSpeedMph" in packet["execution"]
 
     # 2. Alias hand-off: game.pitching_engine()
     alias_res = game.pitching_engine(target_zone="heart")
