@@ -7,7 +7,7 @@ import type {
   TeamRotation,
   ApiErrorResponse,
 } from '../types/api';
-import { STRIKE_ZONES, BaseballApiError } from '../types/api';
+import { STRIKE_ZONES, INNER_ZONES, CHASE_ZONES, BaseballApiError } from '../types/api';
 import type {
   Gameday2DPitchPacket,
   GamedayFilterOptions,
@@ -15,7 +15,12 @@ import type {
   SituationCategory,
 } from '../types/gameday';
 import { GameRepository } from '../services/GameRepository';
-import { executeDelivery, classifyGamedayZone } from '../services/gamedayMath';
+import {
+  executeDelivery,
+  classifyGamedayZone,
+  getZoneNominalTarget,
+  isRulebookStrike,
+} from '../services/gamedayMath';
 import { calculateStrategyAndIntent } from '../services/strategyEngine';
 
 function ensureStrategyIntent(game?: GameState | null): GameState | null | undefined {
@@ -39,6 +44,10 @@ export interface GameUiState {
   initialResponse: InitialStateResponse | null;
   gameState: GameState | null;
   pitchFeed: PitchDetails[];
+  /** Pitches in the current at-bat, oldest first (for numbered zone markers). */
+  currentAtBatPitches: PitchDetails[];
+  /** True when the most recent pitch ended the at-bat. */
+  lastPitchEndedAtBat: boolean;
   latestPitch: PitchDetails | null;
   lineups: TeamLineup[];
   rotations: TeamRotation[];
@@ -107,6 +116,8 @@ const initialState: GameUiState = {
   initialResponse: null,
   gameState: null,
   pitchFeed: [],
+  currentAtBatPitches: [],
+  lastPitchEndedAtBat: false,
   latestPitch: null,
   lineups: [],
   rotations: [],
@@ -147,6 +158,8 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         rotations: response.rotations,
         loadingState: 'success',
         pitchFeed: [],
+        currentAtBatPitches: [],
+        lastPitchEndedAtBat: false,
         latestPitch: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
@@ -167,6 +180,8 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       set((s) => ({
         gameState: ensureStrategyIntent(state) as GameState,
         pitchFeed: [],
+        currentAtBatPitches: [],
+        lastPitchEndedAtBat: false,
         latestPitch: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
@@ -191,6 +206,8 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         lineups: response.lineups,
         rotations: response.rotations,
         pitchFeed: [],
+        currentAtBatPitches: [],
+        lastPitchEndedAtBat: false,
         latestPitch: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
@@ -225,10 +242,19 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       );
 
       const packet = result.pitch_details.gameday_packet;
+      // A 0-0 count after a pitch means the at-bat ended (new batter up).
+      const atBatEnded =
+        result.game_state.balls === 0 && result.game_state.strikes === 0;
 
       set((s) => ({
         gameState: ensureStrategyIntent(result.game_state) as GameState,
         latestPitch: result.pitch_details,
+        // Keep the pitch that ended the at-bat visible; the next at-bat's
+        // first pitch starts a fresh list.
+        currentAtBatPitches: s.lastPitchEndedAtBat
+          ? [result.pitch_details]
+          : [...s.currentAtBatPitches, result.pitch_details],
+        lastPitchEndedAtBat: atBatEnded,
         pitchFeed: [result.pitch_details, ...s.pitchFeed].slice(0, 25),
         gamedayLog: packet ? [packet, ...s.gamedayLog].slice(0, 100) : s.gamedayLog,
         selectedPitchPacketIndex: null, // Reset to latest
@@ -247,10 +273,16 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     try {
       const result = await repo.simAtBat();
       const packet = result.pitch_details.gameday_packet;
+      const atBatEnded =
+        result.game_state.balls === 0 && result.game_state.strikes === 0;
 
       set((s) => ({
         gameState: ensureStrategyIntent(result.game_state) as GameState,
         latestPitch: result.pitch_details,
+        currentAtBatPitches: s.lastPitchEndedAtBat
+          ? [result.pitch_details]
+          : [...s.currentAtBatPitches, result.pitch_details],
+        lastPitchEndedAtBat: atBatEnded,
         pitchFeed: [result.pitch_details, ...s.pitchFeed].slice(0, 25),
         gamedayLog: packet ? [packet, ...s.gamedayLog].slice(0, 100) : s.gamedayLog,
         selectedPitchPacketIndex: null,
@@ -412,6 +444,26 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   setSelectedTargetZone(zone: string) {
     set({ selectedTargetZone: zone, customTargetCoords: null });
+  },
+
+  setGloveTarget(x: number, z: number) {
+    // Keep the zone label in the same category as the target. A glove just
+    // outside a corner is a ball; it should not inherit the nearest inner
+    // corner's strike label.
+    const candidates = isRulebookStrike(x, z) ? INNER_ZONES : CHASE_ZONES;
+    let best: string = candidates[0];
+    let bestDist = Number.POSITIVE_INFINITY;
+    for (const name of candidates) {
+      const center = getZoneNominalTarget(name);
+      const dx = x - center.x;
+      const dz = z - center.z;
+      const dist = dx * dx + dz * dz;
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = name;
+      }
+    }
+    set({ customTargetCoords: { x, z }, selectedTargetZone: best });
   },
 
   setLineupDialogOpen(open: boolean) {
