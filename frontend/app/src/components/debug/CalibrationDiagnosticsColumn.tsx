@@ -92,7 +92,17 @@ export function CalibrationDiagnosticsColumn({
   const actMissRadius = sampleSize > 0 ? totalMissInches / sampleSize : baseline.expectedMissRadiusInches;
   const actAheadOffspeed = aheadPitches > 0 ? (aheadOffspeed / aheadPitches) * 100 : baseline.expectedAheadOffspeedPct;
 
-  const isLeakingAlert = actHeartLeaks > baseline.expectedHeartLeaks + 2.0;
+  // 2-sigma binomial tolerance so a 100-pitch sample does not false-alert.
+  const heartStdError =
+    nonHeartIntended > 0
+      ? Math.sqrt(
+          ((baseline.expectedHeartLeaks / 100) *
+            (1 - baseline.expectedHeartLeaks / 100)) /
+            nonHeartIntended,
+        ) * 100
+      : 0;
+  const isLeakingAlert =
+    actHeartLeaks > baseline.expectedHeartLeaks + 2 * heartStdError + 0.5;
 
   // Extract unique batters from session
   const uniqueBatters = Array.from(new Set(packets.map((p) => p.meta.batterName)));
