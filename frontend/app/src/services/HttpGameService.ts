@@ -5,6 +5,7 @@ import type {
   PitchRequest,
   StartGameRequest,
   SwapLineupRequest,
+  SwapRotationRequest,
   ApiErrorResponse,
 } from '../types/api';
 import { BaseballApiError } from '../types/api';
@@ -256,5 +257,10 @@ export class HttpGameService implements IGameService {
   async swapLineup(team: number, pos1: number, pos2: number): Promise<void> {
     const body: SwapLineupRequest = { team, pos1, pos2 };
     await this.post<unknown>('api/swap_lineup', body);
+  }
+
+  async swapRotation(team: number, pos1: number, pos2: number): Promise<void> {
+    const body: SwapRotationRequest = { team, pos1, pos2 };
+    await this.post<unknown>('api/swap_rotation', body);
   }
 }

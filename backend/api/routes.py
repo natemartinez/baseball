@@ -105,6 +105,16 @@ def state():
                 'team': name
             })
 
+        bullpen_list = []
+        for b_idx, rp in enumerate(roster['pitchers'].get('bullpen', [])):
+            bullpen_list.append({
+                'id': getattr(rp, 'id', 200 + b_idx) or (200 + b_idx),
+                'name': rp.name,
+                'jersey_number': int(rp.number) if str(rp.number).isdigit() else 99,
+                'position': rp.position,
+                'team': name
+            })
+
         lineups_data.append({
             'team_id': i + 1,
             'team_name': name,
@@ -113,7 +123,8 @@ def state():
         rotations_data.append({
             'team_id': i + 1,
             'team_name': name,
-            'starters': starters_list
+            'starters': starters_list,
+            'bullpen': bullpen_list
         })
 
     return jsonify({
