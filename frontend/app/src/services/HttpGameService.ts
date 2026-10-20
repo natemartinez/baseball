@@ -12,10 +12,16 @@ import type { Gameday2DPitchPacket } from '../types/gameday';
 import {
   classifyGamedayZone,
   getZoneNominalTarget,
+  getMaxErrorRadiusInches,
   isRulebookStrike,
   determineSituationCategory,
 } from './gamedayMath';
 import { calculateStrategyAndIntent } from './strategyEngine';
+import {
+  defaultRelease,
+  movementForPitch,
+  type PitcherHand,
+} from './pitchTrajectory';
 import type { IGameService } from './IGameService';
 
 /**
@@ -156,6 +162,12 @@ export class HttpGameService implements IGameService {
       const radialMissInches = +(Math.sqrt(deltaXFeet * deltaXFeet + deltaZFeet * deltaZFeet) * 12).toFixed(1);
       const realizedCategory = classifyGamedayZone(realizedX, realizedZ);
 
+      const pitcherHand: PitcherHand = g.current_pitcher?.throws === 'L' ? 'L' : 'R';
+      const release = g.current_pitcher?.release ?? defaultRelease(pitcherHand);
+      const movement = movementForPitch(p.pitch_name);
+      const commandRating = g.current_pitcher?.control ?? 82;
+      const maxRadiusInches = getMaxErrorRadiusInches(commandRating);
+
       const sitCategory = determineSituationCategory(
         g.balls,
         g.strikes,
@@ -169,8 +181,9 @@ export class HttpGameService implements IGameService {
         meta: {
           pitchNumber: g.current_pitcher?.stats.pitches_thrown ?? 1,
           pitcherName: g.current_pitcher?.name ?? 'Pitcher',
+          pitcherHand,
           pitcherOvr: 85,
-          commandRating: g.current_pitcher?.control ?? 70,
+          commandRating,
           staminaPct: 80,
           pitchesThrown: g.current_pitcher?.stats.pitches_thrown ?? 1,
           inning: g.inning,
@@ -185,6 +198,7 @@ export class HttpGameService implements IGameService {
           batterId: g.current_batter?.id ?? 1,
           situationCategory: sitCategory,
         },
+        release,
         strategy: {
           repertoireProbabilities: { [p.pitch_name]: 0.5 },
           selectedPitch: p.pitch_name,
@@ -203,6 +217,10 @@ export class HttpGameService implements IGameService {
           realizedX,
           realizedZ,
           realizedSpeedMph: p.velocity_mph,
+          releaseSpeedMph: p.velocity_mph,
+          horizontalBreakInches: movement.hb,
+          inducedVerticalBreakInches: movement.ivb,
+          maxRadiusInches,
           radialMissInches,
           deltaXInches: +(deltaXFeet * 12).toFixed(1),
           deltaZInches: +(deltaZFeet * 12).toFixed(1),

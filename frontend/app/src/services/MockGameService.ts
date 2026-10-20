@@ -30,14 +30,14 @@ import type {
 } from '../types/api';
 import {
   STRIKE_ZONES,
-  ALL_ZONES,
-  isStrike,
-  isEdge,
+  INNER_ZONES,
+  CHASE_ZONES,
   batterToPlayerSummary,
   countRunners,
 } from '../types/api';
 import type { IGameService } from './IGameService';
 import type { Gameday2DPitchPacket } from '../types/gameday';
+import { defaultRelease, movementFromArsenal } from './pitchTrajectory';
 import {
   executeDelivery,
   getZoneNominalTarget,
@@ -68,41 +68,59 @@ const NOLAN_MCLEAN: PitcherInfo = {
   jersey_number: 26,
   position: 'SP',
   team: 'New York Mets',
+  throws: 'R',
+  release: { x: -2.1, y: 54.5, z: 5.9 },
   break_rating: 99,
   velocity_rating: 98,
   arm_strength: 97,
-  control: 68,
+  control: 82,
   arsenal: [
     {
       name: 'Spin Monster Sweeper',
       velocity_mph: 84.5,
+      velocity_min_mph: 82.5,
+      velocity_max_mph: 86.5,
       spin_rpm: 3020,
       break_rating: 99,
       control_rating: 65,
+      horizontal_break_in: 18.2,
+      induced_vertical_break_in: 4.5,
       statcast: { whiff_pct: 44.5, chase_pct: 39.0, gb_pct: 38.0, stuff_plus: 135, zone_pct: 42.5, run_value: 8.4 },
     },
     {
       name: 'Four-Seam Fastball',
       velocity_mph: 98.0,
+      velocity_min_mph: 96.0,
+      velocity_max_mph: 100.0,
       spin_rpm: 2480,
       break_rating: 82,
       control_rating: 72,
+      horizontal_break_in: -7.5,
+      induced_vertical_break_in: 16.0,
       statcast: { whiff_pct: 27.0, chase_pct: 22.5, gb_pct: 32.0, stuff_plus: 118, zone_pct: 64.0, run_value: 4.2 },
     },
     {
       name: 'Power Sinker',
       velocity_mph: 96.8,
+      velocity_min_mph: 94.8,
+      velocity_max_mph: 98.8,
       spin_rpm: 2240,
       break_rating: 91,
       control_rating: 69,
+      horizontal_break_in: -14.0,
+      induced_vertical_break_in: 6.0,
       statcast: { whiff_pct: 18.5, chase_pct: 28.0, gb_pct: 64.5, stuff_plus: 106, zone_pct: 58.0, run_value: 5.1 },
     },
     {
       name: 'Spike Curveball',
       velocity_mph: 81.2,
+      velocity_min_mph: 79.2,
+      velocity_max_mph: 83.2,
       spin_rpm: 2890,
       break_rating: 94,
       control_rating: 63,
+      horizontal_break_in: -8.0,
+      induced_vertical_break_in: -12.0,
       statcast: { whiff_pct: 38.0, chase_pct: 35.0, gb_pct: 48.0, stuff_plus: 122, zone_pct: 45.0, run_value: 3.8 },
     },
   ],
@@ -220,23 +238,24 @@ function round1(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
-function getAdjacentZone(zone: string): string {
-  const map: Record<string, string> = {
-    [STRIKE_ZONES.UPPER_IN]: STRIKE_ZONES.UPPER_MIDDLE,
-    [STRIKE_ZONES.UPPER_MIDDLE]: STRIKE_ZONES.UPPER_AWAY,
-    [STRIKE_ZONES.UPPER_AWAY]: STRIKE_ZONES.MIDDLE_AWAY,
-    [STRIKE_ZONES.MIDDLE_IN]: STRIKE_ZONES.HEART,
-    [STRIKE_ZONES.HEART]: STRIKE_ZONES.MIDDLE_AWAY,
-    [STRIKE_ZONES.MIDDLE_AWAY]: STRIKE_ZONES.LOWER_AWAY,
-    [STRIKE_ZONES.LOWER_IN]: STRIKE_ZONES.LOWER_MIDDLE,
-    [STRIKE_ZONES.LOWER_MIDDLE]: STRIKE_ZONES.LOWER_AWAY,
-    [STRIKE_ZONES.LOWER_AWAY]: STRIKE_ZONES.LOWER_MIDDLE,
-    [STRIKE_ZONES.CHASE_HIGH]: STRIKE_ZONES.UPPER_MIDDLE,
-    [STRIKE_ZONES.CHASE_LOW]: STRIKE_ZONES.LOWER_MIDDLE,
-    [STRIKE_ZONES.CHASE_IN]: STRIKE_ZONES.MIDDLE_IN,
-    [STRIKE_ZONES.CHASE_AWAY]: STRIKE_ZONES.MIDDLE_AWAY,
-  };
-  return map[zone] ?? STRIKE_ZONES.LOWER_AWAY;
+function closestZone(x: number, z: number): string {
+  // A ball just outside a corner must still be labeled as a ball zone. Searching
+  // all 13 centers can pick an inner corner (a strike cell) for a point that is
+  // outside the rulebook zone, which makes the pitch marker look like a strike.
+  const candidates = isRulebookStrike(x, z) ? INNER_ZONES : CHASE_ZONES;
+  let best: string = candidates[0];
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const name of candidates) {
+    const center = getZoneNominalTarget(name);
+    const dx = x - center.x;
+    const dz = z - center.z;
+    const dist = dx * dx + dz * dz;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = name;
+    }
+  }
+  return best;
 }
 
 function delay(ms: number): Promise<void> {
@@ -455,13 +474,15 @@ export class MockGameService implements IGameService {
       intendedZoneCategory = nominal.category;
     }
 
-    // 2D Bivariate Gaussian Execution Math
+    // 2D Truncated Gaussian Execution Math — natural spray cloud
+    const currentPitcher = this.currentGameState.current_pitcher;
+    const commandRating = currentPitcher.control ?? 82;
     const execution = executeDelivery(
       targetX,
       targetZ,
-      NOLAN_MCLEAN.control || 68,
-      this.currentGameState.current_pitcher.stats.pitches_thrown,
-      70, // Stamina rating
+      commandRating,
+      currentPitcher.stats.pitches_thrown,
+      70, // Stamina rating; fatigue is gated off in gamedayMath for now
       this.rng,
     );
 
@@ -469,34 +490,29 @@ export class MockGameService implements IGameService {
     const isHeartZoneLeak = intendedZoneCategory !== 'HEART' && realizedCategory === 'HEART';
     const hitShadowZoneTarget = intendedZoneCategory === 'SHADOW' && realizedCategory === 'SHADOW';
 
-    // Command variance
-    const roll = this.rng();
-    let actualZone: string;
+    // The zone is derived from the sampled location. A mistake/leak is simply a
+    // sample crossing a boundary — there is no separate coin flip.
+    const actualZone = closestZone(execution.realizedX, execution.realizedZ);
+    const maxRadius = Math.max(0.001, execution.maxRadiusInches);
+    const missRatio = execution.radialMissInches / maxRadius;
     let commandQuality: string;
 
-    if (isWaste) {
-      actualZone = roll < 0.5 ? STRIKE_ZONES.CHASE_HIGH : STRIKE_ZONES.CHASE_AWAY;
+    if (isWaste && realizedCategory !== 'HEART' && realizedCategory !== 'SHADOW') {
       commandQuality = 'WASTE_EXECUTED';
-    } else if (isChase) {
-      if (roll < 0.85) { actualZone = intended; commandQuality = 'TARGET_EXECUTED'; }
-      else if (roll < 0.94) { actualZone = STRIKE_ZONES.CHASE_LOW; commandQuality = 'SLIGHT_MISS'; }
-      else { actualZone = STRIKE_ZONES.LOWER_AWAY; commandQuality = 'MISTAKE_HANG'; }
-    } else if (roll < 0.68) {
-      actualZone = intended;
-      commandQuality = isEdge(intended) ? 'PINPOINT' : 'TARGET_EXECUTED';
-    } else if (roll < 0.88) {
-      actualZone = getAdjacentZone(intended);
-      commandQuality = 'SLIGHT_MISS';
-    } else if (roll < 0.95) {
-      actualZone = STRIKE_ZONES.HEART;
+    } else if (isHeartZoneLeak) {
       commandQuality = 'MISTAKE_HANG';
+    } else if (missRatio <= 0.35) {
+      commandQuality = 'PINPOINT';
+    } else if (missRatio <= 0.6) {
+      commandQuality = 'TARGET_EXECUTED';
+    } else if (missRatio <= 0.85) {
+      commandQuality = 'SLIGHT_MISS';
     } else {
-      actualZone = STRIKE_ZONES.CHASE_AWAY;
       commandQuality = 'WILD_MISS';
     }
 
     const state = this.currentGameState;
-    const isPitchInZone = isStrike(actualZone);
+    const isPitchInZone = isRulebookStrike(execution.realizedX, execution.realizedZ);
     const batter = state.current_batter;
     const hotSlg = batter.hot_zones[actualZone] ?? 0.32;
 
@@ -591,12 +607,17 @@ export class MockGameService implements IGameService {
       state.bases.third !== null,
     );
 
+    const movement = movementFromArsenal(selectedPitch);
+    const pitcherHand = NOLAN_MCLEAN.throws ?? 'R';
+    const release = NOLAN_MCLEAN.release ?? defaultRelease(pitcherHand);
+
     const gamedayPacket: Gameday2DPitchPacket = {
       meta: {
         pitchNumber: this.currentGameState.current_pitcher.stats.pitches_thrown + 1,
         pitcherName: NOLAN_MCLEAN.name,
+        pitcherHand,
         pitcherOvr: 88,
-        commandRating: NOLAN_MCLEAN.control || 68,
+        commandRating,
         staminaPct: Math.max(10, Math.round(100 - (this.currentGameState.current_pitcher.stats.pitches_thrown / 70) * 40)),
         pitchesThrown: this.currentGameState.current_pitcher.stats.pitches_thrown + 1,
         inning: state.inning,
@@ -611,6 +632,7 @@ export class MockGameService implements IGameService {
         batterId: batter.id,
         situationCategory,
       },
+      release,
       strategy: {
         repertoireProbabilities,
         selectedPitch: selectedPitch.name,
@@ -629,6 +651,10 @@ export class MockGameService implements IGameService {
         realizedX: execution.realizedX,
         realizedZ: execution.realizedZ,
         realizedSpeedMph: +(selectedPitch.velocity_mph + (this.rng() * 2.4 - 1.2)).toFixed(1),
+        releaseSpeedMph: selectedPitch.velocity_mph,
+        horizontalBreakInches: movement.hb,
+        inducedVerticalBreakInches: movement.ivb,
+        maxRadiusInches: execution.maxRadiusInches,
         radialMissInches: execution.radialMissInches,
         deltaXInches: execution.deltaXInches,
         deltaZInches: execution.deltaZInches,
