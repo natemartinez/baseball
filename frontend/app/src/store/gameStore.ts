@@ -367,6 +367,11 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       { x: 0.55, z: 2.50 },
       { x: 0.00, z: 1.15 },
       { x: 1.05, z: 2.50 },
+      // boundary-adjacent targets exercise the natural heart leak
+      { x: 0.40, z: 2.15 },
+      { x: -0.40, z: 2.15 },
+      { x: 0.40, z: 2.85 },
+      { x: -0.40, z: 2.85 },
     ];
 
     const newPackets: Gameday2DPitchPacket[] = [];
@@ -414,6 +419,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
           realizedX: execution.realizedX,
           realizedZ: execution.realizedZ,
           realizedSpeedMph: 94.2,
+          maxRadiusInches: execution.maxRadiusInches,
           radialMissInches: execution.radialMissInches,
           deltaXInches: execution.deltaXInches,
           deltaZInches: execution.deltaZInches,
