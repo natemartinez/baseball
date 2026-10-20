@@ -52,6 +52,7 @@ def test_statcast_multi_pitch_simulation():
     leaks_count = 0
     shadow_hits = 0
     miss_radii = []
+    max_radius_seen = 0.0
 
     for i in range(100):
         target_zone = "lower-away" if i % 2 == 0 else "heart"
@@ -75,10 +76,22 @@ def test_statcast_multi_pitch_simulation():
             shadow_hits += 1
 
         miss_radii.append(pkt['execution']['radialMissInches'])
+        from backend.engine.gameday_math import get_max_error_radius_inches
+        max_radius_seen = max(
+            max_radius_seen,
+            pkt['execution'].get(
+                'maxRadiusInches',
+                get_max_error_radius_inches(pkt['meta']['commandRating']),
+            ),
+        )
 
     mean_miss = round(sum(miss_radii) / len(miss_radii), 2)
     assert len(miss_radii) == 100
-    assert 2.0 <= mean_miss <= 8.0
+
+    # Truncated spray cloud: every miss is bounded by the largest radius used
+    # across the 100 deliveries (command/leverage changes per pitch).
+    assert 0.05 <= mean_miss <= max_radius_seen + 0.1
+    assert max(miss_radii) <= max_radius_seen + 0.2
 
 
 def test_statcast_sim_at_bat():

@@ -27,8 +27,26 @@ BALL_DIAMETER_FT = 2.9 / 12.0      # ~0.2417 ft
 SHADOW_BORDER_FT = 3.4 / 12.0      # 0.2833 ft (1 ball width border)
 CHASE_BORDER_FT = 2 * SHADOW_BORDER_FT  # ~0.5667 ft (2 ball widths)
 
-SIGMA_MAX_FT = 0.50                # 6.0 inches (40 Command)
-SIGMA_MIN_FT = 0.15                # 1.8 inches (99 Command)
+SIGMA_MAX_FT = 0.50                # Legacy; the radius table is authoritative.
+SIGMA_MIN_FT = 0.15                # Legacy; the radius table is authoritative.
+
+# Fatigue is intentionally disabled while the spray-cloud model is validated.
+# Future: enable growth once the pitcher reaches ~75 pitches or low stamina.
+FATIGUE_ENABLED = False
+
+# Command -> hard maximum error radius (inches). Diameter = 2 * radius.
+# Interpolate linearly between tiers and clamp outside the range.
+MAX_ERROR_RADIUS_TIERS: list = [
+    (99.0, 1.00),
+    (90.0, 1.25),
+    (82.0, 1.50),
+    (68.0, 3.00),
+    (55.0, 4.50),
+    (40.0, 7.00),
+]
+
+# The cloud is a truncated Gaussian; sigma = radius / SIGMA_RADIUS_DIVISOR.
+SIGMA_RADIUS_DIVISOR = 2.5
 
 # 13 Nominal Zone Centers (Statcast X, Z in feet)
 ZONE_CENTERS: Dict[str, Tuple[float, float]] = {
@@ -51,30 +69,51 @@ ZONE_CENTERS: Dict[str, Tuple[float, float]] = {
 EMPIRICAL_BASELINES = {
     40: {
         'command_rating': 40,
-        'expected_shadow_accuracy': 68.2,
-        'expected_heart_leaks': 9.7,
-        'expected_miss_radius_inches': 6.22,
+        'expected_shadow_accuracy': 80.8,
+        'expected_heart_leaks': 14.9,
+        'expected_miss_radius_inches': 3.29,
         'expected_ahead_offspeed_pct': 58.4,
+    },
+    55: {
+        'command_rating': 55,
+        'expected_shadow_accuracy': 84.1,
+        'expected_heart_leaks': 13.0,
+        'expected_miss_radius_inches': 2.12,
+        'expected_ahead_offspeed_pct': 61.5,
     },
     68: {
         'command_rating': 68,
-        'expected_shadow_accuracy': 81.0,
-        'expected_heart_leaks': 7.7,
-        'expected_miss_radius_inches': 4.49,
+        'expected_shadow_accuracy': 86.1,
+        'expected_heart_leaks': 11.4,
+        'expected_miss_radius_inches': 1.42,
         'expected_ahead_offspeed_pct': 65.1,
+    },
+    82: {
+        'command_rating': 82,
+        'expected_shadow_accuracy': 92.5,
+        'expected_heart_leaks': 6.15,
+        'expected_miss_radius_inches': 0.71,
+        'expected_ahead_offspeed_pct': 67.5,
     },
     85: {
         'command_rating': 85,
-        'expected_shadow_accuracy': 88.2,
-        'expected_heart_leaks': 6.0,
-        'expected_miss_radius_inches': 3.51,
+        'expected_shadow_accuracy': 93.1,
+        'expected_heart_leaks': 5.66,
+        'expected_miss_radius_inches': 0.66,
         'expected_ahead_offspeed_pct': 68.3,
+    },
+    90: {
+        'command_rating': 90,
+        'expected_shadow_accuracy': 94.6,
+        'expected_heart_leaks': 4.44,
+        'expected_miss_radius_inches': 0.59,
+        'expected_ahead_offspeed_pct': 69.9,
     },
     99: {
         'command_rating': 99,
-        'expected_shadow_accuracy': 94.1,
-        'expected_heart_leaks': 3.3,
-        'expected_miss_radius_inches': 2.63,
+        'expected_shadow_accuracy': 96.8,
+        'expected_heart_leaks': 2.63,
+        'expected_miss_radius_inches': 0.47,
         'expected_ahead_offspeed_pct': 71.9,
     },
 }
@@ -123,13 +162,31 @@ def get_zone_nominal_target(zone_name: str) -> Tuple[float, float, str]:
     return coords[0], coords[1], cat
 
 
+def get_max_error_radius_inches(command_rating: float) -> float:
+    """Interpolates the hard maximum miss radius (inches) for a command rating."""
+    command = max(40.0, min(99.0, float(command_rating)))
+    # Tiers are descending by command.
+    for i in range(len(MAX_ERROR_RADIUS_TIERS) - 1):
+        high_cmd, high_radius = MAX_ERROR_RADIUS_TIERS[i]
+        low_cmd, low_radius = MAX_ERROR_RADIUS_TIERS[i + 1]
+        if low_cmd <= command <= high_cmd:
+            span = high_cmd - low_cmd
+            if span <= 0:
+                return high_radius
+            t = (high_cmd - command) / span
+            return round(high_radius + (low_radius - high_radius) * t, 3)
+    return MAX_ERROR_RADIUS_TIERS[-1][1]
+
+
 def calculate_execution_sigma(command_rating: float, pitch_count: int = 0, stamina: float = 75.0) -> float:
     """
-    Calculates bivariate standard deviation from pitcher Command rating and pitch fatigue.
-    sigma_x = sigma_z = [sigma_max - (Command / 100) * (sigma_max - sigma_min)] * (1 + FatigueMultiplier)
+    Sigma derived from the command's hard max radius. sigma = radius / 2.5.
+    Fatigue growth is gated by FATIGUE_ENABLED and is off for now.
     """
-    clamped_command = max(20.0, min(99.0, float(command_rating)))
-    base_sigma = SIGMA_MAX_FT - (clamped_command / 100.0) * (SIGMA_MAX_FT - SIGMA_MIN_FT)
+    radius_ft = get_max_error_radius_inches(command_rating) / 12.0
+    base_sigma = radius_ft / SIGMA_RADIUS_DIVISOR
+    if not FATIGUE_ENABLED:
+        return base_sigma
     fatigue_multiplier = max(0.0, (pitch_count - stamina) / 30.0)
     return base_sigma * (1.0 + fatigue_multiplier)
 
@@ -138,6 +195,34 @@ def sample_bivariate_gaussian(mean_x: float, mean_z: float, sigma_x: float, sigm
     """Samples realized plate location (X, Z) using Box-Muller / normal distribution."""
     realized_x = random.gauss(mean_x, sigma_x)
     realized_z = random.gauss(mean_z, sigma_z)
+    return round(realized_x, 3), round(realized_z, 3)
+
+
+def sample_truncated_gaussian(
+    target_x: float,
+    target_z: float,
+    sigma: float,
+    max_radius_ft: float,
+    rng=None,
+) -> Tuple[float, float]:
+    """
+    Samples a 2D Gaussian location truncated to the hard max radius.
+    Uses the closed-form truncated Rayleigh radial distribution, so no rejection
+    loop is needed and the result can never leave the circle.
+    """
+    rand = rng or random.random
+    if max_radius_ft <= 0 or sigma <= 0:
+        return round(target_x, 3), round(target_z, 3)
+
+    u = rand()
+    exp_term = math.exp(-(max_radius_ft * max_radius_ft) / (2.0 * sigma * sigma))
+    one_minus = 1.0 - u * (1.0 - exp_term)
+    r = sigma * math.sqrt(-2.0 * math.log(max(1e-12, one_minus)))
+    r = min(r, max_radius_ft)
+    theta = 2.0 * math.pi * rand()
+
+    realized_x = target_x + r * math.cos(theta)
+    realized_z = target_z + r * math.sin(theta)
     return round(realized_x, 3), round(realized_z, 3)
 
 

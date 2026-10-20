@@ -123,6 +123,9 @@ def test_pitching_delivery_execution():
     assert "pitch_effectiveness" in delivery
     assert "adjusted_ratings" in delivery
     assert delivery["adjusted_ratings"]["pitch_count"] == 45
+    assert "horizontal_break_in" in delivery
+    assert "induced_vertical_break_in" in delivery
+    assert "release_speed_mph" in delivery
 
 
 def test_game_engine_pitch_integration():
@@ -150,11 +153,38 @@ def test_game_engine_pitch_integration():
     assert details["adjusted_ratings"]["pitch_count"] == 1
     assert "gameday_packet" in details
 
+    packet = details["gameday_packet"]
+    assert packet["meta"]["pitcherHand"] in ("R", "L")
+    assert set(packet["release"].keys()) == {"x", "y", "z"}
+    assert "horizontalBreakInches" in packet["execution"]
+    assert "inducedVerticalBreakInches" in packet["execution"]
+    assert "releaseSpeedMph" in packet["execution"]
+
     # 2. Alias hand-off: game.pitching_engine()
     alias_res = game.pitching_engine(target_zone="heart")
     assert alias_res["status"] == "success"
     alias_details = alias_res["pitch_details"]
     assert alias_details["adjusted_ratings"]["pitch_count"] == 2
+
+
+def test_current_pitcher_payload_uses_real_control():
+    """The live state payload must expose the pitcher's real control rating."""
+    mclean, judge = get_test_matchup()
+    away_team = {
+        "name": "New York Yankees",
+        "position_players": [judge],
+        "pitchers": {"starters": [mclean], "bullpen": []},
+    }
+    home_team = {
+        "name": "New York Mets",
+        "position_players": [judge],
+        "pitchers": {"starters": [mclean], "bullpen": []},
+    }
+    game = GameEngine(home_team, away_team, "Mets", "Yankees")
+    state = game.get_game_state_payload()
+    expected_control = int(mclean.get_rating("control", 82))
+    assert state["current_pitcher"]["control"] == expected_control
+    assert state["current_pitcher"]["throws"] in ("R", "L")
 
 
 def run_all_tests():
@@ -163,6 +193,7 @@ def run_all_tests():
         ("2. Pitch Arsenal & Count Leverage Strategy", test_pitch_arsenal_and_strategy_leverage),
         ("3. Delivery Execution & Bivariate Gaussian Math", test_pitching_delivery_execution),
         ("4. GameEngine Simulation Hand-off & Alias", test_game_engine_pitch_integration),
+        ("5. Live Payload Uses Real Control", test_current_pitcher_payload_uses_real_control),
     ]
 
     print("=" * 65)

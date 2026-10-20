@@ -368,10 +368,26 @@ class GameEngine:
         batter_name = getattr(batter, 'name', 'Batter') if batter else 'Batter'
         batter_id = getattr(batter, 'id', 1) if batter else 1
 
+        pitcher_hand = (
+            'L'
+            if str(getattr(pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
+            else 'R'
+        )
+        release = {
+            'x': -2.1 if pitcher_hand == 'R' else 2.1,
+            'y': 54.5,
+            'z': 5.9,
+        }
+        horizontal_break_in = delivery.get('horizontal_break_in', 0.0)
+        induced_vertical_break_in = delivery.get('induced_vertical_break_in', 0.0)
+        release_speed_mph = delivery.get('release_speed_mph', velocity_mph)
+        max_radius_inches = delivery.get('max_radius_inches', 0.0)
+
         gameday_packet = {
             'meta': {
                 'pitchNumber': self.session_pitch_count,
                 'pitcherName': pitcher_name,
+                'pitcherHand': pitcher_hand,
                 'pitcherOvr': 85,
                 'commandRating': int(command_rating),
                 'staminaPct': max(10, 100 - cur_pitch_count),
@@ -388,6 +404,7 @@ class GameEngine:
                 'batterId': batter_id,
                 'situationCategory': sit_category,
             },
+            'release': release,
             'strategy': {
                 'repertoireProbabilities': strat_result['repertoire_probabilities'],
                 'selectedPitch': selected_pitch_name,
@@ -406,6 +423,10 @@ class GameEngine:
                 'realizedX': realized_x,
                 'realizedZ': realized_z,
                 'realizedSpeedMph': velocity_mph,
+                'releaseSpeedMph': release_speed_mph,
+                'horizontalBreakInches': horizontal_break_in,
+                'inducedVerticalBreakInches': induced_vertical_break_in,
+                'maxRadiusInches': max_radius_inches,
                 'radialMissInches': radial_miss_in,
                 'deltaXInches': delta_x_in,
                 'deltaZInches': delta_z_in,
@@ -763,15 +784,20 @@ class GameEngine:
                 'jersey_number': int(p_num) if str(p_num).isdigit() else 26,
                 'position': p_pos,
                 'team': p_team,
-                'break_rating': 99,
-                'velocity_rating': 98,
-                'arm_strength': 97,
-                'control': 68,
+                'throws': (
+                    'L'
+                    if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
+                    else 'R'
+                ) if cur_p else 'R',
+                'break_rating': int(cur_p.get_rating('break_rating', 99)) if cur_p else 99,
+                'velocity_rating': int(cur_p.get_rating('velocity_rating', 98)) if cur_p else 98,
+                'arm_strength': int(cur_p.get_rating('arm_strength', 97)) if cur_p else 97,
+                'control': int(cur_p.get_rating('control', 68)) if cur_p else 68,
                 'arsenal': [
-                    {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
-                    {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
-                    {'name': 'Power Sinker', 'velocity_mph': 95.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
-                    {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
+                    {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'velocity_min_mph': 95.4, 'velocity_max_mph': 99.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
+                    {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'velocity_min_mph': 81.5, 'velocity_max_mph': 85.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
+                    {'name': 'Power Sinker', 'velocity_mph': 95.8, 'velocity_min_mph': 93.8, 'velocity_max_mph': 97.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
+                    {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'velocity_min_mph': 79.2, 'velocity_max_mph': 83.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
                 ],
                 'stats': {'pitches_thrown': pitch_count, 'strikeouts': 6, 'walks': 1, 'hits_allowed': 3, 'runs_allowed': 1}
             },
