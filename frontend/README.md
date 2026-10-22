@@ -17,15 +17,16 @@ frontend/
 │   └── src/
 │       ├── components/         # Scorebug, Diamond, MatchupCard, StrikeZoneGrid,
 │       │                       # PitchSelector, PitchOutcomeFeed, LineupDialog, ...
+│       │   ├── GameField.tsx           # Web R3F canvas shell
+│       │   ├── GameField.native.tsx    # Native R3F canvas shell
+│       │   ├── gamefield/              # 3D scene, geometry, projection, pitch visualizer
 │       │   └── debug/          # Gameday Dev Menu, visualizer, calibration, strategy ingest
 │       ├── screens/            # BaseballSimScreen
 │       ├── services/           # GameRepository, HttpGameService, MockGameService, engines
 │       ├── store/              # Zustand game store
 │       ├── theme/              # Design tokens
 │       └── types/              # API + gameday telemetry schemas
-├── docs/pitching-logic/        # 6-part physics / strategy specification
-├── pitching_logic.md           # Statcast physics spec & rules_config
-└── dev.sh                      # Boots the Python backend + Expo web together
+└── ../scripts/dev.sh           # Boots the Python backend + Expo web together
 ```
 
 ### Static resources
@@ -38,7 +39,7 @@ All static resources (images, fonts, the future app icon/splash) live under
 
 ```bash
 # From the repo root (recommended): boots Flask + Expo web
-./dev.sh            # or: npm run dev
+./scripts/dev.sh    # or: npm run dev
 
 # Or just this client:
 cd frontend/app
@@ -51,16 +52,14 @@ the **Backend Switcher** to toggle between the live **Python Flask (5000)** back
 and the in-client **Mock Engine**. On web the HTTP client defaults to
 `http://localhost:5000` (see `app/.env.example`).
 
-## Physics & Documentation
+## 3D Field & Documentation
 
-The `docs/pitching-logic/` suite documents the simulation:
+The tracked system-design docs live in the repository root [`docs/`](../docs/):
 
-1. [`01_HIGH_LEVEL_OVERVIEW.md`](docs/pitching-logic/01_HIGH_LEVEL_OVERVIEW.md)
-2. [`02_STATCAST_PHYSICS_AND_ARSENAL.md`](docs/pitching-logic/02_STATCAST_PHYSICS_AND_ARSENAL.md)
-3. [`03_INTENT_AND_STRATEGY_MATRIX.md`](docs/pitching-logic/03_INTENT_AND_STRATEGY_MATRIX.md)
-4. [`04_STRIKE_ZONE_COMMAND_AND_TARGETING.md`](docs/pitching-logic/04_STRIKE_ZONE_COMMAND_AND_TARGETING.md)
-5. [`05_REACT_JS_FRONTEND_INTEGRATION.md`](docs/pitching-logic/05_REACT_JS_FRONTEND_INTEGRATION.md)
-6. [`06_DATABASE_PERSISTENCE_INTEGRATION.md`](docs/pitching-logic/06_DATABASE_PERSISTENCE_INTEGRATION.md)
+- [Documentation index](../docs/README.md)
+- [3D Field, Pitch Visualization & HUD](../docs/08_3D_FIELD_PITCH_AND_HUD.md) — coordinate systems, camera calibration, projected strike-zone HUD, mock pitch flow, and IVB kinematics
+
+Additional backend, API-contract, data-schema, and state-machine documents are planned; see the documentation index.
 
 ## Notes
 

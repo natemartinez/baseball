@@ -19,8 +19,8 @@ This repository powers the authoritative simulation backend and connects directl
             └──► [ SQLite Data Layer ] (mlb.db: rosters, ratings, pitch arsenals)
 ```
 
-For full architectural history, contract schemas, and integration details, see:
-📖 [**docs/07_FRONTEND_BACKEND_ALIGNMENT.md**](docs/07_FRONTEND_BACKEND_ALIGNMENT.md)
+For the current 3D field, camera, strike-zone projection, and pitch-visualization design, see:
+📖 [**docs/08_3D_FIELD_PITCH_AND_HUD.md**](docs/08_3D_FIELD_PITCH_AND_HUD.md)
 
 ---
 
@@ -46,16 +46,16 @@ Backend runs on `http://0.0.0.0:5000`.
 ### 2. Run Test Suite Concurrently
 Run all consolidated test suites in parallel:
 ```bash
-./run_tests.sh
+./scripts/run_tests.sh
 # or using pytest with auto worker detection:
 pytest -n auto tests/
 ```
 
 ### 3. Connect the React Native Expo Client
-In the client repository (`Baseball-Simulation-Client`):
+Boot the Flask backend and the vendored Expo client together:
 ```bash
-cd mobile
-npx expo start --web
+./scripts/dev.sh
+# or: npm run dev
 ```
 - Open `http://localhost:8081` in your browser.
 - In the client header, open **`[🛠 GAMEDAY DEV MENU]`**.
@@ -80,11 +80,6 @@ npx expo start --web
 
 ## 📚 Technical Documentation
 
-- 📄 [**00. Architecture Overview**](docs/00_ARCHITECTURE_OVERVIEW.md)
-- 📄 [**01. Data Schema & SQLite Tables**](docs/01_DATA_SCHEMA.md)
-- 📄 [**02. API Contracts & TypeScript Interfaces**](docs/02_API_CONTRACTS.md)
-- 📄 [**03. State Machines & Inning Loop**](docs/03_STATE_MACHINES.md)
-- 📄 [**04. Game Loop Tick**](docs/04_GAME_LOOP_TICK.md)
-- 📄 [**05. Dev Test Harness**](docs/05_DEV_TEST_HARNESS.md)
-- 📄 [**06. Statcast 2D Physics & Calibration**](docs/06_STATCAST_2D_PHYSICS.md)
-- 📄 [**07. Frontend <-> Backend Realignment**](docs/07_FRONTEND_BACKEND_ALIGNMENT.md)
+- 📄 [**Documentation index**](docs/README.md)
+- 📄 [**3D Field, Pitch Visualization & HUD**](docs/08_3D_FIELD_PITCH_AND_HUD.md) — coordinates, camera, projected HUD, mock pitch flow, and IVB kinematics
+- Additional architecture, API-contract, data-schema, and state-machine documents are planned and tracked in the documentation index.
