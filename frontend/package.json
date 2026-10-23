@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "./dev.sh",
-    "start": "./dev.sh",
+    "dev": "../scripts/dev.sh",
+    "start": "../scripts/dev.sh",
     "dev:backend": "cd .. && .venv/bin/python main.py",
-    "dev:frontend": "cd assets && npx expo start --web"
+    "dev:frontend": "cd app && npx expo start --web"
   },
   "dependencies": {}
 }

@@ -1,8 +1,11 @@
 {
   "scripts": {
-    "dev": "./dev.sh",
+    "dev": "./scripts/dev.sh",
     "dev:backend": ".venv/bin/python main.py",
     "dev:frontend": "cd frontend/app && npx expo start --web",
-    "test": "pytest -n auto tests"
+    "test": "./scripts/run_tests.sh"
+  },
+  "devDependencies": {
+    "@types/three": "^0.186.0"
   }
 }
