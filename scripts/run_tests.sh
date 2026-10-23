@@ -6,6 +6,10 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 # Detect virtual environment python/pytest or system fallback
 if [ -x ".venv/bin/python" ]; then
     PYTEST_CMD=(".venv/bin/python" "-m" "pytest")

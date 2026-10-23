@@ -5,13 +5,15 @@
 # Cleanly shuts down both processes on Ctrl+C (SIGINT).
 #
 # The Expo client is vendored in this repo at frontend/app.
-# Override with: FRONTEND_DIR=/path/to/app ./dev.sh
+# Run from anywhere: ./scripts/dev.sh
+# Override with: FRONTEND_DIR=/path/to/app ./scripts/dev.sh
 # ==============================================================================
 
 set -u
 
-BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FRONTEND_DIR="${FRONTEND_DIR:-$BACKEND_DIR/frontend/app}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND_DIR="$REPO_ROOT"
+FRONTEND_DIR="${FRONTEND_DIR:-$REPO_ROOT/frontend/app}"
 
 # Color formatting
 CYAN='\033[0;36m'
@@ -63,6 +65,20 @@ fi
 if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
   echo -e "${YELLOW}⚠  No node_modules at $FRONTEND_DIR. Run: cd frontend/app && npm install${NC}"
 fi
+
+# Refuse to start if another dev server already owns a port (Expo would
+# otherwise silently skip its dev server and leave you with a stale bundle).
+port_in_use() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+for port in 5000 8081; do
+  if port_in_use "$port"; then
+    echo -e "${RED}Error: port $port is already in use.${NC}"
+    echo -e "${YELLOW}Stop the process using it (another dev.sh?) and try again.${NC}"
+    exit 1
+  fi
+done
 
 kill_tree() {
   local pid="$1"

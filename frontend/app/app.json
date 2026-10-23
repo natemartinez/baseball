@@ -16,7 +16,8 @@
       "package": "com.example.baseballsim"
     },
     "plugins": [
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-asset"
     ]
   }
 }

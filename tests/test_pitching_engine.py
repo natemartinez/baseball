@@ -7,6 +7,7 @@ bivariate Gaussian delivery physics, and GameEngine integration.
 
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 # Ensure repository root is on sys.path
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -187,6 +188,45 @@ def test_current_pitcher_payload_uses_real_control():
     assert state["current_pitcher"]["throws"] in ("R", "L")
 
 
+def test_execute_pitch_uses_sampled_zone_target():
+    """Auto-target pitches use a sampled point, never the nominal zone center."""
+    mclean, judge = get_test_matchup()
+    engine = PitchingEngine(mclean, judge)
+
+    with patch(
+        "backend.engine.pitching_engine.engine.sample_zone_target",
+        return_value=(0.123, 2.345, "SHADOW"),
+    ) as sampler:
+        delivery = engine.execute_pitch(
+            balls=0, strikes=0, target_zone="upper-in"
+        )
+
+    sampler.assert_called_once_with("upper-in")
+    assert delivery["target_x"] == 0.123
+    assert delivery["target_z"] == 2.345
+    assert delivery["intended_zone_cat"] == "SHADOW"
+
+
+def test_execute_pitch_custom_target_still_wins():
+    """An exact glove aim bypasses zone sampling."""
+    mclean, judge = get_test_matchup()
+    engine = PitchingEngine(mclean, judge)
+
+    with patch(
+        "backend.engine.pitching_engine.engine.sample_zone_target",
+        return_value=(0.123, 2.345, "SHADOW"),
+    ) as sampler:
+        delivery = engine.execute_pitch(
+            balls=0,
+            strikes=0,
+            custom_target={"x": 0.05, "z": 2.05},
+        )
+
+    sampler.assert_not_called()
+    assert delivery["target_x"] == 0.05
+    assert delivery["target_z"] == 2.05
+
+
 def run_all_tests():
     tests = [
         ("1. Pitcher In-Game Fatigue Ratings", test_pitcher_in_game_fatigue_ratings),
@@ -194,6 +234,8 @@ def run_all_tests():
         ("3. Delivery Execution & Bivariate Gaussian Math", test_pitching_delivery_execution),
         ("4. GameEngine Simulation Hand-off & Alias", test_game_engine_pitch_integration),
         ("5. Live Payload Uses Real Control", test_current_pitcher_payload_uses_real_control),
+        ("6. Sampled Zone Target", test_execute_pitch_uses_sampled_zone_target),
+        ("7. Custom Target Override", test_execute_pitch_custom_target_still_wins),
     ]
 
     print("=" * 65)

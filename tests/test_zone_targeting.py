@@ -1,16 +1,23 @@
 """Regression tests for ball-zone targeting and corner classification."""
 
+import random
+
+import pytest
+
 from backend.api.app import create_app
 from backend.engine.gameday_math import (
     CHASE_BORDER_FT,
+    ZONE_TARGET_BOUNDS,
     classify_gameday_zone,
     get_max_error_radius_inches,
     get_zone_nominal_target,
     is_rulebook_strike,
+    sample_zone_target,
 )
 from backend.engine.pitching_engine.calculations import calculate_pitch_delivery
 
 CHASE_ZONES = ("chase-high", "chase-low", "chase-in", "chase-away")
+INNER_ZONES = tuple(name for name in ZONE_TARGET_BOUNDS if name not in CHASE_ZONES)
 
 
 def test_chase_nominal_targets_are_balls():
@@ -78,3 +85,31 @@ def test_custom_chase_targets_are_balls_end_to_end():
                 zone,
                 payload["pitch_details"]["actual_zone"],
             )
+
+
+@pytest.mark.parametrize("zone", INNER_ZONES)
+def test_inner_zone_targets_land_inside_the_single_rectangle(zone):
+    random.seed(11)
+    for _ in range(500):
+        x, z, _ = sample_zone_target(zone)
+        assert is_rulebook_strike(x, z), (zone, x, z)
+
+
+@pytest.mark.parametrize("zone", INNER_ZONES)
+def test_inner_zone_target_bounds_include_the_edge(zone):
+    x_min, x_max, z_min, z_max = ZONE_TARGET_BOUNDS[zone]
+    for rx, rz in ((0.0, 0.0), (1.0, 1.0)):
+        values = iter([rx, rz])
+        x, z, _ = sample_zone_target(zone, rng=lambda: next(values))
+        assert x == pytest.approx(x_min if rx == 0.0 else x_max)
+        assert z == pytest.approx(z_min if rz == 0.0 else z_max)
+        assert is_rulebook_strike(x, z), (zone, x, z)
+
+
+@pytest.mark.parametrize("zone", CHASE_ZONES)
+def test_chase_zone_targets_always_land_outside_the_rectangle(zone):
+    random.seed(12)
+    for _ in range(500):
+        x, z, category = sample_zone_target(zone)
+        assert not is_rulebook_strike(x, z), (zone, x, z)
+        assert category == "CHASE", (zone, x, z, category)

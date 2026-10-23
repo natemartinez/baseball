@@ -20,7 +20,9 @@ try:
         determine_situation_category,
         ZONE_CENTERS,
     )
-except ImportError:
+except ModuleNotFoundError as error:
+    if error.name != 'backend':
+        raise
     from gameday_math import (
         is_rulebook_strike,
         classify_gameday_zone,
@@ -51,6 +53,8 @@ def calculate_pitch_delivery(
     realized_x, realized_z = sample_truncated_gaussian(
         target_x, target_z, sigma, max_radius_in / 12.0
     )
+    # Classify and call the pitch from the full-precision sample. Rounding is
+    # applied only to telemetry fields so boundary pitches keep exact behavior.
     realized_zone_cat = classify_gameday_zone(realized_x, realized_z)
     strike_check = is_rulebook_strike(realized_x, realized_z)
 
@@ -68,8 +72,10 @@ def calculate_pitch_delivery(
     return {
         'sigma': sigma,
         'max_radius_inches': max_radius_in,
-        'realized_x': round(realized_x, 4),
-        'realized_z': round(realized_z, 4),
+        # Keep full precision so the stored packet coordinate and the strike
+        # check agree exactly at the inclusive rulebook boundary.
+        'realized_x': realized_x,
+        'realized_z': realized_z,
         'realized_zone_cat': realized_zone_cat,
         'is_strike': strike_check,
         'delta_x_in': delta_x_in,

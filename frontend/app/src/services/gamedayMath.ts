@@ -31,9 +31,6 @@ export const VIEWPORT_X_MAX = 2.0;
 export const VIEWPORT_Z_MIN = 0.0; // Ground level
 export const VIEWPORT_Z_MAX = 4.5; // High waste area
 
-export const SIGMA_MAX_FT = 0.50; // Legacy; the radius table is authoritative.
-export const SIGMA_MIN_FT = 0.15; // Legacy; the radius table is authoritative.
-
 /** Fatigue is off while the spray-cloud model is being validated. */
 export const FATIGUE_ENABLED = false;
 
@@ -185,17 +182,6 @@ export function sampleTruncatedGaussian(
 }
 
 /**
- * Generates Gaussian random numbers using the Box-Muller transform.
- */
-export function sampleGaussian(mean: number, stdDev: number, rng: () => number = Math.random): number {
-  let u1 = rng();
-  let u2 = rng();
-  while (u1 <= 1e-7) u1 = rng(); // Avoid zero for log
-  const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
-  return mean + z0 * stdDev;
-}
-
-/**
  * Computes realized delivery coordinate given an intended target and variance.
  */
 export function executeDelivery(
@@ -229,8 +215,10 @@ export function executeDelivery(
   const radialMissFeet = Math.sqrt(deltaXFeet * deltaXFeet + deltaZFeet * deltaZFeet);
 
   return {
-    realizedX: +sample.x.toFixed(3),
-    realizedZ: +sample.z.toFixed(3),
+    // Keep full precision for strike/zone classification; UI/packet layers
+    // round only when displaying the coordinate.
+    realizedX: sample.x,
+    realizedZ: sample.z,
     sigmaFeet: +sigma.toFixed(3),
     maxRadiusInches: +maxRadiusInches.toFixed(3),
     radialMissInches: +(radialMissFeet * 12).toFixed(1),
@@ -392,6 +380,117 @@ export function getZoneNominalTarget(zoneName: string): { x: number; z: number; 
     default:
       return { x: 0.00, z: 2.50, category: 'HEART' };
   }
+}
+
+// ─── Zone Aim Regions ─────────────────────────────────────────────────────────
+
+/**
+ * Aim regions for each discrete zone: [xMin, xMax, zMin, zMax] in Statcast feet.
+ * The 9 inner regions partition the full rulebook rectangle into equal thirds,
+ * so a sampled aim can be anywhere inside it, including the exact edges. Chase
+ * regions sit strictly outside the shadow band so they classify as CHASE.
+ */
+const INNER_COL_WIDTH_FT = (ZONE_X_MAX - ZONE_X_MIN) / 3;
+const INNER_ROW_HEIGHT_FT = (ZONE_Z_TOP - ZONE_Z_BOT) / 3;
+const CHASE_INNER_INSET_FT = 1e-6;
+
+export const ZONE_TARGET_BOUNDS: Record<string, [number, number, number, number]> = {
+  'upper-in': [
+    ZONE_X_MIN,
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP,
+  ],
+  'upper-middle': [
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP,
+  ],
+  'upper-away': [
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_X_MAX,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP,
+  ],
+  'middle-in': [
+    ZONE_X_MIN,
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+  ],
+  heart: [
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+  ],
+  'middle-away': [
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_X_MAX,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+    ZONE_Z_TOP - INNER_ROW_HEIGHT_FT,
+  ],
+  'lower-in': [
+    ZONE_X_MIN,
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_Z_BOT,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+  ],
+  'lower-middle': [
+    ZONE_X_MIN + INNER_COL_WIDTH_FT,
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_Z_BOT,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+  ],
+  'lower-away': [
+    ZONE_X_MAX - INNER_COL_WIDTH_FT,
+    ZONE_X_MAX,
+    ZONE_Z_BOT,
+    ZONE_Z_BOT + INNER_ROW_HEIGHT_FT,
+  ],
+  'chase-high': [
+    ZONE_X_MIN,
+    ZONE_X_MAX,
+    ZONE_Z_TOP + SHADOW_BORDER_FT + CHASE_INNER_INSET_FT,
+    ZONE_Z_TOP + CHASE_BORDER_FT,
+  ],
+  'chase-low': [
+    ZONE_X_MIN,
+    ZONE_X_MAX,
+    ZONE_Z_BOT - CHASE_BORDER_FT,
+    ZONE_Z_BOT - SHADOW_BORDER_FT - CHASE_INNER_INSET_FT,
+  ],
+  'chase-in': [
+    ZONE_X_MIN - CHASE_BORDER_FT,
+    ZONE_X_MIN - SHADOW_BORDER_FT - CHASE_INNER_INSET_FT,
+    ZONE_Z_BOT,
+    ZONE_Z_TOP,
+  ],
+  'chase-away': [
+    ZONE_X_MAX + SHADOW_BORDER_FT + CHASE_INNER_INSET_FT,
+    ZONE_X_MAX + CHASE_BORDER_FT,
+    ZONE_Z_BOT,
+    ZONE_Z_TOP,
+  ],
+};
+
+export function getZoneTargetBounds(zoneName: string): [number, number, number, number] {
+  return ZONE_TARGET_BOUNDS[(zoneName || 'heart').toLowerCase().trim()] ?? ZONE_TARGET_BOUNDS.heart;
+}
+
+/**
+ * Samples a uniform aim point inside a zone's closed rectangle.
+ * Inner-zone aims (including the exact edge) are strikes; chase aims are balls.
+ */
+export function sampleZoneTarget(
+  zoneName: string,
+  rng: () => number = Math.random,
+): { x: number; z: number; category: GamedayZoneCategory } {
+  const [xMin, xMax, zMin, zMax] = getZoneTargetBounds(zoneName);
+  const x = xMin + (xMax - xMin) * rng();
+  const z = zMin + (zMax - zMin) * rng();
+  return { x, z, category: classifyGamedayZone(x, z) };
 }
 
 // ─── SVG Coordinate Normalization ─────────────────────────────────────────────

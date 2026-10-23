@@ -1,7 +1,7 @@
 """
 MLB Statcast Strike Zone & Coordinate Mapper.
-Provides 13-zone discrete targeting, 2D continuous coordinates,
-and rulebook strike zone boundary testing.
+Provides 13-zone labels, continuous aim sampling inside those zones,
+2D coordinates, and rulebook strike zone boundary testing.
 """
 
 from typing import Dict, Tuple, Optional
@@ -13,7 +13,9 @@ try:
         get_zone_nominal_target,
         ZONE_X_MIN, ZONE_X_MAX, ZONE_Z_BOT, ZONE_Z_TOP
     )
-except ImportError:
+except ModuleNotFoundError as error:
+    if error.name != 'backend':
+        raise
     from gameday_math import (
         ZONE_CENTERS,
         is_rulebook_strike,
