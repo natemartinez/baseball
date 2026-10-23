@@ -15,13 +15,15 @@ from .calculations import calculate_pitch_delivery
 try:
     from backend.engine.gameday_math import (
         classify_gameday_zone,
-        get_zone_nominal_target,
+        sample_zone_target,
         determine_situation_category,
     )
-except ImportError:
+except ModuleNotFoundError as error:
+    if error.name != 'backend':
+        raise
     from gameday_math import (
         classify_gameday_zone,
-        get_zone_nominal_target,
+        sample_zone_target,
         determine_situation_category,
     )
 
@@ -121,7 +123,7 @@ class PitchingEngine:
             is_manual_override = True
         else:
             nominal_zone = target_zone or strat_result['recommended_zone']
-            target_x, target_z, intended_zone_cat = get_zone_nominal_target(nominal_zone)
+            target_x, target_z, intended_zone_cat = sample_zone_target(nominal_zone)
 
         # 4. Delivery Execution & Gaussian Error
         delivery_math = calculate_pitch_delivery(

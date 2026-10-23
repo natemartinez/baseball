@@ -1,7 +1,8 @@
 """
-MLB Statcast Gameday 2D Coordinate Normalization & Bivariate Gaussian Math Engine.
+MLB Statcast Gameday 2D Coordinate Normalization & Spray-Cloud Math Engine.
 Converts Statcast plate coordinates to 2D cross-section space, models delivery execution
-error from pitcher Command and Fatigue ratings, and defines rulebook/shadow zone boundaries.
+error from pitcher Command with a truncated Gaussian cloud, and defines rulebook/shadow
+zone boundaries.
 """
 
 import math
@@ -27,9 +28,6 @@ BALL_DIAMETER_FT = 2.9 / 12.0      # ~0.2417 ft
 SHADOW_BORDER_FT = 3.4 / 12.0      # 0.2833 ft (1 ball width border)
 CHASE_BORDER_FT = 2 * SHADOW_BORDER_FT  # ~0.5667 ft (2 ball widths)
 
-SIGMA_MAX_FT = 0.50                # Legacy; the radius table is authoritative.
-SIGMA_MIN_FT = 0.15                # Legacy; the radius table is authoritative.
-
 # Fatigue is intentionally disabled while the spray-cloud model is validated.
 # Future: enable growth once the pitcher reaches ~75 pitches or low stamina.
 FATIGUE_ENABLED = False
@@ -48,7 +46,8 @@ MAX_ERROR_RADIUS_TIERS: list = [
 # The cloud is a truncated Gaussian; sigma = radius / SIGMA_RADIUS_DIVISOR.
 SIGMA_RADIUS_DIVISOR = 2.5
 
-# 13 Nominal Zone Centers (Statcast X, Z in feet)
+# 13 Nominal Zone Centers (Statcast X, Z in feet). These are display/label
+# anchors only; pitch aims are sampled across the zone bounds below.
 ZONE_CENTERS: Dict[str, Tuple[float, float]] = {
     'upper-in': (-0.55, 3.15),
     'upper-middle': (0.0, 3.15),
@@ -63,6 +62,95 @@ ZONE_CENTERS: Dict[str, Tuple[float, float]] = {
     'chase-low': (0.0, 1.15),
     'chase-in': (-1.05, 2.50),
     'chase-away': (1.05, 2.50),
+}
+
+# Aim regions for each discrete zone: (x_min, x_max, z_min, z_max) in feet.
+# The 9 inner regions partition the full rulebook rectangle into equal thirds
+# so a sampled aim can be anywhere inside it, including the exact edges. Chase
+# regions sit strictly outside the shadow band so they classify as CHASE.
+_INNER_COL_WIDTH_FT = (ZONE_X_MAX - ZONE_X_MIN) / 3.0
+_INNER_ROW_HEIGHT_FT = (ZONE_Z_TOP - ZONE_Z_BOT) / 3.0
+_CHASE_INNER_INSET_FT = 1e-6
+
+ZONE_TARGET_BOUNDS: Dict[str, Tuple[float, float, float, float]] = {
+    'upper-in': (
+        ZONE_X_MIN,
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP,
+    ),
+    'upper-middle': (
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP,
+    ),
+    'upper-away': (
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP,
+    ),
+    'middle-in': (
+        ZONE_X_MIN,
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+    ),
+    'heart': (
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+    ),
+    'middle-away': (
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+        ZONE_Z_TOP - _INNER_ROW_HEIGHT_FT,
+    ),
+    'lower-in': (
+        ZONE_X_MIN,
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_Z_BOT,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+    ),
+    'lower-middle': (
+        ZONE_X_MIN + _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_Z_BOT,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+    ),
+    'lower-away': (
+        ZONE_X_MAX - _INNER_COL_WIDTH_FT,
+        ZONE_X_MAX,
+        ZONE_Z_BOT,
+        ZONE_Z_BOT + _INNER_ROW_HEIGHT_FT,
+    ),
+    'chase-high': (
+        ZONE_X_MIN,
+        ZONE_X_MAX,
+        ZONE_Z_TOP + SHADOW_BORDER_FT + _CHASE_INNER_INSET_FT,
+        ZONE_Z_TOP + CHASE_BORDER_FT,
+    ),
+    'chase-low': (
+        ZONE_X_MIN,
+        ZONE_X_MAX,
+        ZONE_Z_BOT - CHASE_BORDER_FT,
+        ZONE_Z_BOT - SHADOW_BORDER_FT - _CHASE_INNER_INSET_FT,
+    ),
+    'chase-in': (
+        ZONE_X_MIN - CHASE_BORDER_FT,
+        ZONE_X_MIN - SHADOW_BORDER_FT - _CHASE_INNER_INSET_FT,
+        ZONE_Z_BOT,
+        ZONE_Z_TOP,
+    ),
+    'chase-away': (
+        ZONE_X_MAX + SHADOW_BORDER_FT + _CHASE_INNER_INSET_FT,
+        ZONE_X_MAX + CHASE_BORDER_FT,
+        ZONE_Z_BOT,
+        ZONE_Z_TOP,
+    ),
 }
 
 # Empirical baselines from 10,000-pitch calibration protocol
@@ -162,6 +250,25 @@ def get_zone_nominal_target(zone_name: str) -> Tuple[float, float, str]:
     return coords[0], coords[1], cat
 
 
+def get_zone_target_bounds(zone_name: str) -> Tuple[float, float, float, float]:
+    """Returns the closed aim region (x_min, x_max, z_min, z_max) for a zone."""
+    clean_name = (zone_name or 'heart').lower().strip()
+    return ZONE_TARGET_BOUNDS.get(clean_name, ZONE_TARGET_BOUNDS['heart'])
+
+
+def sample_zone_target(zone_name: str, rng=None) -> Tuple[float, float, str]:
+    """
+    Samples a uniform aim point inside a zone's closed rectangle and returns
+    (x, z, category). The inner 9 zones cover the full rulebook rectangle, so
+    an aim on any edge is a strike; chase aims are balls.
+    """
+    rand = rng or random.random
+    x_min, x_max, z_min, z_max = get_zone_target_bounds(zone_name)
+    x = x_min + (x_max - x_min) * rand()
+    z = z_min + (z_max - z_min) * rand()
+    return x, z, classify_gameday_zone(x, z)
+
+
 def get_max_error_radius_inches(command_rating: float) -> float:
     """Interpolates the hard maximum miss radius (inches) for a command rating."""
     command = max(40.0, min(99.0, float(command_rating)))
@@ -191,13 +298,6 @@ def calculate_execution_sigma(command_rating: float, pitch_count: int = 0, stami
     return base_sigma * (1.0 + fatigue_multiplier)
 
 
-def sample_bivariate_gaussian(mean_x: float, mean_z: float, sigma_x: float, sigma_z: float) -> Tuple[float, float]:
-    """Samples realized plate location (X, Z) using Box-Muller / normal distribution."""
-    realized_x = random.gauss(mean_x, sigma_x)
-    realized_z = random.gauss(mean_z, sigma_z)
-    return round(realized_x, 3), round(realized_z, 3)
-
-
 def sample_truncated_gaussian(
     target_x: float,
     target_z: float,
@@ -209,10 +309,13 @@ def sample_truncated_gaussian(
     Samples a 2D Gaussian location truncated to the hard max radius.
     Uses the closed-form truncated Rayleigh radial distribution, so no rejection
     loop is needed and the result can never leave the circle.
+
+    Returns full-precision coordinates; callers should round only for display or
+    telemetry so boundary pitches are classified from their true location.
     """
     rand = rng or random.random
     if max_radius_ft <= 0 or sigma <= 0:
-        return round(target_x, 3), round(target_z, 3)
+        return target_x, target_z
 
     u = rand()
     exp_term = math.exp(-(max_radius_ft * max_radius_ft) / (2.0 * sigma * sigma))
@@ -223,7 +326,9 @@ def sample_truncated_gaussian(
 
     realized_x = target_x + r * math.cos(theta)
     realized_z = target_z + r * math.sin(theta)
-    return round(realized_x, 3), round(realized_z, 3)
+    # Keep full precision. Callers round only for display/telemetry so an
+    # on-the-line pitch is classified from its actual coordinate.
+    return realized_x, realized_z
 
 
 def calculate_radial_miss_inches(target_x: float, target_z: float, realized_x: float, realized_z: float) -> float:

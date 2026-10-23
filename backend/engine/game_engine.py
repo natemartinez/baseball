@@ -1,7 +1,7 @@
 """
 MLB Statcast Authoritative Game Engine.
 Implements the full 6-stage simulation pipeline, count state machine,
-bivariate Gaussian delivery resolution, and emits standardized Gameday2DPitchPacket telemetry.
+truncated spray-cloud delivery resolution, and emits standardized Gameday2DPitchPacket telemetry.
 """
 
 import os
@@ -16,7 +16,6 @@ try:
         classify_gameday_zone,
         get_zone_nominal_target,
         calculate_execution_sigma,
-        sample_bivariate_gaussian,
         calculate_radial_miss_inches,
         determine_situation_category,
         ZONE_CENTERS,
@@ -25,13 +24,17 @@ try:
     from backend.engine.pitching_engine import PitchingEngine, PitchStrategy
     from backend.engine.batter_strategy import BatterStrategy, JUDGE_DEFAULT_ZONES
     from backend.models.player import Player
-except ImportError:
+except ModuleNotFoundError as error:
+    # Only fall back when the package itself is unavailable (direct script
+    # execution from backend/engine). Never mask a missing symbol or a broken
+    # submodule import.
+    if error.name != 'backend':
+        raise
     from gameday_math import (
         is_rulebook_strike,
         classify_gameday_zone,
         get_zone_nominal_target,
         calculate_execution_sigma,
-        sample_bivariate_gaussian,
         calculate_radial_miss_inches,
         determine_situation_category,
         ZONE_CENTERS,
@@ -459,7 +462,7 @@ class GameEngine:
             'pitch_name': selected_pitch_name,
             'velocity_mph': velocity_mph,
             'spin_rpm': spin_rpm,
-            'intended_zone': target_zone or 'heart',
+            'intended_zone': delivery.get('nominal_zone', target_zone or 'heart'),
             'actual_zone': actual_zone_name,
             'batter_decision': 'SWING' if will_swing else 'TAKE',
             'pitch_result': pitch_result_type,
