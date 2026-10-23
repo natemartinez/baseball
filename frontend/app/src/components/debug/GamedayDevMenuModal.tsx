@@ -564,10 +564,7 @@ const styles = StyleSheet.create({
   pitchScrubberItemSelected: {
     borderColor: Colors.gameday.accentCyan,
     backgroundColor: '#16233B',
-    shadowColor: Colors.gameday.accentCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
+    boxShadow: '0px 0px 4px #06B6D499',
     elevation: 3,
   },
   scrubberItemTop: {

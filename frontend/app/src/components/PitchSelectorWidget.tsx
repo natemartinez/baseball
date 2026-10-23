@@ -282,7 +282,6 @@ function ArsenalChip({
     >
       {/* Hold-to-throw "breathing" fill: grows from a point to fill the chip */}
       <Animated.View
-        pointerEvents="none"
         style={[
           styles.holdFill,
           { opacity: fillOpacity, transform: [{ scale }] },
@@ -381,6 +380,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     borderRadius: 8,
     backgroundColor: 'rgba(0, 200, 83, 0.5)',
+    pointerEvents: 'none',
   },
   arsenalDot: {
     width: 6,
