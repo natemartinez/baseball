@@ -41,6 +41,7 @@ import { defaultRelease, movementFromArsenal } from './pitchTrajectory';
 import {
   executeDelivery,
   getZoneNominalTarget,
+  sampleZoneTarget,
   classifyGamedayZone,
   isRulebookStrike,
   determineSituationCategory,
@@ -497,10 +498,10 @@ export class MockGameService implements IGameService {
       isManualOverride = true;
       intendedZoneCategory = classifyGamedayZone(targetX, targetZ);
     } else {
-      const nominal = getZoneNominalTarget(intended);
-      targetX = nominal.x;
-      targetZ = nominal.z;
-      intendedZoneCategory = nominal.category;
+      const sampled = sampleZoneTarget(intended, this.rng);
+      targetX = sampled.x;
+      targetZ = sampled.z;
+      intendedZoneCategory = sampled.category;
     }
 
     // 2D Truncated Gaussian Execution Math — natural spray cloud
@@ -677,6 +678,8 @@ export class MockGameService implements IGameService {
         isManualOverride,
       },
       execution: {
+        // Keep full precision so the plotted dot and isStrike agree at the
+        // inclusive rulebook boundary.
         realizedX: execution.realizedX,
         realizedZ: execution.realizedZ,
         realizedSpeedMph: +(selectedPitch.velocity_mph + (this.rng() * 2.4 - 1.2)).toFixed(1),

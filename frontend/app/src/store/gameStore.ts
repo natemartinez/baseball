@@ -496,8 +496,10 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
           realizedZoneCategory: realizedCat,
         },
         result: {
-          call: realizedCat === 'HEART' || realizedCat === 'SHADOW' ? 'CALLED_STRIKE' : 'BALL',
-          isStrike: realizedCat === 'HEART' || realizedCat === 'SHADOW',
+          call: isRulebookStrike(execution.realizedX, execution.realizedZ)
+            ? 'CALLED_STRIKE'
+            : 'BALL',
+          isStrike: isRulebookStrike(execution.realizedX, execution.realizedZ),
           description: `Fast calibration delivery #${i + 1}`,
         },
       };

@@ -70,6 +70,7 @@ export function StrategyMenuModal() {
                 currentBatter={currentBatter}
                 latestPitch={latestPitch ?? pitchFeed[0]}
                 atBatPitches={currentAtBatPitches}
+                variant="selector"
               />
             )}
 

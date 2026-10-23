@@ -4,12 +4,18 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
+  Platform,
   type GestureResponderEvent,
 } from 'react-native';
-import Svg, { Circle, Image as SvgImage } from 'react-native-svg';
+import Svg, { Ellipse, Image as SvgImage } from 'react-native-svg';
 import type { BatterInfo, PitchDetails, PitchResultType } from '../types/api';
 import { STRIKE_ZONES } from '../types/api';
-import { buildSprayCloud, CHASE_BORDER_FT, SHADOW_BORDER_FT } from '../services/gamedayMath';
+import {
+  buildSprayCloud,
+  CHASE_BORDER_FT,
+  SHADOW_BORDER_FT,
+  getZoneNominalTarget,
+} from '../services/gamedayMath';
 import { Colors } from '../theme/colors';
 
 const GLOVE_ICON = require('../../assets/glove-icon.png');
@@ -33,6 +39,14 @@ interface StrikeZoneGridWidgetProps {
   chaseTransparent?: boolean;
   /** Show the latest-pitch summary below the grid (default true). */
   showPitchSummary?: boolean;
+  /** Visual scale applied by the parent overlay; corrects web responder coordinates. */
+  coordinateScaleX?: number;
+  coordinateScaleY?: number;
+  /**
+   * 'selector' keeps the 3x3 + chase picker used by the Strategy menu.
+   * 'field' renders one strike rectangle with exact-coordinate pitch dots.
+   */
+  variant?: 'field' | 'selector';
 }
 
 interface NumberedPitch {
@@ -58,6 +72,9 @@ export function StrikeZoneGridWidget({
   showZoneLabels = true,
   chaseTransparent = false,
   showPitchSummary = true,
+  coordinateScaleX = 1,
+  coordinateScaleY = 1,
+  variant = 'selector',
 }: StrikeZoneGridWidgetProps) {
   const sourcePitches =
     atBatPitches !== undefined
@@ -76,9 +93,52 @@ export function StrikeZoneGridWidget({
   // chase band rather than a few pixels just outside the zone.
   function handleGridGlove(e: GestureResponderEvent) {
     if (!onSetGloveTarget) return;
-    const lx = Math.max(0, Math.min(GRID_WIDTH, e.nativeEvent.locationX));
-    const ly = Math.max(0, Math.min(GRID_HEIGHT, e.nativeEvent.locationY));
+    // react-native-web derives locationX/Y from getBoundingClientRect, which
+    // includes the overlay's CSS scale, so undo that scale before mapping.
+    // Native responders already report layout coordinates.
+    const scaleX = Platform.OS === 'web' && coordinateScaleX > 0 ? coordinateScaleX : 1;
+    const scaleY = Platform.OS === 'web' && coordinateScaleY > 0 ? coordinateScaleY : 1;
+    const lx = Math.max(0, Math.min(GRID_WIDTH, e.nativeEvent.locationX / scaleX));
+    const ly = Math.max(0, Math.min(GRID_HEIGHT, e.nativeEvent.locationY / scaleY));
     onSetGloveTarget(gridToStatcastX(lx), gridToStatcastZ(ly));
+  }
+
+  if (variant === 'field') {
+    return (
+      <View style={styles.container}>
+        <View style={styles.fieldBox}>
+          {/* One visible rectangle: the rulebook strike zone, edge inclusive. */}
+          <View style={styles.strikeZoneRect} />
+
+          <View style={styles.fieldGloveLayer}>
+            <GloveCloudOverlay
+              gloveTarget={gloveTarget}
+              commandRating={commandRating}
+              markerScaleX={coordinateScaleX}
+              markerScaleY={coordinateScaleY}
+            />
+          </View>
+
+          <FieldPitchDots
+            pitches={numberedPitches}
+            scaleX={coordinateScaleX}
+            scaleY={coordinateScaleY}
+          />
+
+          {onSetGloveTarget && (
+            <View
+              style={StyleSheet.absoluteFill}
+              onStartShouldSetResponder={() => true}
+              onMoveShouldSetResponder={() => true}
+              onStartShouldSetResponderCapture={() => true}
+              onMoveShouldSetResponderCapture={() => true}
+              onResponderGrant={handleGridGlove}
+              onResponderMove={handleGridGlove}
+            />
+          )}
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -95,6 +155,8 @@ export function StrikeZoneGridWidget({
           onSelect={onSelectZone}
           transparent={chaseTransparent}
           horizontal
+          markerScaleX={coordinateScaleX}
+          markerScaleY={coordinateScaleY}
         />
 
         {/* Middle row: Chase In + 3×3 + Chase Away */}
@@ -107,6 +169,8 @@ export function StrikeZoneGridWidget({
             onSelect={onSelectZone}
             transparent={chaseTransparent}
             horizontal={false}
+            markerScaleX={coordinateScaleX}
+            markerScaleY={coordinateScaleY}
           />
           <InnerStrikeZone3x3
             selectedZone={selectedZone}
@@ -116,6 +180,8 @@ export function StrikeZoneGridWidget({
             gloveTarget={gloveTarget}
             commandRating={commandRating}
             showZoneLabels={showZoneLabels}
+            markerScaleX={coordinateScaleX}
+            markerScaleY={coordinateScaleY}
           />
           <ChaseZonePill
             zoneId={STRIKE_ZONES.CHASE_AWAY}
@@ -125,6 +191,8 @@ export function StrikeZoneGridWidget({
             onSelect={onSelectZone}
             transparent={chaseTransparent}
             horizontal={false}
+            markerScaleX={coordinateScaleX}
+            markerScaleY={coordinateScaleY}
           />
         </View>
 
@@ -137,6 +205,8 @@ export function StrikeZoneGridWidget({
           onSelect={onSelectZone}
           transparent={chaseTransparent}
           horizontal
+          markerScaleX={coordinateScaleX}
+          markerScaleY={coordinateScaleY}
         />
       </View>
       {onSetGloveTarget && (
@@ -164,6 +234,11 @@ export function StrikeZoneGridWidget({
 
 /** Square edge length of the 3×3 strike zone (kept 1:1). */
 const STRIKE_ZONE_SIZE = 190;
+const GRID_PAD_PX = 2;
+
+/** Semi-transparent panel backing so the 3D field shows through the HUD. */
+const GRID_PANEL_BG = 'rgba(13, 19, 26, 0.45)';
+const GRID_INNER_BG = 'rgba(27, 36, 48, 0.3)';
 
 // Fixed grid-box layout. The unified glove responder maps the whole box,
 // including the chase strips, so these offsets must stay in sync with styles.
@@ -179,6 +254,30 @@ const CHASE_LEFT_PX = INNER_LEFT;
 const CHASE_TOP_PX = INNER_TOP;
 const CHASE_RIGHT_PX = GRID_WIDTH - INNER_LEFT - STRIKE_ZONE_SIZE;
 const CHASE_BOTTOM_PX = GRID_HEIGHT - INNER_TOP - STRIKE_ZONE_SIZE;
+
+/** Outer container padding, shared by the style and the exported rendered size. */
+const CONTAINER_PAD = 14;
+
+/** Rendered height while the pitch summary is hidden: grid box plus container padding. */
+export const STRIKE_ZONE_WIDGET_SIZE = GRID_HEIGHT + CONTAINER_PAD * 2;
+
+/** Rendered width of the 3x3 strike zone before any overlay scale. */
+export const STRIKE_ZONE_GRID_SIZE = STRIKE_ZONE_SIZE;
+
+/** Rendered width of the whole widget, including chase strips and container padding. */
+export const STRIKE_ZONE_WIDGET_WIDTH = GRID_WIDTH + CONTAINER_PAD * 2;
+
+/** Distance from the widget's top to the bottom edge of the 3x3 grid (unscaled). */
+export const STRIKE_ZONE_GRID_BOTTOM_OFFSET =
+  CONTAINER_PAD + INNER_TOP + STRIKE_ZONE_SIZE;
+
+/** Inner 3x3 content size, excluding the 2px inner padding. */
+export const STRIKE_ZONE_GRID_CONTENT_SIZE =
+  STRIKE_ZONE_SIZE - GRID_PAD_PX * 2;
+
+/** Distance from the widget's top to the 3x3 content top (unscaled). */
+export const STRIKE_ZONE_GRID_CONTENT_TOP =
+  CONTAINER_PAD + INNER_TOP + GRID_PAD_PX;
 
 const INNER_GRID = [
   [
@@ -203,22 +302,25 @@ const ZONE_X_MIN = -0.7083;
 const ZONE_X_MAX = 0.7083;
 const ZONE_Z_BOT = 1.5;
 const ZONE_Z_TOP = 3.5;
-const GRID_PAD_PX = 2;
-const GRID_CONTENT_PX = STRIKE_ZONE_SIZE - GRID_PAD_PX * 2;
+const GRID_CONTENT_PX = STRIKE_ZONE_GRID_CONTENT_SIZE;
+const CONTENT_LEFT = INNER_LEFT + GRID_PAD_PX;
+const CONTENT_RIGHT = CONTENT_LEFT + GRID_CONTENT_PX;
+const CONTENT_TOP = INNER_TOP + GRID_PAD_PX;
+const CONTENT_BOTTOM = CONTENT_TOP + GRID_CONTENT_PX;
+const EDGE_BAND_PX = GRID_PAD_PX + GRID_BOX_GAP;
 const CLOUD_PAD_PX = 64;
 const CLOUD_SIZE = STRIKE_ZONE_SIZE + CLOUD_PAD_PX * 2;
 const PX_PER_INCH = GRID_CONTENT_PX / 17;
 
 /**
  * The visible layout has three bands on each side:
- *   padding (waste) -> chase strip -> 4px shadow gap -> strike zone.
- * These functions map each band independently so the chase strips represent
- * the real 1-2 ball-width chase band and never collapse into the shadow edge.
+ *   padding (waste) -> chase strip -> shadow gap -> strike zone.
+ * The strike boundary is the visible content rectangle, so taps exactly on
+ * its border map to the inclusive rulebook edge and taps outside map to balls.
  */
 function gridToStatcastX(lx: number): number {
   const stripOuter = GRID_BOX_PAD;
   const stripInner = GRID_BOX_PAD + CHASE_V;
-  const shadowInner = INNER_LEFT;
 
   if (lx < stripOuter) {
     const t = (stripOuter - lx) / GRID_BOX_PAD;
@@ -228,19 +330,19 @@ function gridToStatcastX(lx: number): number {
     const t = (lx - stripOuter) / CHASE_V;
     return ZONE_X_MIN - CHASE_BORDER_FT + t * (CHASE_BORDER_FT - SHADOW_BORDER_FT);
   }
-  if (lx < shadowInner) {
-    const t = (lx - stripInner) / GRID_BOX_GAP;
+  if (lx < CONTENT_LEFT) {
+    const t = (lx - stripInner) / EDGE_BAND_PX;
     return ZONE_X_MIN - SHADOW_BORDER_FT + t * SHADOW_BORDER_FT;
   }
-  if (lx <= INNER_LEFT + STRIKE_ZONE_SIZE) {
-    return ZONE_X_MIN + ((lx - INNER_LEFT) / STRIKE_ZONE_SIZE) * (ZONE_X_MAX - ZONE_X_MIN);
+  if (lx <= CONTENT_RIGHT) {
+    return ZONE_X_MIN + ((lx - CONTENT_LEFT) / GRID_CONTENT_PX) * (ZONE_X_MAX - ZONE_X_MIN);
   }
 
-  const rightShadowStart = INNER_LEFT + STRIKE_ZONE_SIZE;
-  const rightStripStart = rightShadowStart + GRID_BOX_GAP;
+  const rightShadowStart = CONTENT_RIGHT;
+  const rightStripStart = rightShadowStart + EDGE_BAND_PX;
   const rightStripEnd = rightStripStart + CHASE_V;
   if (lx < rightStripStart) {
-    const t = (lx - rightShadowStart) / GRID_BOX_GAP;
+    const t = (lx - rightShadowStart) / EDGE_BAND_PX;
     return ZONE_X_MAX + t * SHADOW_BORDER_FT;
   }
   if (lx < rightStripEnd) {
@@ -255,7 +357,6 @@ function gridToStatcastX(lx: number): number {
 function gridToStatcastZ(ly: number): number {
   const stripOuter = GRID_BOX_PAD;
   const stripInner = GRID_BOX_PAD + CHASE_H;
-  const shadowInner = INNER_TOP;
 
   if (ly < stripOuter) {
     const t = (stripOuter - ly) / GRID_BOX_PAD;
@@ -265,19 +366,19 @@ function gridToStatcastZ(ly: number): number {
     const t = (ly - stripOuter) / CHASE_H;
     return ZONE_Z_TOP + CHASE_BORDER_FT - t * (CHASE_BORDER_FT - SHADOW_BORDER_FT);
   }
-  if (ly < shadowInner) {
-    const t = (ly - stripInner) / GRID_BOX_GAP;
+  if (ly < CONTENT_TOP) {
+    const t = (ly - stripInner) / EDGE_BAND_PX;
     return ZONE_Z_TOP + SHADOW_BORDER_FT - t * SHADOW_BORDER_FT;
   }
-  if (ly <= INNER_TOP + STRIKE_ZONE_SIZE) {
-    return ZONE_Z_TOP - ((ly - INNER_TOP) / STRIKE_ZONE_SIZE) * (ZONE_Z_TOP - ZONE_Z_BOT);
+  if (ly <= CONTENT_BOTTOM) {
+    return ZONE_Z_TOP - ((ly - CONTENT_TOP) / GRID_CONTENT_PX) * (ZONE_Z_TOP - ZONE_Z_BOT);
   }
 
-  const bottomShadowStart = INNER_TOP + STRIKE_ZONE_SIZE;
-  const bottomStripStart = bottomShadowStart + GRID_BOX_GAP;
+  const bottomShadowStart = CONTENT_BOTTOM;
+  const bottomStripStart = bottomShadowStart + EDGE_BAND_PX;
   const bottomStripEnd = bottomStripStart + CHASE_H;
   if (ly < bottomStripStart) {
-    const t = (ly - bottomShadowStart) / GRID_BOX_GAP;
+    const t = (ly - bottomShadowStart) / EDGE_BAND_PX;
     return ZONE_Z_BOT - t * SHADOW_BORDER_FT;
   }
   if (ly < bottomStripEnd) {
@@ -364,6 +465,8 @@ function InnerStrikeZone3x3({
   gloveTarget,
   commandRating,
   showZoneLabels,
+  markerScaleX,
+  markerScaleY,
 }: {
   selectedZone: string;
   onSelectZone: (z: string) => void;
@@ -372,21 +475,9 @@ function InnerStrikeZone3x3({
   gloveTarget?: { x: number; z: number } | null;
   commandRating?: number;
   showZoneLabels: boolean;
+  markerScaleX: number;
+  markerScaleY: number;
 }) {
-  const cloud = useMemo(
-    () =>
-      gloveTarget && commandRating != null
-        ? buildSprayCloud(gloveTarget.x, gloveTarget.z, commandRating)
-        : null,
-    [gloveTarget?.x, gloveTarget?.z, commandRating],
-  );
-  const glovePx = gloveTarget ? statcastToGrid(gloveTarget.x, gloveTarget.z) : null;
-  // The asset has ~9% padding inside its 512 viewBox; compensate so the
-  // visible glove fills the old error-circle diameter.
-  const gloveSize = cloud
-    ? Math.max(18, (2 * cloud.radiusInches * PX_PER_INCH) / 0.81)
-    : 0;
-
   return (
     <View style={styles.innerGrid}>
       {INNER_GRID.map((row) => (
@@ -401,39 +492,153 @@ function InnerStrikeZone3x3({
               pitches={pitches}
               showZoneLabels={showZoneLabels}
               onSelect={onSelectZone}
+              markerScaleX={markerScaleX}
+              markerScaleY={markerScaleY}
             />
           ))}
         </View>
       ))}
 
       {/* Spray cloud + glove marker, drawn over the grid */}
-      {cloud && glovePx && (
-        <View style={styles.cloudOverlay} pointerEvents="none">
-          <Svg width={CLOUD_SIZE} height={CLOUD_SIZE}>
-            {cloud.points.map((point, index) => {
-              const px = statcastToGrid(point.x, point.z);
-              return (
-                <Circle
-                  key={`cloud-${index}`}
-                  cx={px.x + CLOUD_PAD_PX}
-                  cy={px.y + CLOUD_PAD_PX}
-                  r={1.5}
-                  fill={cloudDotColor(point.zone)}
-                />
-              );
-            })}
-            {/* Catcher's glove asset — fills the old error-circle area */}
-            <SvgImage
-              href={GLOVE_ICON}
-              x={glovePx.x + CLOUD_PAD_PX - gloveSize / 2}
-              y={glovePx.y + CLOUD_PAD_PX - gloveSize / 2}
-              width={gloveSize}
-              height={gloveSize}
-              preserveAspectRatio="xMidYMid meet"
+      <GloveCloudOverlay
+        gloveTarget={gloveTarget}
+        commandRating={commandRating}
+        markerScaleX={markerScaleX}
+        markerScaleY={markerScaleY}
+      />
+    </View>
+  );
+}
+
+function GloveCloudOverlay({
+  gloveTarget,
+  commandRating,
+  markerScaleX,
+  markerScaleY,
+}: {
+  gloveTarget?: { x: number; z: number } | null;
+  commandRating?: number;
+  markerScaleX: number;
+  markerScaleY: number;
+}) {
+  const cloud = useMemo(
+    () =>
+      gloveTarget && commandRating != null
+        ? buildSprayCloud(gloveTarget.x, gloveTarget.z, commandRating)
+        : null,
+    [gloveTarget?.x, gloveTarget?.z, commandRating],
+  );
+  const glovePx = gloveTarget ? statcastToGrid(gloveTarget.x, gloveTarget.z) : null;
+  // The asset has ~9% padding inside its 512 viewBox; compensate so the
+  // visible glove fills the old error-circle diameter.
+  const gloveSize = cloud
+    ? Math.max(18, (2 * cloud.radiusInches * PX_PER_INCH) / 0.81)
+    : 0;
+  const markerSx = Math.max(markerScaleX, 0.01);
+  const markerSy = Math.max(markerScaleY, 0.01);
+  const gloveWidth = gloveSize / markerSx;
+  const gloveHeight = gloveSize / markerSy;
+
+  if (!cloud || !glovePx) return null;
+
+  return (
+    <View style={styles.cloudOverlay}>
+      <Svg width={CLOUD_SIZE} height={CLOUD_SIZE}>
+        {cloud.points.map((point, index) => {
+          const px = statcastToGrid(point.x, point.z);
+          return (
+            <Ellipse
+              key={`cloud-${index}`}
+              cx={px.x + CLOUD_PAD_PX}
+              cy={px.y + CLOUD_PAD_PX}
+              rx={1.5 / markerSx}
+              ry={1.5 / markerSy}
+              fill={cloudDotColor(point.zone)}
             />
-          </Svg>
-        </View>
-      )}
+          );
+        })}
+        {/* Catcher's glove asset — counter-scaled so it stays square */}
+        <SvgImage
+          href={GLOVE_ICON}
+          x={glovePx.x + CLOUD_PAD_PX - gloveWidth / 2}
+          y={glovePx.y + CLOUD_PAD_PX - gloveHeight / 2}
+          width={gloveWidth}
+          height={gloveHeight}
+          preserveAspectRatio="none"
+        />
+      </Svg>
+    </View>
+  );
+}
+
+/** Resolve the exact realized pitch location, with legacy fallbacks. */
+function pitchRealizedLocation(pitch: PitchDetails): { x: number; z: number } {
+  const execution = pitch.gameday_packet?.execution;
+  if (
+    execution &&
+    Number.isFinite(execution.realizedX) &&
+    Number.isFinite(execution.realizedZ)
+  ) {
+    return { x: execution.realizedX, z: execution.realizedZ };
+  }
+
+  const intent = pitch.gameday_packet?.intent;
+  if (intent && Number.isFinite(intent.targetX) && Number.isFinite(intent.targetZ)) {
+    return { x: intent.targetX, z: intent.targetZ };
+  }
+
+  const nominal = getZoneNominalTarget(pitch.actual_zone || 'heart');
+  return { x: nominal.x, z: nominal.z };
+}
+
+function FieldPitchDots({
+  pitches,
+  scaleX,
+  scaleY,
+}: {
+  pitches: NumberedPitch[];
+  scaleX: number;
+  scaleY: number;
+}) {
+  if (pitches.length === 0) return null;
+
+  const sx = Math.max(scaleX, 0.01);
+  const sy = Math.max(scaleY, 0.01);
+  const slotWidth = PITCH_MARKER_SIZE / sx;
+  const slotHeight = PITCH_MARKER_SIZE / sy;
+
+  return (
+    <View style={styles.fieldDotsOverlay}>
+      {pitches.map(({ pitch, number }) => {
+        const location = pitchRealizedLocation(pitch);
+        const px = statcastToGrid(location.x, location.z);
+        return (
+          <View
+            key={`${number}-${pitch.pitch_name}`}
+            style={[
+              styles.fieldDotSlot,
+              {
+                left: INNER_LEFT + px.x - slotWidth / 2,
+                top: INNER_TOP + px.y - slotHeight / 2,
+                width: slotWidth,
+                height: slotHeight,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.pitchNumberMarker,
+                {
+                  backgroundColor: pitchMarkerColor(pitch.pitch_result),
+                  transform: [{ scaleX: 1 / sx }, { scaleY: 1 / sy }],
+                },
+              ]}
+            >
+              <Text style={styles.pitchNumberText}>{number}</Text>
+            </View>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -446,6 +651,8 @@ function InnerZoneCell({
   pitches,
   showZoneLabels,
   onSelect,
+  markerScaleX,
+  markerScaleY,
 }: {
   zoneId: string;
   displayLabel: string;
@@ -454,6 +661,8 @@ function InnerZoneCell({
   pitches: NumberedPitch[];
   showZoneLabels: boolean;
   onSelect: (z: string) => void;
+  markerScaleX: number;
+  markerScaleY: number;
 }) {
   const isSelected = selectedZone === zoneId;
   const zonePitches = pitches.filter((p) => p.pitch.actual_zone === zoneId);
@@ -493,7 +702,11 @@ function InnerZoneCell({
           </Text>
         </>
       )}
-      <ZonePitchMarkers pitches={zonePitches} />
+      <ZonePitchMarkers
+        pitches={zonePitches}
+        scaleX={markerScaleX}
+        scaleY={markerScaleY}
+      />
     </TouchableOpacity>
   );
 }
@@ -502,6 +715,7 @@ function InnerZoneCell({
 
 function ChaseZonePill({
   zoneId, label, isSelected, pitches, onSelect, horizontal, transparent = false,
+  markerScaleX, markerScaleY,
 }: {
   zoneId: string;
   label: string;
@@ -510,6 +724,8 @@ function ChaseZonePill({
   onSelect: (z: string) => void;
   horizontal: boolean;
   transparent?: boolean;
+  markerScaleX: number;
+  markerScaleY: number;
 }) {
   const zonePitches = pitches.filter((p) => p.pitch.actual_zone === zoneId);
 
@@ -534,7 +750,11 @@ function ChaseZonePill({
               },
         ]}
       >
-        <ZonePitchMarkers pitches={zonePitches} />
+        <ZonePitchMarkers
+          pitches={zonePitches}
+          scaleX={markerScaleX}
+          scaleY={markerScaleY}
+        />
       </TouchableOpacity>
     );
   }
@@ -556,27 +776,57 @@ function ChaseZonePill({
       <Text style={[styles.chaseLabel, { color: isSelected ? Colors.blueSky : Colors.textMuted }]}>
         {label}
       </Text>
-      <ZonePitchMarkers pitches={zonePitches} />
+      <ZonePitchMarkers
+        pitches={zonePitches}
+        scaleX={markerScaleX}
+        scaleY={markerScaleY}
+      />
     </TouchableOpacity>
   );
 }
 
 // ─── Pitch Markers ────────────────────────────────────────────────────────────
 
-function ZonePitchMarkers({ pitches }: { pitches: NumberedPitch[] }) {
+const PITCH_MARKER_SIZE = 18;
+
+function ZonePitchMarkers({
+  pitches,
+  scaleX,
+  scaleY,
+}: {
+  pitches: NumberedPitch[];
+  scaleX: number;
+  scaleY: number;
+}) {
   if (pitches.length === 0) return null;
 
+  const sx = Math.max(scaleX, 0.01);
+  const sy = Math.max(scaleY, 0.01);
+
   return (
-    <View style={styles.pitchMarkersOverlay} pointerEvents="none">
+    <View style={styles.pitchMarkersOverlay}>
       {pitches.map(({ pitch, number }) => (
         <View
           key={`${number}-${pitch.pitch_name}`}
           style={[
-            styles.pitchNumberMarker,
-            { backgroundColor: pitchMarkerColor(pitch.pitch_result) },
+            styles.pitchMarkerSlot,
+            {
+              width: PITCH_MARKER_SIZE / sx,
+              height: PITCH_MARKER_SIZE / sy,
+            },
           ]}
         >
-          <Text style={styles.pitchNumberText}>{number}</Text>
+          <View
+            style={[
+              styles.pitchNumberMarker,
+              {
+                backgroundColor: pitchMarkerColor(pitch.pitch_result),
+                transform: [{ scaleX: 1 / sx }, { scaleY: 1 / sy }],
+              },
+            ]}
+          >
+            <Text style={styles.pitchNumberText}>{number}</Text>
+          </View>
         </View>
       ))}
     </View>
@@ -631,14 +881,50 @@ function outcomeSummaryColor(result: PitchResultType): string {
 const styles = StyleSheet.create({
   container: {
     backgroundColor: 'transparent',
-    padding: 14,
+    padding: CONTAINER_PAD,
     gap: 10,
     alignItems: 'center',
   },
   gridOuter: { position: 'relative' },
+  // Field variant: one visible rectangle, with the chase/waste bands kept as
+  // invisible tap area and dot-rendering space.
+  fieldBox: { position: 'relative', width: GRID_WIDTH, height: GRID_HEIGHT },
+  strikeZoneRect: {
+    position: 'absolute',
+    left: CONTENT_LEFT,
+    top: CONTENT_TOP,
+    width: GRID_CONTENT_PX,
+    height: GRID_CONTENT_PX,
+    borderWidth: 2,
+    borderColor: 'rgba(236, 240, 245, 0.9)',
+    borderRadius: 2,
+    backgroundColor: 'rgba(27, 36, 48, 0.14)',
+    pointerEvents: 'none',
+  },
+  fieldGloveLayer: {
+    position: 'absolute',
+    left: INNER_LEFT,
+    top: INNER_TOP,
+    width: STRIKE_ZONE_SIZE,
+    height: STRIKE_ZONE_SIZE,
+    pointerEvents: 'none',
+  },
+  fieldDotsOverlay: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: GRID_WIDTH,
+    height: GRID_HEIGHT,
+    pointerEvents: 'none',
+  },
+  fieldDotSlot: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   // Grid outer box
   gridBox: {
-    backgroundColor: Colors.bgInput,
+    backgroundColor: GRID_PANEL_BG,
     borderRadius: 8,
     padding: GRID_BOX_PAD,
     gap: GRID_BOX_GAP,
@@ -656,7 +942,7 @@ const styles = StyleSheet.create({
     width: STRIKE_ZONE_SIZE,
     height: STRIKE_ZONE_SIZE,
     borderRadius: 4,
-    backgroundColor: '#1B2430',
+    backgroundColor: GRID_INNER_BG,
     padding: 2,
     gap: 2,
   },
@@ -666,6 +952,7 @@ const styles = StyleSheet.create({
     top: -CLOUD_PAD_PX,
     width: CLOUD_SIZE,
     height: CLOUD_SIZE,
+    pointerEvents: 'none',
   },
   innerRow: { flex: 1, flexDirection: 'row', gap: 2 },
   innerCell: { flex: 1, borderRadius: 3, alignItems: 'center', justifyContent: 'center', padding: 2 },
@@ -678,6 +965,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    pointerEvents: 'none',
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
@@ -686,10 +974,14 @@ const styles = StyleSheet.create({
     gap: 2,
     padding: 2,
   },
+  pitchMarkerSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   pitchNumberMarker: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: PITCH_MARKER_SIZE,
+    height: PITCH_MARKER_SIZE,
+    borderRadius: PITCH_MARKER_SIZE / 2,
     borderWidth: 1.5,
     borderColor: '#FFF',
     alignItems: 'center',
