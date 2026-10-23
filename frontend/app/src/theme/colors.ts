@@ -79,6 +79,21 @@ export const Colors = {
   baseDefault: '#263238',
   baselineChalk: 'rgba(236, 239, 241, 0.6)',
 
+  // ─── Stadium scene (GameField) ──────────────────────────────────────────
+  field: {
+    skyTop: '#050B14',
+    skyBottom: '#1B2A38',
+    stands: '#0E1620',
+    wall: '#12212C',
+    wallTrim: '#1F3546',
+    grassDark: '#1B4D2E',
+    grassMid: '#21603A',
+    grassLight: '#2A7247',
+    dirt: '#6B4A2F',
+    dirtDark: '#4E3521',
+    chalk: 'rgba(236, 239, 241, 0.75)',
+  },
+
   // ─── Strike zone ────────────────────────────────────────────────────────
   zoneStrike: '#4CAF50',
   zoneChase: '#1565C0',
