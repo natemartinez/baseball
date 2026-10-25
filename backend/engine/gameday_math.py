@@ -242,6 +242,32 @@ def classify_gameday_zone(x: float, z: float) -> str:
     return 'WASTE'
 
 
+def nearest_zone_name(is_strike: bool, x: float, z: float) -> str:
+    """
+    Returns the closest 13-zone label constrained to the realized side of the
+    plate. A strike can only be labeled with an inner zone and a ball can only
+    be labeled with a chase zone, so a pitch just off the corner never inherits
+    an inner-corner strike label.
+    """
+    candidates = [
+        name
+        for name in ZONE_CENTERS
+        if name.startswith('chase-') != bool(is_strike)
+    ]
+    if not candidates:
+        return 'heart'
+
+    best = candidates[0]
+    min_dist = float('inf')
+    for name in candidates:
+        zx, zz = ZONE_CENTERS[name]
+        dist = (zx - x) ** 2 + (zz - z) ** 2
+        if dist < min_dist:
+            min_dist = dist
+            best = name
+    return best
+
+
 def get_zone_nominal_target(zone_name: str) -> Tuple[float, float, str]:
     """Returns nominal (x, z) coordinates and category for a discrete zone name."""
     clean_name = (zone_name or 'heart').lower().strip()

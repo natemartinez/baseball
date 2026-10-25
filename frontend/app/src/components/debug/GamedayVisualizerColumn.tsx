@@ -96,7 +96,7 @@ export function GamedayVisualizerColumn({
 
   // Pitch colors
   const pitchColor = packet ? getPitchTypeColor(packet.strategy.selectedPitch) : Colors.cyan;
-  const ringColor = packet ? getResultRingColor(packet.result.call) : Colors.blue;
+  const ringColor = packet ? getResultRingColor(packet.result.call ?? 'IN_PLAY') : Colors.blue;
 
   const commandRating = packet?.meta.commandRating ?? 82;
   const sprayCloud = useMemo(

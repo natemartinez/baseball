@@ -2,7 +2,9 @@ import { create } from 'zustand';
 import type {
   GameState,
   InitialStateResponse,
-  PitchDetails,
+  PitchResolveResponse,
+  PitchThrowResponse,
+  ResolvedPitchDetails,
   TeamLineup,
   TeamRotation,
   ApiErrorResponse,
@@ -38,19 +40,25 @@ function ensureStrategyIntent(game?: GameState | null): GameState | null | undef
 
 export type LoadingState = 'idle' | 'loading' | 'success' | 'error';
 export type DevTab = 'strategy' | 'gameday' | 'calibration' | 'split';
+export type PitchPhase = 'IDLE' | 'IN_FLIGHT' | 'RESOLVING' | 'REACTING';
 
 export interface GameUiState {
   // Server / game data
   initialResponse: InitialStateResponse | null;
   gameState: GameState | null;
-  pitchFeed: PitchDetails[];
+  pitchFeed: ResolvedPitchDetails[];
   /** Pitches in the current at-bat, oldest first (for numbered zone markers). */
-  currentAtBatPitches: PitchDetails[];
+  currentAtBatPitches: ResolvedPitchDetails[];
   /** True when the most recent pitch ended the at-bat. */
   lastPitchEndedAtBat: boolean;
-  latestPitch: PitchDetails | null;
+  latestPitch: ResolvedPitchDetails | null;
   lineups: TeamLineup[];
   rotations: TeamRotation[];
+
+  // Two-phase pitch reveal
+  pitchPhase: PitchPhase;
+  pendingThrow: PitchThrowResponse | null;
+  pendingResolution: PitchResolveResponse | null;
 
   // Gameday Telemetry & Developer Menu State
   gamedayLog: Gameday2DPitchPacket[];
@@ -96,6 +104,9 @@ export interface GameActions {
 
   // Gameplay
   throwPitch(): Promise<void>;
+  resolvePitch(): Promise<void>;
+  revealPitch(): void;
+  clearPendingPitch(): void;
   simAtBat(): Promise<void>;
   swapLineup(teamId: number, pos1: number, pos2: number): Promise<void>;
   swapRotation(teamId: number, pos1: number, pos2: number): Promise<void>;
@@ -141,6 +152,9 @@ const initialState: GameUiState = {
   latestPitch: null,
   lineups: [],
   rotations: [],
+  pitchPhase: 'IDLE',
+  pendingThrow: null,
+  pendingResolution: null,
   gamedayLog: [],
   selectedPitchPacketIndex: null,
   customTargetCoords: null,
@@ -186,6 +200,9 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         currentAtBatPitches: [],
         lastPitchEndedAtBat: false,
         latestPitch: null,
+        pitchPhase: 'IDLE',
+        pendingThrow: null,
+        pendingResolution: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
         selectedPitchIntent: s.selectedPitchIntent || firstPitch || 'Four-Seam Fastball',
@@ -208,6 +225,9 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         currentAtBatPitches: [],
         lastPitchEndedAtBat: false,
         latestPitch: null,
+        pitchPhase: 'IDLE',
+        pendingThrow: null,
+        pendingResolution: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
         loadingState: 'success',
@@ -234,6 +254,9 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         currentAtBatPitches: [],
         lastPitchEndedAtBat: false,
         latestPitch: null,
+        pitchPhase: 'IDLE',
+        pendingThrow: null,
+        pendingResolution: null,
         gamedayLog: [],
         selectedPitchPacketIndex: null,
         customTargetCoords: null,
@@ -256,44 +279,108 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
   // ─── Gameplay ──────────────────────────────────────────────────────────────
 
   async throwPitch() {
-    const { selectedPitchIntent, selectedTargetZone, customTargetCoords, isPitching } = get();
-    if (isPitching) return;
-    set({ isPitching: true, errorMessage: null, errorEnvelope: null });
+    const {
+      selectedPitchIntent,
+      selectedTargetZone,
+      customTargetCoords,
+      isPitching,
+      pitchPhase,
+    } = get();
+    if (isPitching || pitchPhase !== 'IDLE') return;
+    set({
+      isPitching: true,
+      pitchPhase: 'IN_FLIGHT',
+      pendingThrow: null,
+      pendingResolution: null,
+      errorMessage: null,
+      errorEnvelope: null,
+    });
     try {
-      const result = await repo.pitch(
+      const result = await repo.throwPitch(
         selectedPitchIntent || undefined,
         selectedTargetZone || undefined,
         customTargetCoords || undefined,
       );
-
-      const packet = result.pitch_details.gameday_packet;
-      // A 0-0 count after a pitch means the at-bat ended (new batter up).
-      const atBatEnded =
-        result.game_state.balls === 0 && result.game_state.strikes === 0;
-
-      set((s) => ({
-        gameState: ensureStrategyIntent(result.game_state) as GameState,
-        latestPitch: result.pitch_details,
-        // Keep the pitch that ended the at-bat visible; the next at-bat's
-        // first pitch starts a fresh list.
-        currentAtBatPitches: s.lastPitchEndedAtBat
-          ? [result.pitch_details]
-          : [...s.currentAtBatPitches, result.pitch_details],
-        lastPitchEndedAtBat: atBatEnded,
-        pitchFeed: [result.pitch_details, ...s.pitchFeed].slice(0, 25),
-        gamedayLog: packet ? [packet, ...s.gamedayLog].slice(0, 100) : s.gamedayLog,
-        selectedPitchPacketIndex: null, // Reset to latest
-        isPitching: false,
-      }));
+      // Publish only the delivery. No game state, feed, or log entry changes
+      // until revealPitch().
+      set({ pendingThrow: result });
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
-      set({ isPitching: false, errorMessage: message, errorEnvelope: envelope });
+      set({
+        isPitching: false,
+        pitchPhase: 'IDLE',
+        pendingThrow: null,
+        errorMessage: message,
+        errorEnvelope: envelope,
+      });
     }
   },
 
+  async resolvePitch() {
+    const { pendingThrow, pitchPhase } = get();
+    if (!pendingThrow || pitchPhase !== 'IN_FLIGHT') return;
+    set({ pitchPhase: 'RESOLVING', errorMessage: null, errorEnvelope: null });
+    try {
+      const result = await repo.resolvePitch();
+      set({ pendingResolution: result, pitchPhase: 'REACTING' });
+    } catch (err: unknown) {
+      // The server may have committed before the response was lost. Keep the
+      // last revealed state rather than guessing with a second resolve (which
+      // would conflict). The next successful reveal reconciles the state.
+      const { message, envelope } = parseError(err);
+      set({
+        isPitching: false,
+        pitchPhase: 'IDLE',
+        pendingThrow: null,
+        pendingResolution: null,
+        errorMessage: message,
+        errorEnvelope: envelope,
+      });
+    }
+  },
+
+  revealPitch() {
+    const { pendingResolution } = get();
+    const pitch = pendingResolution?.pitch_details;
+    if (!pendingResolution || !pitch) return;
+
+    const packet = pitch.gameday_packet;
+    // A 0-0 count after a pitch means the at-bat ended (new batter up).
+    const atBatEnded =
+      pendingResolution.game_state.balls === 0 &&
+      pendingResolution.game_state.strikes === 0;
+
+    set((s) => ({
+      gameState: ensureStrategyIntent(pendingResolution.game_state) as GameState,
+      latestPitch: pitch,
+      // Keep the pitch that ended the at-bat visible; the next at-bat's first
+      // pitch starts a fresh list.
+      currentAtBatPitches: s.lastPitchEndedAtBat
+        ? [pitch]
+        : [...s.currentAtBatPitches, pitch],
+      lastPitchEndedAtBat: atBatEnded,
+      pitchFeed: [pitch, ...s.pitchFeed].slice(0, 25),
+      gamedayLog: packet ? [packet, ...s.gamedayLog].slice(0, 100) : s.gamedayLog,
+      selectedPitchPacketIndex: null,
+      pitchPhase: 'IDLE',
+      pendingThrow: null,
+      pendingResolution: null,
+      isPitching: false,
+    }));
+  },
+
+  clearPendingPitch() {
+    set({
+      pitchPhase: 'IDLE',
+      pendingThrow: null,
+      pendingResolution: null,
+      isPitching: false,
+    });
+  },
+
   async simAtBat() {
-    const { isPitching } = get();
-    if (isPitching) return;
+    const { isPitching, pitchPhase } = get();
+    if (isPitching || pitchPhase !== 'IDLE') return;
     set({ isPitching: true, errorMessage: null, errorEnvelope: null });
     try {
       const result = await repo.simAtBat();

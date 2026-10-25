@@ -54,6 +54,9 @@ export function BaseballSimScreen() {
     pitchFeed,
     currentAtBatPitches,
     latestPitch,
+    pitchPhase,
+    pendingThrow,
+    pendingResolution,
     lineups,
     rotations,
     selectedPitchIntent,
@@ -70,6 +73,8 @@ export function BaseballSimScreen() {
     loadInitialState,
     startNewGame,
     throwPitch,
+    resolvePitch,
+    revealPitch,
     swapLineup,
     swapRotation,
     toggleMockMode,
@@ -93,25 +98,27 @@ export function BaseballSimScreen() {
 
   const [activePitch, setActivePitch] = useState<ActivePitchData | null>(null);
   const pitchSequence = useRef(0);
-  const lastAnimatedPitchRef = useRef<PitchDetails | null>(latestPitch);
+  const lastAnimatedPitchRef = useRef<PitchDetails | null>(null);
+  const revealedResolutionRef = useRef<unknown>(null);
 
-  // Animate the pitch that was actually resolved, for both mock and live
-  // throws. The ball ends at the packet's realized location, not a zone
-  // center, so the 3D endpoint and the 2D marker always agree.
+  // Animate the ball flight from the throw response, before any reaction or
+  // outcome is published. The ball ends at the packet's realized location, not
+  // a zone center, so the 3D endpoint and the 2D marker always agree.
   useEffect(() => {
-    if (!latestPitch || lastAnimatedPitchRef.current === latestPitch) return;
-    lastAnimatedPitchRef.current = latestPitch;
+    const pitch = pendingThrow?.pitch_details;
+    if (!pitch || lastAnimatedPitchRef.current === pitch) return;
+    lastAnimatedPitchRef.current = pitch;
 
-    const packet = latestPitch.gameday_packet;
+    const packet = pitch.gameday_packet;
     const execution = packet?.execution;
     if (!execution) return;
 
-    const fallbackMovement = movementForPitch(latestPitch.pitch_name);
+    const fallbackMovement = movementForPitch(pitch.pitch_name);
     const horizontalBreakIn =
       execution.horizontalBreakInches ?? fallbackMovement.hb;
     const inducedVerticalBreakIn =
       execution.inducedVerticalBreakInches ?? fallbackMovement.ivb;
-    const speedMph = execution.releaseSpeedMph ?? latestPitch.velocity_mph;
+    const speedMph = execution.releaseSpeedMph ?? pitch.velocity_mph;
     const flightTime = speedMph > 0 ? 59.5 / (speedMph * 1.4667) : 0.414;
 
     // Packet release uses [x, depth, height]; the 3D scene uses
@@ -128,7 +135,29 @@ export function BaseballSimScreen() {
       pfx: [horizontalBreakIn / 12, inducedVerticalBreakIn / 12],
       flightTime,
     });
-  }, [latestPitch]);
+  }, [pendingThrow]);
+
+  // The ball reached the plate: resolve contact, but do not publish the result
+  // yet. The reaction beat below controls the reveal.
+  const handlePitchComplete = useCallback(() => {
+    if (pitchPhase !== 'IN_FLIGHT') return;
+    setActivePitch(null);
+    void resolvePitch();
+  }, [pitchPhase, resolvePitch]);
+
+  // Reaction beat: after the SWING/TAKE indicator has played, publish the
+  // result, count, feed, zone markers, and gameday log together.
+  useEffect(() => {
+    if (pitchPhase !== 'REACTING' || !pendingResolution) return;
+    if (!pendingResolution.pitch_details) return;
+    if (revealedResolutionRef.current === pendingResolution) return;
+    revealedResolutionRef.current = pendingResolution;
+
+    const timer = setTimeout(() => {
+      revealPitch();
+    }, 650);
+    return () => clearTimeout(timer);
+  }, [pitchPhase, pendingResolution, revealPitch]);
 
   const handleSelectPitchIntent = useCallback(
     (name: string) => {
@@ -136,10 +165,6 @@ export function BaseballSimScreen() {
     },
     [setSelectedPitchIntent],
   );
-
-  const handlePitchComplete = useCallback(() => {
-    setActivePitch(null);
-  }, []);
 
   const isLoading = loadingState === 'loading' && !isPitching && !gameState;
 
@@ -155,7 +180,7 @@ export function BaseballSimScreen() {
   const currentBatter = gameState?.current_batter;
   const currentPitcher = gameState?.current_pitcher;
   const defaultGlove = getZoneNominalTarget(selectedTargetZone || 'heart');
-  const packetAim = latestPitch?.gameday_packet?.intent;
+  const packetAim = pendingThrow?.pitch_details.gameday_packet?.intent ?? latestPitch?.gameday_packet?.intent;
   const resolvedAim =
     activePitch &&
     packetAim &&
@@ -166,6 +191,11 @@ export function BaseballSimScreen() {
   const gloveTarget =
     customTargetCoords ?? resolvedAim ?? { x: defaultGlove.x, z: defaultGlove.z };
   const commandRating = currentPitcher?.control ?? 82;
+  const reactionDecision =
+    pitchPhase === 'REACTING'
+      ? pendingResolution?.pitch_details?.batter_decision ?? null
+      : null;
+  const resultVisible = pitchPhase === 'IDLE';
 
   // Project the HUD onto the 3D strike zone so the glove marker and the pitch
   // endpoint share the same screen position. The 3D zone is wider/taller in
@@ -197,6 +227,29 @@ export function BaseballSimScreen() {
         onPitchComplete={handlePitchComplete}
       />
 
+      {/* Reaction beat: SWING/TAKE appears at the plate before the reveal. */}
+      {reactionDecision && (
+        <View pointerEvents="none" style={styles.reactionOverlay}>
+          <Text
+            style={[
+              styles.reactionText,
+              reactionDecision === 'SWING' ? styles.reactionSwing : styles.reactionTake,
+            ]}
+          >
+            {reactionDecision}
+          </Text>
+        </View>
+      )}
+
+      {/* Neutral in-flight state: never expose the previous result. */}
+      {(pitchPhase === 'IN_FLIGHT' || pitchPhase === 'RESOLVING') && (
+        <View pointerEvents="none" style={styles.flightOverlay}>
+          <Text style={styles.flightText}>
+            {pitchPhase === 'IN_FLIGHT' ? 'PITCH IN FLIGHT' : 'AT THE PLATE'}
+          </Text>
+        </View>
+      )}
+
       <SafeAreaView style={styles.safeArea}>
         {/* Error Banner */}
         {errorMessage && (
@@ -216,7 +269,7 @@ export function BaseballSimScreen() {
           <ScoreboardControlsWidget
             gameState={gameState}
             lineups={lineups}
-            latestPitch={latestPitch}
+            latestPitch={resultVisible ? latestPitch : null}
             isMockMode={isMockMode}
             onOpenSettings={() => toggleSettingsMenu(true)}
             onToggleMock={toggleMockMode}
@@ -264,7 +317,7 @@ export function BaseballSimScreen() {
                 selectedZone={selectedTargetZone ?? ''}
                 onSelectZone={setSelectedTargetZone}
                 currentBatter={currentBatter}
-                latestPitch={latestPitch ?? pitchFeed[0]}
+                latestPitch={resultVisible ? latestPitch ?? pitchFeed[0] : null}
                 atBatPitches={currentAtBatPitches}
                 gloveTarget={gloveTarget}
                 commandRating={commandRating}
@@ -333,4 +386,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pitchFooter: { paddingHorizontal: 12, paddingBottom: 8 },
+  reactionOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '48%',
+    alignItems: 'center',
+  },
+  reactionText: {
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
+  },
+  reactionSwing: { color: Colors.amber },
+  reactionTake: { color: Colors.blueSky },
+  flightOverlay: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '42%',
+    alignItems: 'center',
+  },
+  flightText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2,
+    color: Colors.textSecondary,
+    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
 });

@@ -129,8 +129,8 @@ export function GamedayDevMenuModal() {
               activeOpacity={0.7}
               onPress={() => {
                 if (isMockMode) {
-                  setBackendUrl('http://localhost:5000');
-                } else if (backendUrl.includes('5000')) {
+                  setBackendUrl('http://localhost:5050');
+                } else if (backendUrl.includes('5050')) {
                   setBackendUrl('http://localhost:3000');
                 } else {
                   toggleMockMode(true);
@@ -141,14 +141,14 @@ export function GamedayDevMenuModal() {
                 {
                   backgroundColor: isMockMode
                     ? 'rgba(16, 185, 129, 0.15)'
-                    : backendUrl.includes('5000')
+                    : backendUrl.includes('5050')
                     ? 'rgba(59, 130, 246, 0.15)'
                     : 'rgba(249, 115, 22, 0.15)',
                 },
                 {
                   borderColor: isMockMode
                     ? Colors.gameday.statusPass
-                    : backendUrl.includes('5000')
+                    : backendUrl.includes('5050')
                     ? '#3B82F6'
                     : Colors.gameday.statusWarn,
                 },
@@ -160,7 +160,7 @@ export function GamedayDevMenuModal() {
                   {
                     backgroundColor: isMockMode
                       ? Colors.gameday.statusPass
-                      : backendUrl.includes('5000')
+                      : backendUrl.includes('5050')
                       ? '#3B82F6'
                       : Colors.gameday.statusWarn,
                   },
@@ -172,7 +172,7 @@ export function GamedayDevMenuModal() {
                   {
                     color: isMockMode
                       ? Colors.gameday.statusPass
-                      : backendUrl.includes('5000')
+                      : backendUrl.includes('5050')
                       ? '#60A5FA'
                       : Colors.gameday.statusWarn,
                   },
@@ -180,8 +180,8 @@ export function GamedayDevMenuModal() {
               >
                 {isMockMode
                   ? 'MOCK ENGINE ⇄'
-                  : backendUrl.includes('5000')
-                  ? 'PYTHON FLASK (5000) ⇄'
+                  : backendUrl.includes('5050')
+                  ? 'PYTHON FLASK (5050) ⇄'
                   : 'NODE SERVER (3000) ⇄'}
               </Text>
             </TouchableOpacity>
@@ -239,9 +239,9 @@ export function GamedayDevMenuModal() {
               {gamedayLog.map((pkt, idx) => {
                 const isSelected = selectedIndex === idx;
                 const typeColor = getPitchTypeColor(pkt.strategy.selectedPitch);
-                const ringColor = getResultRingColor(pkt.result.call);
+                const ringColor = getResultRingColor(pkt.result.call ?? 'IN_PLAY');
                 const abbr = getPitchAbbr(pkt.strategy.selectedPitch);
-                const symbol = getResultSymbol(pkt.result.call);
+                const symbol = getResultSymbol(pkt.result.call ?? 'NONE');
 
                 return (
                   <TouchableOpacity

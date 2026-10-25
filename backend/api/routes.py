@@ -3,6 +3,8 @@ Authoritative REST API Routes for Baseball Simulation.
 Provides strict contract parity with React Native Expo client and Android clients.
 """
 
+import os
+
 from flask import Blueprint, jsonify, render_template, request
 from typing import Dict, Any
 
@@ -65,7 +67,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'engine': 'python-statcast-v4.8',
-        'port': 5000,
+        'port': int(os.environ.get('PORT', '5050')),
         'active_game': game_engine is not None
     })
 
@@ -136,15 +138,75 @@ def state():
     })
 
 
+def _parse_seed(data: dict):
+    seed = data.get('seed')
+    if seed is None:
+        return None
+    try:
+        return int(seed)
+    except (TypeError, ValueError) as error:
+        raise ValueError('seed must be an integer') from error
+
+
+def _parse_pitch_request(data: dict) -> dict:
+    pitch_intent = data.get('pitch_intent')
+    pitch_type = data.get('pitch_type') or data.get('pitch_name')
+    target_zone = data.get('target_zone')
+    batter_approach = data.get('batter_approach', 'AUTO')
+
+    custom_target = None
+    if 'target_x' in data and 'target_z' in data:
+        try:
+            custom_target = {
+                'x': float(data['target_x']),
+                'z': float(data['target_z'])
+            }
+        except (TypeError, ValueError) as error:
+            raise ValueError('target_x and target_z must be numbers') from error
+
+    return {
+        'pitch_intent': pitch_intent,
+        'pitch_type': pitch_type,
+        'target_zone': target_zone,
+        'custom_target': custom_target,
+        'batter_approach': batter_approach,
+    }
+
+
+def _pitch_response(outcome: dict, status_code: int = 200):
+    return jsonify(outcome), status_code
+
+
+def _pitch_error_status(outcome: dict) -> int:
+    message = str(outcome.get('message', '')).lower()
+    if 'in flight' in message:
+        return 409
+    return 400
+
+
+def _parse_batter_decision(data: dict):
+    decision = data.get('batter_decision')
+    if decision is None:
+        return None
+    normalized = str(decision).upper()
+    if normalized not in ('SWING', 'TAKE'):
+        raise ValueError("batter_decision must be 'SWING' or 'TAKE'")
+    return normalized
+
+
 @api_bp.route('/api/start_game', methods=['POST'])
 def start_game():
     global game_engine, team_rosters
     data = request.get_json(silent=True) or {}
+    try:
+        seed = _parse_seed(data)
+    except ValueError as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
     # Reload fresh roster state from DB on start
     team_rosters = [load_team_roster(name) for name in team_names]
     away = team_rosters[0]
     home = team_rosters[1]
-    game_engine = GameEngine(home, away, team_names[1], team_names[0])
+    game_engine = GameEngine(home, away, team_names[1], team_names[0], seed=seed)
     payload = game_engine.get_game_state_payload()
     return jsonify(payload)
 
@@ -153,27 +215,53 @@ def start_game():
 def pitch():
     engine = get_or_create_engine()
     data = request.get_json(silent=True) or {}
-
-    pitch_intent = data.get('pitch_intent')
-    pitch_type = data.get('pitch_type') or data.get('pitch_name')
-    target_zone = data.get('target_zone')
-    batter_approach = data.get('batter_approach', 'AUTO')
-
-    custom_target = None
-    if 'target_x' in data and 'target_z' in data:
-        custom_target = {
-            'x': float(data['target_x']),
-            'z': float(data['target_z'])
-        }
+    try:
+        options = _parse_pitch_request(data)
+    except ValueError as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
 
     outcome = engine.pitch(
-        pitch_intent=pitch_intent,
-        pitch_type=pitch_type,
-        target_zone=target_zone,
-        custom_target=custom_target,
-        batter_approach=batter_approach
+        pitch_intent=options['pitch_intent'],
+        pitch_type=options['pitch_type'],
+        target_zone=options['target_zone'],
+        custom_target=options['custom_target'],
+        batter_approach=options['batter_approach']
     )
     return jsonify(outcome)
+
+
+@api_bp.route('/api/pitch/throw', methods=['POST'])
+def throw_pitch():
+    engine = get_or_create_engine()
+    data = request.get_json(silent=True) or {}
+    try:
+        options = _parse_pitch_request(data)
+    except ValueError as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
+
+    outcome = engine.throw_pitch(
+        pitch_intent=options['pitch_intent'],
+        pitch_type=options['pitch_type'],
+        target_zone=options['target_zone'],
+        custom_target=options['custom_target'],
+    )
+    return _pitch_response(outcome, 200 if outcome.get('status') == 'success' else _pitch_error_status(outcome))
+
+
+@api_bp.route('/api/pitch/resolve', methods=['POST'])
+def resolve_pitch():
+    engine = get_or_create_engine()
+    data = request.get_json(silent=True) or {}
+    try:
+        batter_decision = _parse_batter_decision(data)
+    except ValueError as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
+
+    outcome = engine.resolve_pitch(
+        batter_approach=data.get('batter_approach', 'AUTO'),
+        batter_decision=batter_decision,
+    )
+    return _pitch_response(outcome, 200 if outcome.get('status') == 'success' else _pitch_error_status(outcome))
 
 
 @api_bp.route('/api/sim_at_bat', methods=['POST'])
@@ -186,10 +274,15 @@ def sim_at_bat():
 @api_bp.route('/api/reset', methods=['POST'])
 def reset():
     global game_engine, team_rosters
+    data = request.get_json(silent=True) or {}
+    try:
+        seed = _parse_seed(data)
+    except ValueError as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
     team_rosters = [load_team_roster(name) for name in team_names]
     away = team_rosters[0]
     home = team_rosters[1]
-    game_engine = GameEngine(home, away, team_names[1], team_names[0])
+    game_engine = GameEngine(home, away, team_names[1], team_names[0], seed=seed)
     return state()
 
 

@@ -4,6 +4,7 @@ Coordinates pitch strategy, pitch selection, target intent, bivariate Gaussian d
 and in-game pitcher rating adjustments for a baseball game instance.
 """
 
+import random
 from typing import Dict, Any, Optional, List, Tuple
 from dataclasses import dataclass
 
@@ -34,7 +35,12 @@ class PitchingEngine:
     Communicates between GameEngine and pitching submodules (strategy, physics, pitcher ratings).
     """
 
-    def __init__(self, pitcher: Any, batter: Any):
+    def __init__(
+        self,
+        pitcher: Any,
+        batter: Any,
+        rng: Optional[random.Random] = None,
+    ):
         # Enforce domain model boundary at engine entry point
         if isinstance(pitcher, dict):
             try:
@@ -57,10 +63,32 @@ class PitchingEngine:
 
         self.pitcher = pitcher
         self.batter = batter
-        self.strategy = PitchStrategy(pitcher, batter)
+        self.rng = rng or random
+        self.strategy = PitchStrategy(pitcher, batter, rng=self.rng)
         self.arsenal = PitchArsenal.extract_from_pitcher(pitcher)
         self.pitch_arsenal = self.strategy.pitch_arsenal
 
+
+    def _mix_ball_intent(self, recommended_zone: str, balls: int, strikes: int) -> str:
+        """
+        Occasionally aim off the plate in leverage counts. Without this mix a
+        high-command pitcher only targets the rulebook rectangle, making walks
+        effectively impossible. The recommended strike target remains the
+        default; a chase/waste target is selected on a minority of pitches.
+        """
+        waste_chance = 0.0
+        if strikes == 2 and balls >= 2:
+            waste_chance = 0.50
+        elif balls == 3 and strikes == 0:
+            waste_chance = 0.40
+        elif balls == 3 and strikes == 1:
+            waste_chance = 0.45
+        elif balls == 2:
+            waste_chance = 0.28
+
+        if waste_chance > 0.0 and self.rng.random() < waste_chance:
+            return 'chase-low' if self.rng.random() < 0.35 else 'chase-away'
+        return recommended_zone
 
     def execute_pitch( # Returns "Delivery", line 214 -> game_engine.py
         self,
@@ -123,7 +151,11 @@ class PitchingEngine:
             is_manual_override = True
         else:
             nominal_zone = target_zone or strat_result['recommended_zone']
-            target_x, target_z, intended_zone_cat = sample_zone_target(nominal_zone)
+            if not target_zone:
+                nominal_zone = self._mix_ball_intent(nominal_zone, balls, strikes)
+            target_x, target_z, intended_zone_cat = sample_zone_target(
+                nominal_zone, rng=self.rng.random
+            )
 
         # 4. Delivery Execution & Gaussian Error
         delivery_math = calculate_pitch_delivery(
@@ -132,7 +164,8 @@ class PitchingEngine:
             command_rating=adjusted_ratings.base_command,
             pitch_count=pitch_count,
             stamina=adjusted_ratings.base_stamina,
-            intended_zone_cat=intended_zone_cat
+            intended_zone_cat=intended_zone_cat,
+            rng=self.rng.random,
         )
 
         pitch_category = PITCH_CATEGORIES.get(selected_pitch_name, 'Fastball')

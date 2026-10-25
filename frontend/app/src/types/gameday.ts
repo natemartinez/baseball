@@ -73,10 +73,22 @@ export interface Gameday2DPitchPacket {
   };
 
   result: {
-    call: 'BALL' | 'CALLED_STRIKE' | 'SWINGING_STRIKE' | 'FOUL' | 'IN_PLAY';
+    /** Null while the pitch is in flight (throw phase). */
+    call:
+      | 'BALL'
+      | 'CALLED_STRIKE'
+      | 'SWINGING_STRIKE'
+      | 'FOUL'
+      | 'IN_PLAY'
+      | 'IN_PLAY_OUT'
+      | 'SINGLE'
+      | 'DOUBLE'
+      | 'TRIPLE'
+      | 'HOME_RUN'
+      | null;
     isStrike: boolean;
-    exitVelocityMph?: number;
-    launchAngleDeg?: number;
+    exitVelocityMph?: number | null;
+    launchAngleDeg?: number | null;
     description: string;
   };
 }

@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, FlatList, StyleSheet } from 'react-native';
-import type { PitchDetails, PitchResultType } from '../types/api';
+import type { PitchResultType, ResolvedPitchDetails } from '../types/api';
 import { Colors } from '../theme/colors';
 
 interface PitchOutcomeFeedWidgetProps {
-  pitches: PitchDetails[];
+  pitches: ResolvedPitchDetails[];
 }
 
 /**
@@ -42,7 +42,7 @@ export function PitchOutcomeFeedWidget({ pitches }: PitchOutcomeFeedWidgetProps)
 
 // ─── Single Pitch Feed Card ──────────────────────────────────────────────────
 
-export function PitchFeedItemCard({ pitch, pitchIndex }: { pitch: PitchDetails; pitchIndex: number }) {
+export function PitchFeedItemCard({ pitch, pitchIndex }: { pitch: ResolvedPitchDetails; pitchIndex: number }) {
   const badgeColor = resultBadgeColor(pitch.pitch_result);
 
   return (

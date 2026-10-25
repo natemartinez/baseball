@@ -4,25 +4,20 @@ Implements the full 6-stage simulation pipeline, count state machine,
 truncated spray-cloud delivery resolution, and emits standardized Gameday2DPitchPacket telemetry.
 """
 
-import os
-import sys
-import math
 import random
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Dict, Any, Optional, List
 
 try:
-    from backend.engine.gameday_math import (
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        calculate_execution_sigma,
-        calculate_radial_miss_inches,
-        determine_situation_category,
-        ZONE_CENTERS,
-    )
+    from backend.engine.gameday_math import determine_situation_category
     from backend.engine.strike_zone import StrikeZone
-    from backend.engine.pitching_engine import PitchingEngine, PitchStrategy
-    from backend.engine.batter_strategy import BatterStrategy, JUDGE_DEFAULT_ZONES
+    from backend.engine.batting_engine import (
+        BatterInstanceManager,
+        normalize_traits,
+    )
+    from backend.engine.orchestration import (
+        PitchFlowError,
+        PitchFlowOrchestrator,
+    )
     from backend.models.player import Player
 except ModuleNotFoundError as error:
     # Only fall back when the package itself is unavailable (direct script
@@ -30,18 +25,16 @@ except ModuleNotFoundError as error:
     # submodule import.
     if error.name != 'backend':
         raise
-    from gameday_math import (
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        calculate_execution_sigma,
-        calculate_radial_miss_inches,
-        determine_situation_category,
-        ZONE_CENTERS,
-    )
+    from gameday_math import determine_situation_category
     from strike_zone import StrikeZone
-    from pitching_engine import PitchingEngine, PitchStrategy
-    from batter_strategy import BatterStrategy, JUDGE_DEFAULT_ZONES
+    from batting_engine import (
+        BatterInstanceManager,
+        normalize_traits,
+    )
+    from orchestration import (
+        PitchFlowError,
+        PitchFlowOrchestrator,
+    )
     try:
         from models.player import Player
     except ImportError:
@@ -58,11 +51,21 @@ class GameEngine:
             return Player.from_dict(player_or_dict)
         return player_or_dict
 
-    def __init__(self, home_roster: dict, away_roster: dict, home_name: str = 'New York Yankees', away_name: str = 'New York Mets'):
+    def __init__(
+        self,
+        home_roster: dict,
+        away_roster: dict,
+        home_name: str = 'New York Yankees',
+        away_name: str = 'New York Mets',
+        seed: Optional[int] = None,
+        batter_controller: Any = None,
+    ):
         self.home_roster = home_roster
         self.away_roster = away_roster
         self.home_name = home_name
         self.away_name = away_name
+        self.seed = seed
+        self.rng = random.Random(seed)
 
         self.inning = 1
         self.top_bottom = 'TOP'  # 'TOP' (away bats), 'BOT' (home bats)
@@ -93,6 +96,12 @@ class GameEngine:
 
         self.strike_zone = StrikeZone()
         self.last_command_quality = 'TARGET_EXECUTED'
+        # The orchestrator owns the pitch phase and pending delivery snapshot.
+        self.orchestrator = PitchFlowOrchestrator(
+            rng=self.rng, batter_controller=batter_controller
+        )
+        # Live per-batter game line: at_bats, hits, rbis, home_runs.
+        self._batter_game_stats: Dict[str, Dict[str, int]] = {}
 
     def current_batter_obj(self) -> Any:
         lineup = self.away_lineup if self.top_bottom == 'TOP' else self.home_lineup
@@ -182,199 +191,18 @@ class GameEngine:
                 if self.score[self.home_name] != self.score[self.away_name]:
                     self.game_over = True
 
-    def pitch(
+    def _build_gameday_packet(
         self,
-        pitch_intent: Optional[str] = None,
-        pitch_type: Optional[str] = None,
-        target_zone: Optional[str] = None,
-        custom_target: Optional[Dict[str, float]] = None,
-        batter_approach: str = 'AUTO'
+        *,
+        pitcher: Any,
+        batter: Any,
+        delivery: Dict[str, Any],
+        sit_category: str,
+        command_rating: float,
+        cur_pitch_count: int,
+        result: Dict[str, Any],
     ) -> Dict[str, Any]:
-        if self.game_over:
-            return {'status': 'error', 'message': 'Game is over'}
-
-        pitcher = self.current_pitcher_obj()
-        batter = self.current_batter_obj()
-
-        # Update pitch count
-        if self.top_bottom == 'TOP':
-            self.pitch_count_home += 1
-            cur_pitch_count = self.pitch_count_home
-        else:
-            self.pitch_count_away += 1
-            cur_pitch_count = self.pitch_count_away
-
-        self.session_pitch_count += 1
-
-        # Evaluate Situation
-        r1 = self.bases['first'] is not None
-        r2 = self.bases['second'] is not None
-        r3 = self.bases['third'] is not None
-        sit_category = determine_situation_category(self.balls, self.strikes, self.outs, r1, r2, r3)
-
-        # 1. Pitching Engine: Strategy, Target Intent, Rating Adjustments & Delivery Execution
-        pitching_engine = PitchingEngine(pitcher, batter)
-        delivery = pitching_engine.execute_pitch( # Calls method from engine.py
-            balls=self.balls,
-            strikes=self.strikes,
-            outs=self.outs,
-            runners=(r1, r2, r3),
-            pitch_count=cur_pitch_count,
-            recent_pitches=self.recent_pitches_sequence,
-            pitch_intent=pitch_intent,
-            pitch_type=pitch_type,
-            target_zone=target_zone,
-            custom_target=custom_target,
-            situation=sit_category,
-        )
-
-        selected_pitch_name = delivery['selected_pitch']
-        velocity_mph = delivery['velocity_mph']
-        spin_rpm = delivery['spin_rpm']
-        self.recent_pitches_sequence.append(selected_pitch_name)
-
-        target_x = delivery['target_x']
-        target_z = delivery['target_z']
-        intended_zone_cat = delivery['intended_zone_cat']
-        is_manual_override = delivery['is_manual_override']
-
-        sigma = delivery['sigma']
-        realized_x = delivery['realized_x']
-        realized_z = delivery['realized_z']
-        realized_zone_cat = delivery['realized_zone_cat']
-        strike_check = delivery['is_strike']
-        delta_x_in = delivery['delta_x_in']
-        delta_z_in = delivery['delta_z_in']
-        radial_miss_in = delivery['radial_miss_in']
-        is_heart_leak = delivery['is_heart_leak']
-        hit_shadow_target = delivery['hit_shadow_target']
-        strat_result = delivery['strat_result']
-        command_rating = delivery['adjusted_ratings'].get('base_command', 70.0)
-
-        # 4. Batter Swing & Reaction
-        batter_engine = BatterStrategy(batter)
-        # Label the realized location inside the category it actually belongs
-        # to. A ball just outside a corner must not inherit the nearest inner
-        # corner (strike) label.
-        candidate_zone_names = [
-            name
-            for name in ZONE_CENTERS
-            if name.startswith('chase-') != bool(strike_check)
-        ]
-        actual_zone_name = candidate_zone_names[0] if candidate_zone_names else 'heart'
-        min_dist = 999.0
-        for z_name in candidate_zone_names:
-            zx, zz = ZONE_CENTERS[z_name]
-            dist = (zx - realized_x) ** 2 + (zz - realized_z) ** 2
-            if dist < min_dist:
-                min_dist = dist
-                actual_zone_name = z_name
-
-        will_swing, swing_prob = batter_engine.decide_swing(
-            realized_zone_cat, actual_zone_name, strike_check, self.balls, self.strikes, approach_mode=batter_approach
-        )
-
-        pitch_result_type = 'BALL'
-        call = 'BALL'
-        description = 'Ball outside the zone'
-        exit_velo = None
-        launch_angle = None
-
-        if not will_swing:
-            if strike_check:
-                pitch_result_type = 'CALLED_STRIKE'
-                call = 'CALLED_STRIKE'
-                description = f'Called strike ({actual_zone_name})'
-            else:
-                pitch_result_type = 'BALL'
-                call = 'BALL'
-                description = f'Ball ({realized_zone_cat.lower()})'
-        else:
-            contact = batter_engine.resolve_contact(
-                selected_pitch_name, velocity_mph, actual_zone_name, realized_zone_cat, strike_check
-            )
-            call = contact['call']
-            description = contact['description']
-            exit_velo = contact.get('exit_velocity_mph')
-            launch_angle = contact.get('launch_angle_deg')
-            if call == 'SWINGING_STRIKE':
-                pitch_result_type = 'SWINGING_STRIKE'
-            elif call == 'FOUL':
-                pitch_result_type = 'FOUL'
-            else:
-                pitch_result_type = call
-
-        # 5. State Machine Update
-        batter_summary = {
-            'id': getattr(batter, 'id', 1) if batter else 1,
-            'name': getattr(batter, 'name', 'Batter') if batter else 'Batter',
-            'jersey_number': getattr(batter, 'number', 99) if batter else 99,
-            'position': getattr(batter, 'position', 'DH') if batter else 'DH',
-            'team': self.away_name if self.top_bottom == 'TOP' else self.home_name
-        }
-
-        batting_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
-
-        if pitch_result_type == 'BALL':
-            self.balls += 1
-            if self.balls == 4:
-                runs = self._advance_runners_on_walk(batter_summary)
-                self.score[batting_team] += runs
-                self.balls = 0
-                self.strikes = 0
-                self._advance_batter_order()
-
-        elif pitch_result_type in ('CALLED_STRIKE', 'SWINGING_STRIKE'):
-            self.strikes += 1
-            if self.strikes == 3:
-                self.outs += 1
-                self.balls = 0
-                self.strikes = 0
-                self._advance_batter_order()
-
-        elif pitch_result_type == 'FOUL':
-            if self.strikes < 2:
-                self.strikes += 1
-
-        elif pitch_result_type == 'IN_PLAY_OUT':
-            self.outs += 1
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        elif pitch_result_type == 'SINGLE':
-            runs = self._advance_runners_on_hit(1, batter_summary)
-            self.score[batting_team] += runs
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        elif pitch_result_type == 'DOUBLE':
-            runs = self._advance_runners_on_hit(2, batter_summary)
-            self.score[batting_team] += runs
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        elif pitch_result_type == 'TRIPLE':
-            runs = self._advance_runners_on_hit(3, batter_summary)
-            self.score[batting_team] += runs
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        elif pitch_result_type == 'HOME_RUN':
-            runs = self._advance_runners_on_hit(4, batter_summary)
-            self.score[batting_team] += runs
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        # Inning completion check
-        if self.outs >= 3:
-            self._switch_half_inning()
-
-        # 6. Construct Gameday2DPitchPacket
+        """Builds a Gameday2DPitchPacket. ``result`` is pending during the throw phase."""
         pitcher_name = getattr(pitcher, 'name', 'Pitcher') if pitcher else 'Pitcher'
         batter_name = getattr(batter, 'name', 'Batter') if batter else 'Batter'
         batter_id = getattr(batter, 'id', 1) if batter else 1
@@ -389,12 +217,8 @@ class GameEngine:
             'y': 54.5,
             'z': 5.9,
         }
-        horizontal_break_in = delivery.get('horizontal_break_in', 0.0)
-        induced_vertical_break_in = delivery.get('induced_vertical_break_in', 0.0)
-        release_speed_mph = delivery.get('release_speed_mph', velocity_mph)
-        max_radius_inches = delivery.get('max_radius_inches', 0.0)
 
-        gameday_packet = {
+        return {
             'meta': {
                 'pitchNumber': self.session_pitch_count,
                 'pitcherName': pitcher_name,
@@ -417,72 +241,393 @@ class GameEngine:
             },
             'release': release,
             'strategy': {
-                'repertoireProbabilities': strat_result['repertoire_probabilities'],
-                'selectedPitch': selected_pitch_name,
-                'dynamicModifier': strat_result['dynamic_modifier'],
-                'strategyName': strat_result['strategy_name'],
-                'rationale': strat_result['rationale'],
+                'repertoireProbabilities': delivery['strat_result']['repertoire_probabilities'],
+                'selectedPitch': delivery['selected_pitch'],
+                'dynamicModifier': delivery['strat_result']['dynamic_modifier'],
+                'strategyName': delivery['strat_result']['strategy_name'],
+                'rationale': delivery['strat_result']['rationale'],
             },
             'intent': {
-                'targetX': target_x,
-                'targetZ': target_z,
-                'intendedZone': intended_zone_cat,
-                'targetSpeedMph': velocity_mph,
-                'isManualOverride': is_manual_override,
+                'targetX': delivery['target_x'],
+                'targetZ': delivery['target_z'],
+                'intendedZone': delivery['intended_zone_cat'],
+                'targetSpeedMph': delivery['velocity_mph'],
+                'isManualOverride': delivery['is_manual_override'],
             },
             'execution': {
-                'realizedX': realized_x,
-                'realizedZ': realized_z,
-                'realizedSpeedMph': velocity_mph,
-                'releaseSpeedMph': release_speed_mph,
-                'horizontalBreakInches': horizontal_break_in,
-                'inducedVerticalBreakInches': induced_vertical_break_in,
-                'maxRadiusInches': max_radius_inches,
-                'radialMissInches': radial_miss_in,
-                'deltaXInches': delta_x_in,
-                'deltaZInches': delta_z_in,
-                'sigmaXFeet': round(sigma, 3),
-                'sigmaZFeet': round(sigma, 3),
-                'isHeartZoneLeak': is_heart_leak,
-                'hitShadowZoneTarget': hit_shadow_target,
-                'realizedZoneCategory': realized_zone_cat,
+                'realizedX': delivery['realized_x'],
+                'realizedZ': delivery['realized_z'],
+                'realizedSpeedMph': delivery['velocity_mph'],
+                'releaseSpeedMph': delivery.get('release_speed_mph', delivery['velocity_mph']),
+                'horizontalBreakInches': delivery.get('horizontal_break_in', 0.0),
+                'inducedVerticalBreakInches': delivery.get('induced_vertical_break_in', 0.0),
+                'maxRadiusInches': delivery.get('max_radius_inches', 0.0),
+                'radialMissInches': delivery['radial_miss_in'],
+                'deltaXInches': delivery['delta_x_in'],
+                'deltaZInches': delivery['delta_z_in'],
+                'sigmaXFeet': round(delivery['sigma'], 3),
+                'sigmaZFeet': round(delivery['sigma'], 3),
+                'isHeartZoneLeak': delivery['is_heart_leak'],
+                'hitShadowZoneTarget': delivery['hit_shadow_target'],
+                'realizedZoneCategory': delivery['realized_zone_cat'],
             },
-            'result': {
-                'call': call,
-                'isStrike': strike_check,
-                'exitVelocityMph': exit_velo,
-                'launchAngleDeg': launch_angle,
-                'description': description,
-            }
+            'result': result,
         }
 
-        game_state = self.get_game_state_payload()
-
-        pitch_details = {
-            'pitch_name': selected_pitch_name,
-            'velocity_mph': velocity_mph,
-            'spin_rpm': spin_rpm,
+    def _build_pitch_details(
+        self,
+        *,
+        delivery: Dict[str, Any],
+        actual_zone_name: str,
+        target_zone: Optional[str],
+        batter_decision: Optional[str],
+        pitch_result_type: Optional[str],
+        exit_velo: Optional[float],
+        launch_angle: Optional[float],
+        description: str,
+        gameday_packet: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        radial_miss_in = delivery['radial_miss_in']
+        return {
+            'pitch_name': delivery['selected_pitch'],
+            'velocity_mph': delivery['velocity_mph'],
+            'spin_rpm': delivery['spin_rpm'],
             'intended_zone': delivery.get('nominal_zone', target_zone or 'heart'),
             'actual_zone': actual_zone_name,
-            'batter_decision': 'SWING' if will_swing else 'TAKE',
+            'batter_decision': batter_decision,
             'pitch_result': pitch_result_type,
             'exit_velocity_mph': exit_velo,
             'launch_angle_deg': launch_angle,
             'description': description,
-            'strategy_name': strat_result['strategy_name'],
+            'strategy_name': delivery['strat_result']['strategy_name'],
             'command_quality': 'PINPOINT' if radial_miss_in <= 2.0 else 'TARGET_EXECUTED' if radial_miss_in <= 4.0 else 'SLIGHT_MISS',
             'pitch_effectiveness': delivery.get('pitch_effectiveness', 75.0),
             'adjusted_ratings': delivery.get('adjusted_ratings', {}),
             'gameday_packet': gameday_packet,
         }
 
+    @property
+    def has_pending_pitch(self) -> bool:
+        """True while a thrown ball is in flight awaiting batter activity."""
+        return self.orchestrator.has_pending
+
+    @property
+    def pitch_phase(self) -> str:
+        """Current pitch-flow phase (owned by the orchestrator)."""
+        return self.orchestrator.phase.value
+
+    def throw_pitch(
+        self,
+        pitch_intent: Optional[str] = None,
+        pitch_type: Optional[str] = None,
+        target_zone: Optional[str] = None,
+        custom_target: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Stage 1 — Throw the ball.
+
+        Runs the pitching pipeline through delivery execution and returns the
+        pitch-flight telemetry (intent + realized location). Batter activity is
+        intentionally NOT resolved and the count/bases/outs are left untouched,
+        so the client can animate the ball before any outcome lands. Call
+        resolve_pitch() to apply the per-ball result.
+        """
+        if self.game_over:
+            return {'status': 'error', 'message': 'Game is over'}
+        if self.has_pending_pitch:
+            return {
+                'status': 'error',
+                'message': 'A pitch is already in flight; resolve it before throwing another.',
+            }
+
+        pitcher = self.current_pitcher_obj()
+        batter = self.current_batter_obj()
+
+        # Pitch counts reflect the throw, not the outcome.
+        if self.top_bottom == 'TOP':
+            self.pitch_count_home += 1
+            cur_pitch_count = self.pitch_count_home
+        else:
+            self.pitch_count_away += 1
+            cur_pitch_count = self.pitch_count_away
+        self.session_pitch_count += 1
+
+        r1 = self.bases['first'] is not None
+        r2 = self.bases['second'] is not None
+        r3 = self.bases['third'] is not None
+        sit_category = determine_situation_category(
+            self.balls, self.strikes, self.outs, r1, r2, r3
+        )
+
+        # 1. Orchestrator -> Pitching Engine: strategy, intent, delivery.
+        try:
+            started = self.orchestrator.start_pitch(
+                pitcher=pitcher,
+                batter=batter,
+                balls=self.balls,
+                strikes=self.strikes,
+                outs=self.outs,
+                runners=(r1, r2, r3),
+                situation=sit_category,
+                pitch_count=cur_pitch_count,
+                recent_pitches=self.recent_pitches_sequence,
+                pitch_intent=pitch_intent,
+                pitch_type=pitch_type,
+                target_zone=target_zone,
+                custom_target=custom_target,
+            )
+        except PitchFlowError as error:
+            return {'status': 'error', 'message': str(error)}
+
+        delivery = started['delivery']
+        actual_zone_name = started['actual_zone_name']
+        self.recent_pitches_sequence.append(delivery['selected_pitch'])
+
+        pending_result = {
+            'call': None,
+            'isStrike': delivery['is_strike'],
+            'exitVelocityMph': None,
+            'launchAngleDeg': None,
+            'description': 'Pitch in flight - awaiting batter activity',
+        }
+        gameday_packet = self._build_gameday_packet(
+            pitcher=pitcher,
+            batter=batter,
+            delivery=delivery,
+            sit_category=sit_category,
+            command_rating=delivery['adjusted_ratings'].get('base_command', 70.0),
+            cur_pitch_count=cur_pitch_count,
+            result=pending_result,
+        )
+        pitch_details = self._build_pitch_details(
+            delivery=delivery,
+            actual_zone_name=actual_zone_name,
+            target_zone=target_zone,
+            batter_decision=None,
+            pitch_result_type=None,
+            exit_velo=None,
+            launch_angle=None,
+            description='Pitch in flight',
+            gameday_packet=gameday_packet,
+        )
+
+        game_state = self.get_game_state_payload()
         return {
             'status': 'success',
+            'phase': 'THROWN',
             'pitch_details': pitch_details,
             'game_state': game_state,
             'pitch': pitch_details,
-            'game': game_state
+            'game': game_state,
         }
+
+    def resolve_pitch(
+        self,
+        batter_approach: str = 'AUTO',
+        batter_decision: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Stage 2 — Batter activity.
+
+        Delegates the batter reaction and contact resolution to the
+        orchestrator, then applies the returned BatterActivity exactly once.
+        This is the hook to call once the pitch animation finishes.
+        """
+        if not self.has_pending_pitch:
+            return {'status': 'error', 'message': 'No pitch in flight to resolve'}
+
+        try:
+            outcome = self.orchestrator.resolve_pitch(
+                batter_decision=batter_decision,
+                batter_approach=batter_approach,
+            )
+        except PitchFlowError as error:
+            return {'status': 'error', 'message': str(error)}
+
+        if outcome['phase'] == 'AWAITING_REACTION':
+            game_state = self.get_game_state_payload()
+            return {
+                'status': 'success',
+                'phase': 'AWAITING_REACTION',
+                'reaction_context': outcome.get('reaction_context'),
+                'game_state': game_state,
+                'game': game_state,
+            }
+
+        return self._finalize_resolved_pitch(
+            outcome['pending'], outcome['activity']
+        )
+
+    def submit_batter_reaction(
+        self, decision: str, batter_approach: str = 'AUTO'
+    ) -> Dict[str, Any]:
+        """Future-facing facade for a user-controlled batter reaction."""
+        try:
+            outcome = self.orchestrator.submit_reaction(
+                decision, approach=batter_approach
+            )
+        except PitchFlowError as error:
+            return {'status': 'error', 'message': str(error)}
+        return self._finalize_resolved_pitch(
+            outcome['pending'], outcome['activity']
+        )
+
+    def _finalize_resolved_pitch(self, pending: Any, activity: Any) -> Dict[str, Any]:
+        """Applies the activity once and builds the resolved response."""
+        # 3. GameEngine is the only state machine.
+        self._apply_batter_activity(activity, pending.batter)
+        self.orchestrator.mark_applied()
+
+        strike_check = activity.is_strike
+        pitch_result_type = activity.pitch_result
+        call = activity.call
+        description = activity.description
+        exit_velo = activity.exit_velocity_mph
+        launch_angle = activity.launch_angle_deg
+
+        result_payload = {
+            'call': call,
+            'isStrike': strike_check,
+            'exitVelocityMph': exit_velo,
+            'launchAngleDeg': launch_angle,
+            'description': description,
+        }
+        gameday_packet = self._build_gameday_packet(
+            pitcher=pending.pitcher,
+            batter=pending.batter,
+            delivery=pending.delivery,
+            sit_category=pending.situation,
+            command_rating=pending.command_rating,
+            cur_pitch_count=pending.pitch_count,
+            result=result_payload,
+        )
+        pitch_details = self._build_pitch_details(
+            delivery=pending.delivery,
+            actual_zone_name=pending.actual_zone_name,
+            target_zone=None,
+            batter_decision='SWING' if activity.decision == 'SWING' else 'TAKE',
+            pitch_result_type=pitch_result_type,
+            exit_velo=exit_velo,
+            launch_angle=launch_angle,
+            description=description,
+            gameday_packet=gameday_packet,
+        )
+
+        self.orchestrator.finish()
+        game_state = self.get_game_state_payload()
+        return {
+            'status': 'success',
+            'phase': 'RESOLVED',
+            'pitch_details': pitch_details,
+            'game_state': game_state,
+            'pitch': pitch_details,
+            'game': game_state,
+        }
+
+    @staticmethod
+    def _batter_stats_key(batter: Any) -> str:
+        batter_id = getattr(batter, 'id', None) if batter is not None else None
+        batter_name = getattr(batter, 'name', '') if batter is not None else ''
+        return f'{batter_id if batter_id is not None else 0}:{batter_name}'
+
+    def _batter_game_line(self, batter: Any) -> Dict[str, int]:
+        key = self._batter_stats_key(batter)
+        return self._batter_game_stats.setdefault(
+            key, {'at_bats': 0, 'hits': 0, 'rbis': 0, 'home_runs': 0}
+        )
+
+    def _apply_batter_activity(self, activity: Any, batter: Any) -> None:
+        """
+        Applies a resolved BatterActivity to the game state. This is the only
+        place where count, bases, outs, score, and batting lines change.
+        """
+        batter_summary = {
+            'id': getattr(batter, 'id', 1) if batter else 1,
+            'name': getattr(batter, 'name', 'Batter') if batter else 'Batter',
+            'jersey_number': getattr(batter, 'number', 99) if batter else 99,
+            'position': getattr(batter, 'position', 'DH') if batter else 'DH',
+            'team': self.away_name if self.top_bottom == 'TOP' else self.home_name,
+        }
+        stats = self._batter_game_line(batter)
+        batting_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
+        result = activity.pitch_result
+
+        if result == 'BALL':
+            self.balls += 1
+            if self.balls == 4:
+                runs = self._advance_runners_on_walk(batter_summary)
+                self.score[batting_team] += runs
+                stats['rbis'] += runs
+                self.balls = 0
+                self.strikes = 0
+                self._advance_batter_order()
+
+        elif result in ('CALLED_STRIKE', 'SWINGING_STRIKE'):
+            self.strikes += 1
+            if self.strikes == 3:
+                stats['at_bats'] += 1
+                self.outs += 1
+                self.balls = 0
+                self.strikes = 0
+                self._advance_batter_order()
+
+        elif result == 'FOUL':
+            if self.strikes < 2:
+                self.strikes += 1
+
+        elif result == 'IN_PLAY_OUT':
+            stats['at_bats'] += 1
+            self.outs += 1
+            self.balls = 0
+            self.strikes = 0
+            self._advance_batter_order()
+
+        elif result in ('SINGLE', 'DOUBLE', 'TRIPLE', 'HOME_RUN'):
+            stats['at_bats'] += 1
+            stats['hits'] += 1
+            if result == 'HOME_RUN':
+                stats['home_runs'] += 1
+
+            bases_taken = {
+                'SINGLE': 1,
+                'DOUBLE': 2,
+                'TRIPLE': 3,
+                'HOME_RUN': 4,
+            }[result]
+            runs = self._advance_runners_on_hit(bases_taken, batter_summary)
+            self.score[batting_team] += runs
+            stats['rbis'] += runs
+            self.balls = 0
+            self.strikes = 0
+            self._advance_batter_order()
+
+        if self.outs >= 3:
+            self._switch_half_inning()
+
+    def pitch(
+        self,
+        pitch_intent: Optional[str] = None,
+        pitch_type: Optional[str] = None,
+        target_zone: Optional[str] = None,
+        custom_target: Optional[Dict[str, float]] = None,
+        batter_approach: str = 'AUTO'
+    ) -> Dict[str, Any]:
+        """
+        Synchronous convenience wrapper: throw + resolve in one call.
+
+        Kept for the existing /api/pitch contract and simulations. Use
+        throw_pitch()/resolve_pitch() when the client needs to animate the
+        pitch before the per-ball result takes effect.
+        """
+        thrown = self.throw_pitch(
+            pitch_intent=pitch_intent,
+            pitch_type=pitch_type,
+            target_zone=target_zone,
+            custom_target=custom_target,
+        )
+        if thrown.get('status') != 'success':
+            return thrown
+        return self.resolve_pitch(batter_approach=batter_approach)
 
     def pitching_engine(
         self,
@@ -506,6 +651,11 @@ class GameEngine:
 
     def sim_at_bat(self) -> Dict[str, Any]:
         """Simulates pitches until the current at-bat concludes."""
+        if self.has_pending_pitch:
+            return {
+                'status': 'error',
+                'message': 'A pitch is in flight; resolve it before simulating an at-bat.',
+            }
         loops = 0
         last_result = None
         while loops < 15:
@@ -767,6 +917,23 @@ class GameEngine:
         b_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
 
         pitch_count = self.pitch_count_home if self.top_bottom == 'TOP' else self.pitch_count_away
+        pitcher_hand = (
+            'L'
+            if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
+            else 'R'
+        ) if cur_p else 'R'
+        batter_ratings = BatterInstanceManager.get_adjusted_ratings(
+            cur_b,
+            balls=self.balls,
+            strikes=self.strikes,
+            pitcher_hand=pitcher_hand,
+        )
+        batter_line = dict(
+            self._batter_game_stats.get(
+                self._batter_stats_key(cur_b),
+                {'at_bats': 0, 'hits': 0, 'rbis': 0, 'home_runs': 0},
+            )
+        )
 
         payload = {
             'inning': self.inning,
@@ -782,12 +949,12 @@ class GameEngine:
                 'jersey_number': int(b_num) if str(b_num).isdigit() else 99,
                 'position': b_pos,
                 'team': b_team,
-                'power': 99,
-                'contact': 88,
-                'vision': 85,
-                'traits': ['Home Run Threat', 'First Pitch Ambush'],
-                'hot_zones': JUDGE_DEFAULT_ZONES,
-                'stats': {'at_bats': 3, 'hits': 1, 'rbis': 2, 'home_runs': 1}
+                'power': int(round(batter_ratings.power)),
+                'contact': int(round(batter_ratings.contact)),
+                'vision': int(round(batter_ratings.vision)),
+                'traits': normalize_traits(cur_b),
+                'hot_zones': {k: round(v, 3) for k, v in batter_ratings.hot_zones.items()},
+                'stats': batter_line,
             },
             'current_pitcher': {
                 'id': getattr(cur_p, 'id', 101) if cur_p else 101,

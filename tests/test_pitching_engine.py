@@ -201,7 +201,10 @@ def test_execute_pitch_uses_sampled_zone_target():
             balls=0, strikes=0, target_zone="upper-in"
         )
 
-    sampler.assert_called_once_with("upper-in")
+    sampler.assert_called_once()
+    call_args, call_kwargs = sampler.call_args
+    assert call_args == ("upper-in",)
+    assert callable(call_kwargs.get("rng"))
     assert delivery["target_x"] == 0.123
     assert delivery["target_z"] == 2.345
     assert delivery["intended_zone_cat"] == "SHADOW"

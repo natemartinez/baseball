@@ -15,6 +15,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.database.db import DB_PATH, add_player, init_db
+from backend.engine.batting_engine.batters import LEAGUE_AVG_SLG
 from backend.engine.pitching_engine.pitch_objects import movement_for
 
 MOCK_DB_PATH = ROOT_DIR / 'backend' / 'mock' / 'mock_baseball_db.json'
@@ -98,11 +99,34 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         raw_zones = p.get('zones', []) or p.get('hot_zones', [])
         if isinstance(raw_zones, dict):
             for z, slg in raw_zones.items():
-                zones_list.append({'zone': z, 'slugging': float(slg)})
+                value = float(slg)
+                if value > 1.0:
+                    value = LEAGUE_AVG_SLG * value
+                zones_list.append({'zone': z, 'slugging': round(value, 3)})
         elif isinstance(raw_zones, list):
             for item in raw_zones:
-                if isinstance(item, dict):
-                    zones_list.append({'zone': str(item.get('zone', 'heart')), 'slugging': float(item.get('slugging', 0.400))})
+                if not isinstance(item, dict):
+                    continue
+                raw_name = item.get('zone')
+                if not isinstance(raw_name, str):
+                    raw_name = item.get('name', 'heart')
+                zone_name = str(raw_name or 'heart')
+
+                slugging = item.get('slugging', item.get('slg'))
+                if slugging is None:
+                    multiplier = item.get('slg_multiplier', item.get('multiplier'))
+                    if multiplier is not None:
+                        try:
+                            slugging = LEAGUE_AVG_SLG * float(multiplier)
+                        except (TypeError, ValueError):
+                            slugging = None
+                if slugging is None:
+                    slugging = LEAGUE_AVG_SLG
+
+                zones_list.append({
+                    'zone': zone_name,
+                    'slugging': float(slugging),
+                })
 
         # Pitch arsenal
         raw_arsenal = p.get('arsenal', [])

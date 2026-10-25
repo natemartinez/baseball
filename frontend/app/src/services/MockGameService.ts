@@ -7,20 +7,25 @@
  */
 
 import type {
+  BatterDecision,
   BatterInfo,
   BatterGameStats,
   Bases,
+  CommandQuality,
   GameState,
   InitialStateResponse,
   LineupPlayer,
   PitchArsenalItem,
   PitchDetails,
+  PitchResolveResponse,
+  PitchResultResponse,
+  PitchResultType,
+  PitchThrowResponse,
   PitcherGameStats,
   PitcherInfo,
   PitchOptionWeight,
-  PitchResultResponse,
-  PitchResultType,
   PlayerSummary,
+  ResolvedPitchDetails,
   Score,
   StatcastMetrics,
   StrategyIntentDecision,
@@ -36,7 +41,11 @@ import {
   countRunners,
 } from '../types/api';
 import type { IGameService } from './IGameService';
-import type { Gameday2DPitchPacket } from '../types/gameday';
+import type {
+  Gameday2DPitchPacket,
+  GamedayZoneCategory,
+  SituationCategory,
+} from '../types/gameday';
 import { defaultRelease, movementFromArsenal } from './pitchTrajectory';
 import {
   executeDelivery,
@@ -263,6 +272,33 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface MockPitchContext {
+  state: GameState;
+  strategyDecision: StrategyIntentDecision;
+  selectedPitch: PitchArsenalItem;
+  intended: string;
+  targetX: number;
+  targetZ: number;
+  isManualOverride: boolean;
+  intendedZoneCategory: GamedayZoneCategory;
+  execution: ReturnType<typeof executeDelivery>;
+  realizedCategory: GamedayZoneCategory;
+  isHeartZoneLeak: boolean;
+  hitShadowZoneTarget: boolean;
+  actualZone: string;
+  commandQuality: CommandQuality;
+  commandRating: number;
+  isPitchInZone: boolean;
+  batter: BatterInfo;
+  isWaste: boolean;
+  situationCategory: SituationCategory;
+  movement: { hb: number; ivb: number };
+  pitcherHand: 'R' | 'L';
+  release: { x: number; y: number; z: number };
+  dynamicModifier: number;
+  realizedSpeedMph: number;
+}
+
 // ─── MockGameService ──────────────────────────────────────────────────────────
 
 export class MockGameService implements IGameService {
@@ -277,6 +313,7 @@ export class MockGameService implements IGameService {
   private yankeesBullpen: PlayerSummary[];
   private metsBullpen: PlayerSummary[];
   private currentGameState!: GameState;
+  private pendingThrowContext: MockPitchContext | null = null;
 
   constructor(seed: number = 42) {
     this.seed = seed;
@@ -386,6 +423,7 @@ export class MockGameService implements IGameService {
     };
     this.currentGameState = { ...base, strategy_intent: this.calculateStrategyAndIntent(base) };
     this.yankeeBatterIndex = 1;
+    this.pendingThrowContext = null;
     return this.currentGameState;
   }
 
@@ -465,12 +503,69 @@ export class MockGameService implements IGameService {
 
   // ─── Core pitch resolution (port of resolvePitch) ─────────────────────────
 
+  async throwPitch(
+    pitchIntent?: string,
+    targetZone?: string,
+    customTarget?: { x: number; z: number },
+  ): Promise<PitchThrowResponse> {
+    await delay(120);
+    if (this.pendingThrowContext) {
+      throw new Error('A pitch is already in flight; resolve it before throwing another.');
+    }
+
+    const context = this._buildDelivery(pitchIntent, targetZone, customTarget);
+    this.pendingThrowContext = context;
+
+    const packet = this._buildPacket(context, {
+      pitchResult: null,
+      description: 'Pitch in flight - awaiting batter activity',
+    });
+    const pitchDetails: PitchDetails = {
+      ...this._detailFields(context, packet),
+      batter_decision: null,
+      pitch_result: null,
+      description: 'Pitch in flight',
+    };
+
+    return {
+      phase: 'THROWN',
+      pitch_details: pitchDetails,
+      game_state: this.currentGameState,
+    };
+  }
+
+  async resolvePitch(
+    batterDecision?: BatterDecision,
+    _batterApproach?: string,
+  ): Promise<PitchResolveResponse> {
+    await delay(120);
+    const context = this.pendingThrowContext;
+    if (!context) {
+      throw new Error('No pitch in flight to resolve');
+    }
+    this.pendingThrowContext = null;
+
+    const resolved = this._resolveDelivery(context, batterDecision);
+    return { phase: 'RESOLVED', ...resolved };
+  }
+
   private _resolvePitch(
     pitchIntent?: string,
     targetZone?: string,
     customTarget?: { x: number; z: number },
+    batterDecision?: BatterDecision,
   ): PitchResultResponse {
-    const strategyDecision = this.calculateStrategyAndIntent(this.currentGameState);
+    const context = this._buildDelivery(pitchIntent, targetZone, customTarget);
+    return this._resolveDelivery(context, batterDecision);
+  }
+
+  private _buildDelivery(
+    pitchIntent?: string,
+    targetZone?: string,
+    customTarget?: { x: number; z: number },
+  ): MockPitchContext {
+    const state = this.currentGameState;
+    const strategyDecision = this.calculateStrategyAndIntent(state);
     const isWaste = pitchIntent?.toUpperCase() === 'WASTE';
     const isChase = pitchIntent?.toUpperCase() === 'BALL';
 
@@ -505,13 +600,12 @@ export class MockGameService implements IGameService {
     }
 
     // 2D Truncated Gaussian Execution Math — natural spray cloud
-    const currentPitcher = this.currentGameState.current_pitcher;
-    const commandRating = currentPitcher.control ?? 82;
+    const commandRating = state.current_pitcher.control ?? 82;
     const execution = executeDelivery(
       targetX,
       targetZ,
       commandRating,
-      currentPitcher.stats.pitches_thrown,
+      state.current_pitcher.stats.pitches_thrown,
       70, // Stamina rating; fatigue is gated off in gamedayMath for now
       this.rng,
     );
@@ -525,7 +619,7 @@ export class MockGameService implements IGameService {
     const actualZone = closestZone(execution.realizedX, execution.realizedZ);
     const maxRadius = Math.max(0.001, execution.maxRadiusInches);
     const missRatio = execution.radialMissInches / maxRadius;
-    let commandQuality: string;
+    let commandQuality: CommandQuality;
 
     if (isWaste && realizedCategory !== 'HEART' && realizedCategory !== 'SHADOW') {
       commandQuality = 'WASTE_EXECUTED';
@@ -541,11 +635,67 @@ export class MockGameService implements IGameService {
       commandQuality = 'WILD_MISS';
     }
 
-    const state = this.currentGameState;
-    const isPitchInZone = isRulebookStrike(execution.realizedX, execution.realizedZ);
     const batter = state.current_batter;
-    const hotSlg = batter.hot_zones[actualZone] ?? 0.32;
+    const isPitchInZone = isRulebookStrike(execution.realizedX, execution.realizedZ);
+    const situationCategory = determineSituationCategory(
+      state.balls,
+      state.strikes,
+      state.outs,
+      state.bases.first !== null,
+      state.bases.second !== null,
+      state.bases.third !== null,
+    );
 
+    const movement = movementFromArsenal(selectedPitch);
+    const pitcherHand = NOLAN_MCLEAN.throws ?? 'R';
+    const release = NOLAN_MCLEAN.release ?? defaultRelease(pitcherHand);
+
+    // Delivery-phase randomness is consumed once, at throw time.
+    const dynamicModifier = +(1.0 + (this.rng() * 0.4 - 0.2)).toFixed(2);
+    const realizedSpeedMph = +(selectedPitch.velocity_mph + (this.rng() * 2.4 - 1.2)).toFixed(1);
+
+    return {
+      state,
+      strategyDecision,
+      selectedPitch,
+      intended,
+      targetX,
+      targetZ,
+      isManualOverride,
+      intendedZoneCategory,
+      execution,
+      realizedCategory,
+      isHeartZoneLeak,
+      hitShadowZoneTarget,
+      actualZone,
+      commandQuality,
+      commandRating,
+      isPitchInZone,
+      batter,
+      isWaste,
+      situationCategory,
+      movement,
+      pitcherHand,
+      release,
+      dynamicModifier,
+      realizedSpeedMph,
+    };
+  }
+
+  private _resolveDelivery(
+    context: MockPitchContext,
+    batterDecision?: BatterDecision,
+  ): PitchResultResponse {
+    const {
+      state,
+      selectedPitch,
+      actualZone,
+      isPitchInZone,
+      batter,
+      isWaste,
+    } = context;
+
+    const hotSlg = batter.hot_zones[actualZone] ?? 0.32;
     const isDoublePlaySituation = state.bases.first !== null && state.outs < 2;
     const isBasesLoaded = state.bases.first !== null && state.bases.second !== null && state.bases.third !== null;
 
@@ -556,7 +706,9 @@ export class MockGameService implements IGameService {
         ? actualZone === STRIKE_ZONES.HEART ? 0.92 : 0.76
         : selectedPitch.break_rating > 95 ? 0.44 : 0.28;
 
-    const didSwing = this.rng() < swingProb;
+    const didSwing = batterDecision !== undefined
+      ? batterDecision === 'SWING'
+      : this.rng() < swingProb;
 
     let pitchResult: PitchResultType;
     let exitVelo: number | undefined;
@@ -623,33 +775,81 @@ export class MockGameService implements IGameService {
 
     const updatedState = this._applyOutcomeToGameState(pitchResult, exitVelo, isDoublePlayTurned);
 
+    const packet = this._buildPacket(context, {
+      pitchResult,
+      exitVelo,
+      launchAngle,
+      description,
+    });
+    const pitchDetails: ResolvedPitchDetails = {
+      ...this._detailFields(context, packet),
+      batter_decision: didSwing ? 'SWING' : 'TAKE',
+      pitch_result: pitchResult,
+      exit_velocity_mph: exitVelo,
+      launch_angle_deg: launchAngle,
+      description,
+    };
+
+    this.currentGameState = updatedState;
+    return { pitch_details: pitchDetails, game_state: updatedState };
+  }
+
+  private _detailFields(
+    context: MockPitchContext,
+    packet: Gameday2DPitchPacket,
+  ): Omit<PitchDetails, 'batter_decision' | 'pitch_result' | 'description'> {
+    return {
+      pitch_name: context.selectedPitch.name,
+      velocity_mph: context.selectedPitch.velocity_mph,
+      spin_rpm: context.selectedPitch.spin_rpm,
+      intended_zone: context.intended,
+      actual_zone: context.actualZone,
+      exit_velocity_mph: undefined,
+      launch_angle_deg: undefined,
+      strategy_name: context.strategyDecision.strategy_name,
+      command_quality: context.commandQuality,
+      statcast: context.selectedPitch.statcast,
+      gameday_packet: packet,
+    };
+  }
+
+  private _buildPacket(
+    context: MockPitchContext,
+    result: {
+      pitchResult: PitchResultType | null;
+      exitVelo?: number;
+      launchAngle?: number;
+      description: string;
+    },
+  ): Gameday2DPitchPacket {
+    const { state, strategyDecision, selectedPitch, execution, batter } = context;
+
     const repertoireProbabilities: Record<string, number> = {};
     for (const p of strategyDecision.pitch_weights ?? []) {
       repertoireProbabilities[p.pitch_name] = +(p.probability_pct / 100).toFixed(2);
     }
 
-    const situationCategory = determineSituationCategory(
-      state.balls,
-      state.strikes,
-      state.outs,
-      state.bases.first !== null,
-      state.bases.second !== null,
-      state.bases.third !== null,
-    );
+    const call: Gameday2DPitchPacket['result']['call'] = result.pitchResult === null
+      ? null
+      : result.pitchResult === 'BALL'
+        ? 'BALL'
+        : result.pitchResult === 'CALLED_STRIKE'
+          ? 'CALLED_STRIKE'
+          : result.pitchResult === 'SWINGING_STRIKE'
+            ? 'SWINGING_STRIKE'
+            : result.pitchResult === 'FOUL'
+              ? 'FOUL'
+              : 'IN_PLAY';
 
-    const movement = movementFromArsenal(selectedPitch);
-    const pitcherHand = NOLAN_MCLEAN.throws ?? 'R';
-    const release = NOLAN_MCLEAN.release ?? defaultRelease(pitcherHand);
-
-    const gamedayPacket: Gameday2DPitchPacket = {
+    return {
       meta: {
-        pitchNumber: this.currentGameState.current_pitcher.stats.pitches_thrown + 1,
+        pitchNumber: state.current_pitcher.stats.pitches_thrown + 1,
         pitcherName: NOLAN_MCLEAN.name,
-        pitcherHand,
+        pitcherHand: context.pitcherHand,
         pitcherOvr: 88,
-        commandRating,
-        staminaPct: Math.max(10, Math.round(100 - (this.currentGameState.current_pitcher.stats.pitches_thrown / 70) * 40)),
-        pitchesThrown: this.currentGameState.current_pitcher.stats.pitches_thrown + 1,
+        commandRating: context.commandRating,
+        staminaPct: Math.max(10, Math.round(100 - (state.current_pitcher.stats.pitches_thrown / 70) * 40)),
+        pitchesThrown: state.current_pitcher.stats.pitches_thrown + 1,
         inning: state.inning,
         isTopInning: state.top_bottom === 'TOP',
         count: { balls: state.balls, strikes: state.strikes, outs: state.outs },
@@ -660,78 +860,50 @@ export class MockGameService implements IGameService {
         },
         batterName: batter.name,
         batterId: batter.id,
-        situationCategory,
+        situationCategory: context.situationCategory,
       },
-      release,
+      release: context.release,
       strategy: {
         repertoireProbabilities,
         selectedPitch: selectedPitch.name,
-        dynamicModifier: +(1.0 + (this.rng() * 0.4 - 0.2)).toFixed(2),
+        dynamicModifier: context.dynamicModifier,
         strategyName: strategyDecision.strategy_name,
         rationale: strategyDecision.rationale,
       },
       intent: {
-        targetX,
-        targetZ,
-        intendedZone: intendedZoneCategory,
+        targetX: context.targetX,
+        targetZ: context.targetZ,
+        intendedZone: context.intendedZoneCategory,
         targetSpeedMph: selectedPitch.velocity_mph,
-        isManualOverride,
+        isManualOverride: context.isManualOverride,
       },
       execution: {
         // Keep full precision so the plotted dot and isStrike agree at the
         // inclusive rulebook boundary.
         realizedX: execution.realizedX,
         realizedZ: execution.realizedZ,
-        realizedSpeedMph: +(selectedPitch.velocity_mph + (this.rng() * 2.4 - 1.2)).toFixed(1),
+        realizedSpeedMph: context.realizedSpeedMph,
         releaseSpeedMph: selectedPitch.velocity_mph,
-        horizontalBreakInches: movement.hb,
-        inducedVerticalBreakInches: movement.ivb,
+        horizontalBreakInches: context.movement.hb,
+        inducedVerticalBreakInches: context.movement.ivb,
         maxRadiusInches: execution.maxRadiusInches,
         radialMissInches: execution.radialMissInches,
         deltaXInches: execution.deltaXInches,
         deltaZInches: execution.deltaZInches,
         sigmaXFeet: execution.sigmaFeet,
         sigmaZFeet: execution.sigmaFeet,
-        isHeartZoneLeak,
-        hitShadowZoneTarget,
-        realizedZoneCategory: realizedCategory,
+        isHeartZoneLeak: context.isHeartZoneLeak,
+        hitShadowZoneTarget: context.hitShadowZoneTarget,
+        realizedZoneCategory: context.realizedCategory,
       },
       result: {
-        call: pitchResult === 'BALL'
-          ? 'BALL'
-          : pitchResult === 'CALLED_STRIKE'
-            ? 'CALLED_STRIKE'
-            : pitchResult === 'SWINGING_STRIKE'
-              ? 'SWINGING_STRIKE'
-              : pitchResult === 'FOUL'
-                ? 'FOUL'
-                : 'IN_PLAY',
+        call,
         isStrike: isRulebookStrike(execution.realizedX, execution.realizedZ),
-        exitVelocityMph: exitVelo ? +exitVelo.toFixed(1) : undefined,
-        launchAngleDeg: launchAngle ? +launchAngle.toFixed(1) : undefined,
-        description,
+        exitVelocityMph: result.exitVelo ? +result.exitVelo.toFixed(1) : undefined,
+        launchAngleDeg: result.launchAngle ? +result.launchAngle.toFixed(1) : undefined,
+        description: result.description,
       },
     };
-
-    const pitchDetails: PitchDetails = {
-      pitch_name: selectedPitch.name,
-      velocity_mph: selectedPitch.velocity_mph,
-      spin_rpm: selectedPitch.spin_rpm,
-      intended_zone: intended,
-      actual_zone: actualZone,
-      batter_decision: didSwing ? 'SWING' : 'TAKE',
-      pitch_result: pitchResult,
-      exit_velocity_mph: exitVelo,
-      launch_angle_deg: launchAngle,
-      description,
-      strategy_name: strategyDecision.strategy_name,
-      command_quality: commandQuality as any,
-      statcast: selectedPitch.statcast,
-      gameday_packet: gamedayPacket,
-    };
-
-    this.currentGameState = updatedState;
-    return { pitch_details: pitchDetails, game_state: updatedState };
   }
 
   // ─── State mutation (port of applyOutcomeToGameState) ────────────────────────

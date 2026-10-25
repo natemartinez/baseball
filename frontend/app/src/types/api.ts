@@ -233,8 +233,10 @@ export interface PitchDetails {
   spin_rpm: number;
   intended_zone?: string;
   actual_zone: string;
-  batter_decision: BatterDecision;
-  pitch_result: PitchResultType;
+  /** Null while the pitch is in flight (throw phase). */
+  batter_decision: BatterDecision | null;
+  /** Null while the pitch is in flight (throw phase). */
+  pitch_result: PitchResultType | null;
   exit_velocity_mph?: number;
   launch_angle_deg?: number;
   description: string;
@@ -244,9 +246,45 @@ export interface PitchDetails {
   gameday_packet?: Gameday2DPitchPacket;
 }
 
+/** A pitch whose reaction and outcome have been revealed. */
+export interface ResolvedPitchDetails extends PitchDetails {
+  batter_decision: BatterDecision;
+  pitch_result: PitchResultType;
+}
+
 export interface PitchResultResponse {
+  pitch_details: ResolvedPitchDetails;
+  game_state: GameState;
+}
+
+export interface PitchThrowResponse {
+  phase: 'THROWN';
+  /** Delivery telemetry only: reaction and outcome are intentionally null. */
   pitch_details: PitchDetails;
   game_state: GameState;
+}
+
+export interface PitchResolveResponse {
+  phase: 'RESOLVED' | 'AWAITING_REACTION';
+  pitch_details?: ResolvedPitchDetails;
+  game_state: GameState;
+  reaction_context?: BatterReactionContext;
+}
+
+export interface BatterReactionContext {
+  batter_id: number | null;
+  batter_name: string;
+  balls: number;
+  strikes: number;
+  outs: number;
+  runners: [boolean, boolean, boolean];
+  situation: string;
+  delivery: Record<string, unknown>;
+  zone_name: string;
+  zone_category: string;
+  is_strike: boolean;
+  approach: string;
+  ratings: Record<string, unknown>;
 }
 
 export interface ApiErrorResponse {
@@ -294,6 +332,13 @@ export interface StartGameRequest {
 export interface PitchRequest {
   pitch_intent?: string;
   target_zone?: string;
+  target_x?: number;
+  target_z?: number;
+}
+
+export interface ResolvePitchRequest {
+  batter_decision?: BatterDecision;
+  batter_approach?: string;
 }
 
 export interface SwapLineupRequest {

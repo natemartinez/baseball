@@ -13,9 +13,15 @@ from .pitch_objects import PITCH_CATEGORIES, PitchArsenal, Pitch
 class PitchStrategy:
     """Evaluates count leverage and selects pitches based on arsenal usage and context."""
 
-    def __init__(self, pitcher: Any, batter: Any):
+    def __init__(
+        self,
+        pitcher: Any,
+        batter: Any,
+        rng: Optional[random.Random] = None,
+    ):
         self.pitcher = pitcher
         self.batter = batter
+        self.rng = rng or random
         self.arsenal_obj = PitchArsenal.extract_from_pitcher(pitcher)
         self.pitch_arsenal = self.arsenal_obj.to_raw_list()
 
@@ -133,7 +139,7 @@ class PitchStrategy:
         # 6. Weighted selection
         pitches = list(probs.keys())
         weights = list(probs.values())
-        selected = random.choices(pitches, weights=weights, k=1)[0]
+        selected = self.rng.choices(pitches, weights=weights, k=1)[0]
 
         # Get profile data for selected pitch
         vel = 94.0

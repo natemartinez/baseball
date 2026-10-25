@@ -1,8 +1,13 @@
 import type {
+  BatterDecision,
   GameState,
   InitialStateResponse,
+  PitchDetails,
+  PitchResolveResponse,
   PitchResultResponse,
+  PitchThrowResponse,
   PitchRequest,
+  ResolvePitchRequest,
   StartGameRequest,
   SwapLineupRequest,
   SwapRotationRequest,
@@ -33,7 +38,7 @@ export class HttpGameService implements IGameService {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    const defaultUrl = typeof window !== 'undefined' ? 'http://localhost:5000' : 'http://10.0.2.2:5000';
+    const defaultUrl = typeof window !== 'undefined' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
     this.baseUrl = (baseUrl || defaultUrl).replace(/\/$/, '');
   }
 
@@ -120,17 +125,55 @@ export class HttpGameService implements IGameService {
     targetZone?: string,
     customTarget?: { x: number; z: number },
   ): Promise<PitchResultResponse> {
-    const body: PitchRequest & { target_x?: number; target_z?: number } = {};
+    const body = this.buildPitchBody(pitchIntent, targetZone, customTarget);
+    const res = await this.post<PitchResultResponse>('api/pitch', body);
+    this.ensureStrategyIntent(res.game_state);
+    this.ensureGamedayPacket(res, customTarget);
+    return res;
+  }
+
+  async throwPitch(
+    pitchIntent?: string,
+    targetZone?: string,
+    customTarget?: { x: number; z: number },
+  ): Promise<PitchThrowResponse> {
+    const body = this.buildPitchBody(pitchIntent, targetZone, customTarget);
+    const res = await this.post<PitchThrowResponse>('api/pitch/throw', body);
+    this.ensureStrategyIntent(res.game_state);
+    this.ensureGamedayPacket(res, customTarget);
+    return res;
+  }
+
+  async resolvePitch(
+    batterDecision?: BatterDecision,
+    batterApproach?: string,
+  ): Promise<PitchResolveResponse> {
+    const body: ResolvePitchRequest = {};
+    if (batterDecision) body.batter_decision = batterDecision;
+    if (batterApproach) body.batter_approach = batterApproach;
+    const res = await this.post<PitchResolveResponse>('api/pitch/resolve', body);
+    this.ensureStrategyIntent(res.game_state);
+    if (res.pitch_details) {
+      this.ensureGamedayPacket(
+        { pitch_details: res.pitch_details, game_state: res.game_state },
+      );
+    }
+    return res;
+  }
+
+  private buildPitchBody(
+    pitchIntent?: string,
+    targetZone?: string,
+    customTarget?: { x: number; z: number },
+  ): PitchRequest {
+    const body: PitchRequest = {};
     if (pitchIntent) body.pitch_intent = pitchIntent;
     if (targetZone) body.target_zone = targetZone;
     if (customTarget) {
       body.target_x = customTarget.x;
       body.target_z = customTarget.z;
     }
-    const res = await this.post<PitchResultResponse>('api/pitch', body);
-    this.ensureStrategyIntent(res.game_state);
-    this.ensureGamedayPacket(res, customTarget);
-    return res;
+    return body;
   }
 
   async simAtBat(): Promise<PitchResultResponse> {
@@ -146,7 +189,10 @@ export class HttpGameService implements IGameService {
     }
   }
 
-  private ensureGamedayPacket(res: PitchResultResponse, customTarget?: { x: number; z: number }) {
+  private ensureGamedayPacket(
+    res: { pitch_details: PitchDetails; game_state: GameState },
+    customTarget?: { x: number; z: number },
+  ) {
     if (!res.pitch_details.gameday_packet) {
       const p = res.pitch_details;
       const g = res.game_state;
@@ -232,15 +278,17 @@ export class HttpGameService implements IGameService {
           realizedZoneCategory: realizedCategory,
         },
         result: {
-          call: p.pitch_result === 'BALL'
-            ? 'BALL'
-            : p.pitch_result === 'CALLED_STRIKE'
-              ? 'CALLED_STRIKE'
-              : p.pitch_result === 'SWINGING_STRIKE'
-                ? 'SWINGING_STRIKE'
-                : p.pitch_result === 'FOUL'
-                  ? 'FOUL'
-                  : 'IN_PLAY',
+          call: p.pitch_result === null
+            ? null
+            : p.pitch_result === 'BALL'
+              ? 'BALL'
+              : p.pitch_result === 'CALLED_STRIKE'
+                ? 'CALLED_STRIKE'
+                : p.pitch_result === 'SWINGING_STRIKE'
+                  ? 'SWINGING_STRIKE'
+                  : p.pitch_result === 'FOUL'
+                    ? 'FOUL'
+                    : 'IN_PLAY',
           isStrike: isRulebookStrike(realizedX, realizedZ),
           exitVelocityMph: p.exit_velocity_mph,
           launchAngleDeg: p.launch_angle_deg,

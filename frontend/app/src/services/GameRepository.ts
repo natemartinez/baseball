@@ -1,6 +1,7 @@
 import { MockGameService } from './MockGameService';
 import { HttpGameService } from './HttpGameService';
 import type { IGameService } from './IGameService';
+import type { BatterDecision } from '../types/api';
 
 /**
  * GameRepository — transparent service switcher.
@@ -18,7 +19,7 @@ export class GameRepository implements IGameService {
 
   private constructor(useMock: boolean, baseUrl?: string) {
     this._mockService = new MockGameService();
-    const defaultBaseUrl = typeof window !== 'undefined' ? 'http://localhost:5000' : 'http://10.0.2.2:5000';
+    const defaultBaseUrl = typeof window !== 'undefined' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
     this._httpService = new HttpGameService(baseUrl ?? process.env['API_BASE_URL'] ?? defaultBaseUrl);
     this._isMockMode = useMock;
   }
@@ -64,6 +65,12 @@ export class GameRepository implements IGameService {
   }
   pitch(pitchIntent?: string, targetZone?: string, customTarget?: { x: number; z: number }) {
     return this.activeService.pitch(pitchIntent, targetZone, customTarget);
+  }
+  throwPitch(pitchIntent?: string, targetZone?: string, customTarget?: { x: number; z: number }) {
+    return this.activeService.throwPitch(pitchIntent, targetZone, customTarget);
+  }
+  resolvePitch(batterDecision?: BatterDecision, batterApproach?: string) {
+    return this.activeService.resolvePitch(batterDecision, batterApproach);
   }
   simAtBat() {
     return this.activeService.simAtBat();

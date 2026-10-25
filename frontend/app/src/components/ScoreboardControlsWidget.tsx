@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, TouchableOpacity, Switch, StyleSheet } from 'react-native';
 import type {
   GameState,
-  PitchDetails,
   PitchResultType,
+  ResolvedPitchDetails,
   TeamLineup,
 } from '../types/api';
 import { ScorebugWidget } from './ScorebugWidget';
@@ -12,7 +12,7 @@ import { Colors } from '../theme/colors';
 interface ScoreboardControlsWidgetProps {
   gameState: GameState | null;
   lineups?: TeamLineup[];
-  latestPitch?: PitchDetails | null;
+  latestPitch?: ResolvedPitchDetails | null;
   isMockMode: boolean;
   onOpenSettings?: () => void;
   onToggleMock: (value: boolean) => void;

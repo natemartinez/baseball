@@ -8,7 +8,7 @@ import {
   type GestureResponderEvent,
 } from 'react-native';
 import Svg, { Ellipse, Image as SvgImage } from 'react-native-svg';
-import type { BatterInfo, PitchDetails, PitchResultType } from '../types/api';
+import type { BatterInfo, PitchResultType, ResolvedPitchDetails } from '../types/api';
 import { STRIKE_ZONES } from '../types/api';
 import {
   buildSprayCloud,
@@ -24,9 +24,9 @@ interface StrikeZoneGridWidgetProps {
   selectedZone: string;
   onSelectZone: (zone: string) => void;
   currentBatter: BatterInfo;
-  latestPitch?: PitchDetails | null;
+  latestPitch?: ResolvedPitchDetails | null;
   /** All pitches in the current at-bat, oldest first (numbered 1..n). */
-  atBatPitches?: PitchDetails[];
+  atBatPitches?: ResolvedPitchDetails[];
   /** Exact catcher's glove target (Statcast feet). */
   gloveTarget?: { x: number; z: number } | null;
   /** Pitcher command rating used to size the spray cloud. */
@@ -50,7 +50,7 @@ interface StrikeZoneGridWidgetProps {
 }
 
 interface NumberedPitch {
-  pitch: PitchDetails;
+  pitch: ResolvedPitchDetails;
   number: number;
 }
 
@@ -572,7 +572,7 @@ function GloveCloudOverlay({
 }
 
 /** Resolve the exact realized pitch location, with legacy fallbacks. */
-function pitchRealizedLocation(pitch: PitchDetails): { x: number; z: number } {
+function pitchRealizedLocation(pitch: ResolvedPitchDetails): { x: number; z: number } {
   const execution = pitch.gameday_packet?.execution;
   if (
     execution &&
@@ -833,7 +833,7 @@ function ZonePitchMarkers({
   );
 }
 
-function PitchOutcomeSummaryBadge({ latestPitch }: { latestPitch: PitchDetails }) {
+function PitchOutcomeSummaryBadge({ latestPitch }: { latestPitch: ResolvedPitchDetails }) {
   const color = outcomeSummaryColor(latestPitch.pitch_result);
   return (
     <View style={[styles.summaryBadge, { borderColor: color + '99' }]}>

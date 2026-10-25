@@ -42,7 +42,8 @@ def calculate_pitch_delivery(
     command_rating: float,
     pitch_count: int,
     stamina: float = 75.0,
-    intended_zone_cat: str = 'HEART'
+    intended_zone_cat: str = 'HEART',
+    rng=None,
 ) -> Dict[str, Any]:
     """
     Computes the bivariate Gaussian dispersion for a pitch delivery.
@@ -51,7 +52,7 @@ def calculate_pitch_delivery(
     sigma = calculate_execution_sigma(command_rating, pitch_count, stamina=stamina)
     max_radius_in = get_max_error_radius_inches(command_rating)
     realized_x, realized_z = sample_truncated_gaussian(
-        target_x, target_z, sigma, max_radius_in / 12.0
+        target_x, target_z, sigma, max_radius_in / 12.0, rng=rng
     )
     # Classify and call the pitch from the full-precision sample. Rounding is
     # applied only to telemetry fields so boundary pitches keep exact behavior.
