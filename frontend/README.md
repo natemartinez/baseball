@@ -5,7 +5,7 @@ backend repo at `frontend/`. It renders the scoreboard, strike zone, pitch
 selection, strategy decider, at-bat outcome feed, and the Gameday Dev Menu.
 
 The authoritative simulation engine and REST API live in the repository root
-(Python Flask, port `5000`). This directory contains only the client.
+(Python Flask, port `5050`). This directory contains only the client.
 
 ## Layout
 
@@ -47,9 +47,9 @@ npx expo start --web     # http://localhost:8081
 ```
 
 In the app header, open the **Gameday Dev Menu** (`Shift+D` / tap **DEV**) and use
-the **Backend Switcher** to toggle between the live **Python Flask (5000)** backend
+the **Backend Switcher** to toggle between the live **Python Flask (5050)** backend
 and the in-client **Mock Engine**. On web the HTTP client defaults to
-`http://localhost:5000` (see `app/.env.example`).
+`http://localhost:5050` (see `app/.env.example`).
 
 ## Physics & Documentation
 

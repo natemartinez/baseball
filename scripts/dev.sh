@@ -14,6 +14,8 @@ set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_ROOT"
 FRONTEND_DIR="${FRONTEND_DIR:-$REPO_ROOT/frontend/app}"
+# 5050 avoids macOS AirPlay Receiver, which binds port 5000.
+BACKEND_PORT="${PORT:-5050}"
 
 # Color formatting
 CYAN='\033[0;36m'
@@ -72,7 +74,7 @@ port_in_use() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }
 
-for port in 5000 8081; do
+for port in "$BACKEND_PORT" 8081; do
   if port_in_use "$port"; then
     echo -e "${RED}Error: port $port is already in use.${NC}"
     echo -e "${YELLOW}Stop the process using it (another dev.sh?) and try again.${NC}"
@@ -103,9 +105,9 @@ cleanup() {
 # Trap exit signals to ensure child processes are terminated
 trap cleanup SIGINT SIGTERM EXIT
 
-echo -e "\n${GREEN}[1/2] Launching Python Flask Backend on http://localhost:5000...${NC}"
+echo -e "\n${GREEN}[1/2] Launching Python Flask Backend on http://localhost:$BACKEND_PORT...${NC}"
 (
-  cd "$BACKEND_DIR" && "$PYTHON" main.py
+  cd "$BACKEND_DIR" && PORT="$BACKEND_PORT" "$PYTHON" main.py
 ) &
 BACKEND_PID=$!
 

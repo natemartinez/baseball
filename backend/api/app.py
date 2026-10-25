@@ -2,6 +2,7 @@
 Application factory for Flask backend with CORS and blueprint registration.
 """
 
+import os
 from pathlib import Path
 from flask import Flask
 from flask_cors import CORS
@@ -25,4 +26,4 @@ def create_app() -> Flask:
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, port=5000, host='0.0.0.0')
+    app.run(debug=True, port=int(os.environ.get('PORT', '5050')), host='0.0.0.0')
