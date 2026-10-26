@@ -72,10 +72,12 @@ export function ScoreboardControlsWidget({
       {/* Latest pitch result */}
       {latestPitch && (
         <View style={[styles.resultRow, { borderColor: `${resultColor}66` }]}>
-          <View style={[styles.resultDot, { backgroundColor: resultColor }]} />
-          <Text style={[styles.resultLabel, { color: resultColor }]} numberOfLines={1}>
-            {latestPitch.pitch_result.replace(/_/g, ' ')}
-          </Text>
+          <View style={styles.resultHeader}>
+            <View style={[styles.resultDot, { backgroundColor: resultColor }]} />
+            <Text style={[styles.resultLabel, { color: resultColor }]} numberOfLines={1}>
+              {latestPitch.pitch_result.replace(/_/g, ' ')}
+            </Text>
+          </View>
           <Text style={styles.resultMeta} numberOfLines={1}>
             {latestPitch.pitch_name} • {latestPitch.velocity_mph} mph
           </Text>
@@ -148,18 +150,23 @@ const styles = StyleSheet.create({
   toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   toggleLabel: { fontSize: 10, fontWeight: '700' },
   resultRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+    alignSelf: 'flex-start',
+    maxWidth: 280,
     borderWidth: 1,
     borderRadius: 6,
     backgroundColor: Colors.bgInput,
     paddingHorizontal: 8,
     paddingVertical: 4,
+    gap: 2,
+  },
+  resultHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   resultDot: { width: 8, height: 8, borderRadius: 4 },
   resultLabel: { fontSize: 10, fontWeight: '900', letterSpacing: 0.4 },
-  resultMeta: { flex: 1, fontSize: 10, color: Colors.textSecondary },
+  resultMeta: { fontSize: 10, color: Colors.textSecondary },
   inactiveBox: { backgroundColor: Colors.bgInput, borderRadius: 8, height: 44, alignItems: 'center', justifyContent: 'center' },
   inactiveText: { color: Colors.textMuted, fontSize: 12 },
   gameOverBanner: { backgroundColor: 'rgba(239, 68, 68, 0.15)', borderRadius: 8, borderWidth: 1, borderColor: '#EF4444', height: 36, alignItems: 'center', justifyContent: 'center' },

@@ -216,6 +216,14 @@ export function BaseballSimScreen() {
   const strikeZoneTop =
     zoneTopPx - STRIKE_ZONE_GRID_CONTENT_TOP * strikeZoneScaleY;
 
+  // Place the pitch selector beside the strike zone when the viewport leaves
+  // enough room; otherwise keep the bottom footer as the narrow-screen fallback.
+  const strikeZoneRight = screenWidth / 2 + scaledStrikeZoneWidth / 2;
+  const sidePitchSelectorWidth = Math.min(260, screenWidth - strikeZoneRight - 24);
+  const showSidePitchSelector =
+    Boolean(currentPitcher) && sidePitchSelectorWidth >= 180;
+  const sidePitchSelectorTop = Math.max(12, strikeZoneTop - 12);
+
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.bgDeep} />
@@ -278,8 +286,8 @@ export function BaseballSimScreen() {
           <View style={styles.bottomPad} />
         </ScrollView>
 
-        {/* Pitch Selector — pinned to the bottom of the screen */}
-        {currentPitcher && (
+        {/* Pitch Selector — bottom fallback for narrow screens */}
+        {currentPitcher && !showSidePitchSelector && (
           <View style={styles.pitchFooter}>
             <PitchSelectorWidget
               pitcher={currentPitcher}
@@ -328,6 +336,31 @@ export function BaseballSimScreen() {
               />
             </View>
           </View>
+        </View>
+      )}
+
+      {/* Pitch Selector — stacked vertically beside the strike zone */}
+      {currentPitcher && showSidePitchSelector && (
+        <View
+          style={[
+            styles.pitchSelectorSide,
+            {
+              top: sidePitchSelectorTop,
+              left: strikeZoneRight + 12,
+              width: sidePitchSelectorWidth,
+            },
+          ]}
+        >
+          <PitchSelectorWidget
+            layout="vertical"
+            pitcher={currentPitcher}
+            selectedPitchIntent={selectedPitchIntent}
+            recommendedPitch={gameState?.strategy_intent?.recommended_pitch}
+            strategyIntent={gameState?.strategy_intent}
+            onSelectPitchIntent={handleSelectPitchIntent}
+            onThrowPitch={throwPitch}
+            isActionPending={isPitching || loadingState === 'loading'}
+          />
         </View>
       )}
 
@@ -386,6 +419,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   pitchFooter: { paddingHorizontal: 12, paddingBottom: 8 },
+  pitchSelectorSide: {
+    position: 'absolute',
+    zIndex: 10,
+  },
   reactionOverlay: {
     position: 'absolute',
     left: 0,

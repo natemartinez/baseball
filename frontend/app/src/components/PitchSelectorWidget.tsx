@@ -29,6 +29,8 @@ interface PitchSelectorWidgetProps {
   onSelectPitchIntent: (name: string) => void;
   onThrowPitch: () => void;
   isActionPending?: boolean;
+  /** Horizontal footer layout (default) or a vertical side-panel stack. */
+  layout?: 'horizontal' | 'vertical';
 }
 
 /**
@@ -49,34 +51,46 @@ export function PitchSelectorWidget({
   onSelectPitchIntent,
   onThrowPitch,
   isActionPending = false,
+  layout = 'horizontal',
 }: PitchSelectorWidgetProps) {
+  const isVertical = layout === 'vertical';
+
+  const chips = pitcher.arsenal.map((item) => (
+    <ArsenalChip
+      key={item.name}
+      item={item}
+      layout={layout}
+      isSelected={item.name === selectedPitchIntent}
+      isRecommended={item.name === recommendedPitch}
+      disabled={isActionPending}
+      onSelect={() => onSelectPitchIntent(item.name)}
+      onThrow={() => {
+        onSelectPitchIntent(item.name);
+        onThrowPitch();
+      }}
+    />
+  ));
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, isVertical && styles.containerVertical]}>
       <View style={styles.headerRow}>
         <Text style={styles.sectionLabel}>PITCH SELECTOR</Text>
-        <Text style={styles.headerHint}>TAP TO SELECT • HOLD TO THROW</Text>
+        <Text style={styles.headerHint}>
+          {isVertical ? 'TAP • HOLD' : 'TAP TO SELECT • HOLD TO THROW'}
+        </Text>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.arsenalRow}
-      >
-        {pitcher.arsenal.map((item) => (
-          <ArsenalChip
-            key={item.name}
-            item={item}
-            isSelected={item.name === selectedPitchIntent}
-            isRecommended={item.name === recommendedPitch}
-            disabled={isActionPending}
-            onSelect={() => onSelectPitchIntent(item.name)}
-            onThrow={() => {
-              onSelectPitchIntent(item.name);
-              onThrowPitch();
-            }}
-          />
-        ))}
-      </ScrollView>
+      {isVertical ? (
+        <View style={styles.arsenalColumn}>{chips}</View>
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.arsenalRow}
+        >
+          {chips}
+        </ScrollView>
+      )}
 
       {/* Strategy summary: situation, recommended target, pitch percentages */}
       {strategyIntent && (
@@ -212,6 +226,7 @@ function StrategySummaryStrip({
 
 function ArsenalChip({
   item,
+  layout = 'horizontal',
   isSelected,
   isRecommended,
   disabled = false,
@@ -219,6 +234,7 @@ function ArsenalChip({
   onThrow,
 }: {
   item: PitchArsenalItem;
+  layout?: 'horizontal' | 'vertical';
   isSelected: boolean;
   isRecommended?: boolean;
   disabled?: boolean;
@@ -269,6 +285,7 @@ function ArsenalChip({
       activeOpacity={0.85}
       style={[
         styles.arsenalChip,
+        layout === 'vertical' && styles.arsenalChipVertical,
         disabled && styles.arsenalChipDisabled,
         {
           backgroundColor: 'transparent',
@@ -337,6 +354,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.borderPrimary,
   },
+  containerVertical: {
+    padding: 10,
+    gap: 8,
+    backgroundColor: 'rgba(10, 18, 28, 0.92)',
+  },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -360,6 +382,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 2,
   },
+  arsenalColumn: {
+    gap: 6,
+  },
   arsenalChip: {
     position: 'relative',
     overflow: 'hidden',
@@ -370,6 +395,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minWidth: 132,
     gap: 2,
+  },
+  arsenalChipVertical: {
+    width: '100%',
+    minWidth: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   arsenalChipDisabled: { opacity: 0.45 },
   holdFill: {
