@@ -5,7 +5,7 @@ Provides strict contract parity with React Native Expo client and Android client
 
 import os
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, request
 from typing import Dict, Any
 
 from backend.database.db import get_team_roster_players
@@ -59,7 +59,13 @@ def get_or_create_engine() -> GameEngine:
 
 @api_bp.route('/')
 def index():
-    return render_template('index.html', teams=team_names)
+    """API-only root; the client UI is served separately by Expo."""
+    return jsonify({
+        'status': 'ok',
+        'service': 'baseball-simulation-api',
+        'message': 'REST API only. Start the Expo client for the UI.',
+        'health': '/api/health',
+    })
 
 
 @api_bp.route('/api/health')

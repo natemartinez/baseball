@@ -30,6 +30,16 @@ def test_statcast_health():
     assert data.get('status') == 'ok'
 
 
+def test_root_is_api_only():
+    """The backend root no longer serves the legacy HTML page."""
+    client = get_test_client()
+    res = client.get('/')
+    assert res.status_code == 200
+    assert res.is_json
+    assert 'text/html' not in res.content_type
+    assert res.get_json()['service'] == 'baseball-simulation-api'
+
+
 def test_statcast_initial_state():
     """2. Initial State Endpoint."""
     client = get_test_client()
