@@ -1,7 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import type { MutableRefObject } from 'react';
 import * as THREE from 'three';
 
-import type { ActivePitchData, ProjectedPlatePosition } from './types';
+import type {
+  ActiveBattedBallData,
+  ActivePitchData,
+  GameCameraMode,
+  ProjectedPlatePosition,
+} from './types';
+import type { SwingContactReport } from '../../types/api';
+import type { ControlMode, PitchPhase } from '../../store/gameStore';
+import { BattedBallVisualizer } from './BattedBallVisualizer';
+import { BattingLayer } from './BattingLayer';
+import { FielderLayer } from './FielderLayer';
+import { GameCameraDirector } from './GameCameraDirector';
 import { PitchVisualizer } from './PitchVisualizer';
 import { useThree } from './useThree';
 import {
@@ -103,21 +115,44 @@ export function FieldScene({
   onPlateProjected,
   activePitch,
   onPitchComplete,
+  activeBattedBall,
+  onBattedBallComplete,
+  cameraMode = 'PITCH',
+  controlMode = 'PITCHING',
+  pitchPhase = 'IDLE',
+  battingInputEnabled = false,
+  battingChargeRef,
+  onBattingContact,
+  onBattingPitchArrival,
 }: {
   onPlateProjected?: (p: ProjectedPlatePosition) => void;
   activePitch?: ActivePitchData | null;
   onPitchComplete?: () => void;
+  activeBattedBall?: ActiveBattedBallData | null;
+  onBattedBallComplete?: () => void;
+  cameraMode?: GameCameraMode;
+  controlMode?: ControlMode;
+  pitchPhase?: PitchPhase;
+  battingInputEnabled?: boolean;
+  battingChargeRef?: MutableRefObject<number>;
+  onBattingContact?: (contact: SwingContactReport) => void;
+  onBattingPitchArrival?: (swingAttempted: boolean) => void;
 }) {
+  const fallbackChargeRef = useRef(0);
+  const chargeRef = battingChargeRef ?? fallbackChargeRef;
+  const isBatting = controlMode === 'BATTING';
+
   return (
     <>
+      <GameCameraDirector mode={cameraMode} />
       <color attach="background" args={[BACKGROUND_COLOR]} />
 
       <ambientLight intensity={0.7} />
       <directionalLight position={[30, 60, 20]} intensity={1.2} castShadow={false} />
 
       {/* Outfield turf */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -150]}>
-        <planeGeometry args={[500, 500]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -300]}>
+        <planeGeometry args={[800, 800]} />
         <meshStandardMaterial color={GRASS_COLOR} roughness={0.9} metalness={0.1} />
       </mesh>
 
@@ -193,19 +228,42 @@ export function FieldScene({
         <meshStandardMaterial color={BASE_COLOR} roughness={0.5} />
       </mesh>
 
-      {activePitch && (
-        <PitchVisualizer
-          key={activePitch.id}
-          pitchId={activePitch.id}
-          release={activePitch.release}
-          plate={activePitch.plate}
-          pfx={activePitch.pfx}
-          flightTime={activePitch.flightTime}
-          onComplete={onPitchComplete ?? NOOP}
+      <FielderLayer />
+
+      {isBatting ? (
+        <BattingLayer
+          activePitch={activePitch ?? null}
+          pitchPhase={pitchPhase}
+          inputEnabled={battingInputEnabled}
+          chargeRef={chargeRef}
+          onContact={onBattingContact ?? NOOP}
+          onPitchArrival={onBattingPitchArrival ?? NOOP}
+        />
+      ) : (
+        activePitch && (
+          <PitchVisualizer
+            key={activePitch.id}
+            pitchId={activePitch.id}
+            release={activePitch.release}
+            plate={activePitch.plate}
+            pfx={activePitch.pfx}
+            flightTime={activePitch.flightTime}
+            onComplete={onPitchComplete ?? NOOP}
+          />
+        )
+      )}
+
+      {activeBattedBall && (
+        <BattedBallVisualizer
+          key={activeBattedBall.id}
+          data={activeBattedBall}
+          onComplete={onBattedBallComplete ?? NOOP}
         />
       )}
 
-      <PlateProjector onProject={onPlateProjected} />
+      {cameraMode === 'PITCH' && (
+        <PlateProjector onProject={onPlateProjected} />
+      )}
     </>
   );
 }

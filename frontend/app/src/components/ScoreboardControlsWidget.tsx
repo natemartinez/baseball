@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Switch, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import type {
   GameState,
   PitchResultType,
@@ -8,19 +8,21 @@ import type {
 } from '../types/api';
 import { ScorebugWidget } from './ScorebugWidget';
 import { Colors } from '../theme/colors';
+import type { ControlMode } from '../store/gameStore';
 
 interface ScoreboardControlsWidgetProps {
   gameState: GameState | null;
   lineups?: TeamLineup[];
   latestPitch?: ResolvedPitchDetails | null;
-  isMockMode: boolean;
   onOpenSettings?: () => void;
-  onToggleMock: (value: boolean) => void;
+  activeSeed?: number | null;
+  controlMode?: ControlMode;
+  onOpenBattingDrill?: () => void;
 }
 
 /**
  * Core UI Component 3: Scoreboard & Game Controls
- * Stadium ticker, settings, and the Mock/Live toggle.
+ * Stadium ticker and settings.
  *
  * Ported from ScoreboardControlsWidget.kt.
  */
@@ -28,9 +30,10 @@ export function ScoreboardControlsWidget({
   gameState,
   lineups = [],
   latestPitch,
-  isMockMode,
   onOpenSettings,
-  onToggleMock,
+  activeSeed = null,
+  controlMode,
+  onOpenBattingDrill,
 }: ScoreboardControlsWidgetProps) {
   const gameOver = gameState?.game_over ?? false;
   const resultColor = latestPitch
@@ -39,7 +42,7 @@ export function ScoreboardControlsWidget({
 
   return (
     <View style={styles.container}>
-      {/* Top row: settings + mock toggle */}
+      {/* Top row: settings and mode chips */}
       <View style={styles.headerRow}>
         <View style={styles.headerActions}>
           {onOpenSettings && (
@@ -52,17 +55,24 @@ export function ScoreboardControlsWidget({
               <Text style={styles.settingsBtnText}>⚙️ SETTINGS</Text>
             </TouchableOpacity>
           )}
-          <View style={styles.toggleRow}>
-            <Text style={[styles.toggleLabel, { color: isMockMode ? Colors.greenLight : '#FFB74D' }]}>
-              {isMockMode ? 'MOCK ENGINE' : 'LIVE FLASK API'}
-            </Text>
-            <Switch
-              value={isMockMode}
-              onValueChange={onToggleMock}
-              trackColor={{ false: '#E65100', true: '#1B5E20' }}
-              thumbColor={isMockMode ? Colors.green : '#FF9800'}
-            />
-          </View>
+          {controlMode === 'BATTING' && (
+            <TouchableOpacity
+              style={styles.battingChip}
+              onPress={onOpenBattingDrill}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.battingChipText} numberOfLines={1}>
+                🏏 BATTING
+              </Text>
+            </TouchableOpacity>
+          )}
+          {activeSeed !== null && (
+            <View style={styles.seedChip}>
+              <Text style={styles.seedChipText} numberOfLines={1}>
+                🌱 SEED {activeSeed}
+              </Text>
+            </View>
+          )}
         </View>
       </View>
 
@@ -147,8 +157,25 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   settingsBtnText: { fontSize: 9, fontWeight: '800', color: Colors.textPrimary, letterSpacing: 0.5 },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  toggleLabel: { fontSize: 10, fontWeight: '700' },
+  seedChip: {
+    maxWidth: 150,
+    backgroundColor: 'rgba(6, 182, 212, 0.15)',
+    borderWidth: 1,
+    borderColor: '#06B6D4',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  seedChipText: { fontSize: 9, fontWeight: '800', color: '#67E8F9' },
+  battingChip: {
+    backgroundColor: 'rgba(255, 179, 0, 0.16)',
+    borderWidth: 1,
+    borderColor: '#FFB300',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+  },
+  battingChipText: { fontSize: 9, fontWeight: '900', color: '#FFD54F' },
   resultRow: {
     alignSelf: 'flex-start',
     maxWidth: 280,

@@ -1,5 +1,6 @@
 import type {
   BatterDecision,
+  BattingDrillEntry,
   GameState,
   InitialStateResponse,
   PitchDetails,
@@ -11,7 +12,10 @@ import type {
   StartGameRequest,
   SwapLineupRequest,
   SwapRotationRequest,
+  SwingContactReport,
   ApiErrorResponse,
+  TeamsResponse,
+  TeamRosterResponse,
 } from '../types/api';
 import { BaseballApiError } from '../types/api';
 import type { Gameday2DPitchPacket } from '../types/gameday';
@@ -31,15 +35,16 @@ import {
 import type { IGameService } from './IGameService';
 
 /**
- * HTTP Game Service — calls the live server.js Node backend.
+ * HTTP Game Service — calls the authoritative Python Flask API.
  * Mirrors Kotlin HttpGameService / Retrofit BaseballApi.
  */
 export class HttpGameService implements IGameService {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
+    const envUrl = process.env['EXPO_PUBLIC_API_URL'] || process.env['API_BASE_URL'];
     const defaultUrl = typeof window !== 'undefined' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
-    this.baseUrl = (baseUrl || defaultUrl).replace(/\/$/, '');
+    this.baseUrl = (baseUrl || envUrl || defaultUrl).replace(/\/$/, '');
   }
 
   getBaseUrl(): string {
@@ -108,6 +113,15 @@ export class HttpGameService implements IGameService {
     return res;
   }
 
+  async getTeams(): Promise<TeamsResponse> {
+    return this.get<TeamsResponse>('api/teams');
+  }
+
+  async getTeamRoster(teamIdOrName: number | string, season: number = 2026): Promise<TeamRosterResponse> {
+    const param = typeof teamIdOrName === 'number' ? `team_id=${teamIdOrName}` : `team_name=${encodeURIComponent(teamIdOrName)}`;
+    return this.get<TeamRosterResponse>(`api/rosters?${param}&season=${season}`);
+  }
+
   async startGame(
     homeTeamId: number = 1,
     awayTeamId: number = 2,
@@ -144,13 +158,62 @@ export class HttpGameService implements IGameService {
     return res;
   }
 
+  async startPractice(): Promise<InitialStateResponse> {
+    const res = await this.post<InitialStateResponse>('api/practice/start', {});
+    this.ensureStrategyIntent(res.game ?? undefined);
+    return res;
+  }
+
+  async practiceThrowPitch(entry: BattingDrillEntry): Promise<PitchThrowResponse> {
+    const res = await this.post<PitchThrowResponse>('api/practice/pitch/throw', {
+      pitch_type: entry.pitchName,
+      target_zone: entry.targetZone,
+      target_x: entry.targetX,
+      target_z: entry.targetZ,
+    });
+    this.ensureStrategyIntent(res.game_state);
+    this.ensureGamedayPacket(res);
+    return res;
+  }
+
+  async practiceResolvePitch(options?: {
+    batterDecision?: BatterDecision;
+    batterApproach?: string;
+    contact?: SwingContactReport;
+  }): Promise<PitchResolveResponse> {
+    const body: ResolvePitchRequest = {};
+    if (options?.batterDecision) body.batter_decision = options.batterDecision;
+    if (options?.batterApproach) body.batter_approach = options.batterApproach;
+    if (options?.contact) body.contact = options.contact;
+    const res = await this.post<PitchResolveResponse>(
+      'api/practice/pitch/resolve',
+      body,
+    );
+    this.ensureStrategyIntent(res.game_state);
+    if (res.pitch_details) {
+      this.ensureGamedayPacket({
+        pitch_details: res.pitch_details,
+        game_state: res.game_state,
+      });
+    }
+    return res;
+  }
+
+  async endPractice(): Promise<InitialStateResponse> {
+    const res = await this.post<InitialStateResponse>('api/practice/end', {});
+    this.ensureStrategyIntent(res.game ?? undefined);
+    return res;
+  }
+
   async resolvePitch(
     batterDecision?: BatterDecision,
     batterApproach?: string,
+    contact?: SwingContactReport,
   ): Promise<PitchResolveResponse> {
     const body: ResolvePitchRequest = {};
     if (batterDecision) body.batter_decision = batterDecision;
     if (batterApproach) body.batter_approach = batterApproach;
+    if (contact) body.contact = contact;
     const res = await this.post<PitchResolveResponse>('api/pitch/resolve', body);
     this.ensureStrategyIntent(res.game_state);
     if (res.pitch_details) {
@@ -298,8 +361,9 @@ export class HttpGameService implements IGameService {
     }
   }
 
-  async reset(): Promise<InitialStateResponse> {
-    return this.post<InitialStateResponse>('api/reset');
+  async reset(seed?: number): Promise<InitialStateResponse> {
+    const body = seed !== undefined ? { seed } : undefined;
+    return this.post<InitialStateResponse>('api/reset', body);
   }
 
   async swapLineup(team: number, pos1: number, pos2: number): Promise<void> {

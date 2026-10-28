@@ -3,6 +3,8 @@ import * as THREE from 'three';
 import { Sphere, Trail } from '@react-three/drei';
 import { useFrame } from '@react-three/fiber';
 
+import { pitchPointAt, type PitchPath } from './pitchPath';
+
 interface PitchVisualizerProps {
   pitchId: string;
   release: [number, number, number];
@@ -15,7 +17,8 @@ interface PitchVisualizerProps {
 /**
  * One-shot data-driven pitch: release ghost, white ball, and red trail.
  * `pfx` is the total break in feet from the virtual aim point; the path is a
- * quadratic break that ends exactly at `plate`.
+ * quadratic break that ends exactly at `plate`. The path math is shared with
+ * the Rapier batting ball via `pitchPath.ts`.
  */
 export function PitchVisualizer({
   pitchId,
@@ -29,6 +32,10 @@ export function PitchVisualizer({
   const elapsedRef = useRef(0);
   const completedRef = useRef(false);
   const releaseVec = useMemo(() => new THREE.Vector3(...release), [release]);
+  const path = useMemo<PitchPath>(
+    () => ({ release, plate, pfx, flightTime }),
+    [release, plate, pfx, flightTime],
+  );
 
   useEffect(() => {
     elapsedRef.current = 0;
@@ -41,30 +48,10 @@ export function PitchVisualizer({
 
     const duration = Math.max(flightTime, 0.01);
     elapsedRef.current = Math.min(elapsedRef.current + delta, duration);
-    const normalizedT = elapsedRef.current / duration;
-    const timeSeconds = elapsedRef.current;
+    const point = pitchPointAt(elapsedRef.current, path);
+    ball.position.set(point.x, point.y, point.z);
 
-    // Horizontal: aim at the pre-break target, then add the quadratic break.
-    const targetX = plate[0] - pfx[0];
-    const horizontalX =
-      THREE.MathUtils.lerp(release[0], targetX, normalizedT) +
-      pfx[0] * normalizedT * normalizedT;
-
-    // Vertical: IVB is measured relative to a gravity-only baseline. The
-    // spinless ball ends at (plate.y - IVB); the IVB lift closes that gap.
-    const baselineY = plate[1] - pfx[1];
-    const gravity = 32.174; // ft/s²
-    const initialVy =
-      (baselineY - release[1] + 0.5 * gravity * duration * duration) / duration;
-    const gravityY =
-      release[1] + initialVy * timeSeconds - 0.5 * gravity * timeSeconds * timeSeconds;
-    const verticalY = gravityY + pfx[1] * normalizedT * normalizedT;
-
-    const depthZ = THREE.MathUtils.lerp(release[2], plate[2], normalizedT);
-
-    ball.position.set(horizontalX, verticalY, depthZ);
-
-    if (normalizedT >= 1) {
+    if (elapsedRef.current >= duration) {
       completedRef.current = true;
       onComplete();
     }

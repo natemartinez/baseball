@@ -19,7 +19,7 @@ frontend/
 │       │                       # PitchSelector, PitchOutcomeFeed, LineupDialog, ...
 │       │   └── debug/          # Gameday Dev Menu, visualizer, calibration, strategy ingest
 │       ├── screens/            # BaseballSimScreen
-│       ├── services/           # GameRepository, HttpGameService, MockGameService, engines
+│       ├── services/           # HttpGameService, game math, strategy and physics helpers
 │       ├── store/              # Zustand game store
 │       ├── theme/              # Design tokens
 │       └── types/              # API + gameday telemetry schemas
@@ -46,10 +46,10 @@ npm install
 npx expo start --web     # http://localhost:8081
 ```
 
-In the app header, open the **Gameday Dev Menu** (`Shift+D` / tap **DEV**) and use
-the **Backend Switcher** to toggle between the live **Python Flask (5050)** backend
-and the in-client **Mock Engine**. On web the HTTP client defaults to
-`http://localhost:5050` (see `app/.env.example`).
+The client always talks to the Flask API; there is no offline mode. On web it
+defaults to `http://localhost:5050` (see `app/.env.example`), so start the Python
+backend before playing. In the **Gameday Dev Menu** (`Shift+D` / tap **DEV**),
+open the **SEEDS** tab to restart a fresh game from a preset or custom seed.
 
 ## Physics & Documentation
 
@@ -67,5 +67,7 @@ The `docs/pitching-logic/` suite documents the simulation:
 - The former standalone Node prototype (`server.js` / `db.js`) and the native
   Android app (`app/`) were removed. The Python backend is authoritative and the
   Expo client is the interactive frontend.
-- The mock seed data moved to `backend/mock/mock_baseball_db.json`; the Python
+- The Python backend is the only simulation engine. The former in-client mock
+  engine and its runtime switch were removed.
+- The seed data lives in `backend/mock/mock_baseball_db.json`; the Python
   seeder (`backend/database/seed.py`) loads it to populate SQLite.
