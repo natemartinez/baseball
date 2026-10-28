@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from backend.engine.gameday_math import (
+from backend.engine.game_engine.gameday_math import (
     FATIGUE_ENABLED,
     ZONE_X_MAX,
     ZONE_X_MIN,
@@ -19,7 +19,7 @@ from backend.engine.gameday_math import (
     is_rulebook_strike,
     sample_truncated_gaussian,
 )
-from backend.engine.pitching_engine import calculations
+from backend.engine.pitching_engine.pitch_execution import calculations
 
 
 def test_command_radius_tiers():

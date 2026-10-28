@@ -17,9 +17,9 @@ import pytest
 
 from backend.api.app import create_app
 from backend.database.db import get_player
-from backend.engine.game_engine import GameEngine
-from backend.engine.orchestration import (
+from backend.engine.game_engine import (
     BatterReactionContext,
+    GameEngine,
     PitchFlowError,
     PitchPhase,
 )
@@ -168,8 +168,8 @@ def test_manual_controller_pauses_then_submits_reaction():
 
 
 def test_orchestrator_does_not_import_game_engine():
-    source = (ROOT_DIR / 'backend' / 'engine' / 'orchestration' /
-              'pitch_orchestrator.py').read_text()
+    source = (ROOT_DIR / 'backend' / 'engine' / 'game_engine' /
+              'orchestration' / 'pitch_orchestrator.py').read_text()
     assert 'game_engine' not in source
 
 

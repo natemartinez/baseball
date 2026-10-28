@@ -8,12 +8,12 @@ while a future user-controlled adapter can return ``None`` to pause the flow at
 """
 
 import random
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, Optional, Protocol, Sequence, Tuple
 
 try:
-    from ..batting_engine.batter_strategy import BatterStrategy
-    from ..batting_engine.batters import InGameBatterRatings
+    from ...batting_engine.batter_strategy import BatterStrategy
+    from ...batting_engine.batters import InGameBatterRatings
 except ImportError:  # direct script execution from backend/engine
     from batting_engine.batter_strategy import BatterStrategy
     from batting_engine.batters import InGameBatterRatings
@@ -39,6 +39,10 @@ class BatterReactionContext:
     is_strike: bool
     ratings: InGameBatterRatings
     approach: str = 'AUTO'
+    pitch_sequence: Tuple[Dict[str, Any], ...] = ()
+    pitcher_ratings: Dict[str, Any] = field(default_factory=dict)
+    score_diff: int = 0
+    inning: int = 1
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -55,6 +59,10 @@ class BatterReactionContext:
             'is_strike': self.is_strike,
             'ratings': self.ratings.to_dict(),
             'approach': self.approach,
+            'pitch_sequence': [dict(pitch) for pitch in self.pitch_sequence],
+            'pitcher_ratings': dict(self.pitcher_ratings),
+            'score_diff': self.score_diff,
+            'inning': self.inning,
         }
 
 
@@ -66,6 +74,7 @@ class BatterReaction:
     approach: str = 'AUTO'
     source: str = 'AI'
     swing_probability: Optional[float] = None
+    decision_factors: Optional[Dict[str, Any]] = None
 
     @classmethod
     def explicit(cls, decision: str, approach: str = 'AUTO') -> 'BatterReaction':
@@ -100,20 +109,33 @@ class AIBatterController:
         balls: int,
         strikes: int,
         approach: str = 'AUTO',
+        pitch_sequence: Optional[Sequence[Dict[str, Any]]] = None,
+        outs: int = 0,
+        runners: Sequence[bool] = (False, False, False),
+        score_diff: int = 0,
+        inning: int = 1,
+        pitcher_ratings: Optional[Dict[str, Any]] = None,
     ) -> BatterReaction:
         strategy = BatterStrategy(ratings, rng=self.rng)
-        will_swing, probability = strategy.decide_swing(
+        evaluation = strategy.evaluate_swing(
             delivery,
             actual_zone_name=actual_zone_name,
             balls=balls,
             strikes=strikes,
             approach_mode=approach,
+            pitch_sequence=pitch_sequence,
+            outs=outs,
+            runners=runners,
+            score_diff=score_diff,
+            inning=inning,
+            pitcher_ratings=pitcher_ratings,
         )
         return BatterReaction(
-            decision='SWING' if will_swing else 'TAKE',
+            decision='SWING' if evaluation.will_swing else 'TAKE',
             approach=approach,
             source='AI',
-            swing_probability=probability,
+            swing_probability=round(evaluation.probability, 3),
+            decision_factors=evaluation.to_dict(),
         )
 
     def choose_reaction(
@@ -126,4 +148,10 @@ class AIBatterController:
             balls=context.balls,
             strikes=context.strikes,
             approach=context.approach,
+            pitch_sequence=context.pitch_sequence,
+            outs=context.outs,
+            runners=context.runners,
+            score_diff=context.score_diff,
+            inning=context.inning,
+            pitcher_ratings=context.pitcher_ratings,
         )

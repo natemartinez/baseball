@@ -263,7 +263,9 @@ class BatterInstanceManager:
         # Small platoon adjustment when the batter has the opposite hand.
         platoon = 2.0 if batter_side != pitcher_side else 0.0
         effective_contact = contact + platoon
-        effective_discipline = vision + (1.0 if strikes == 2 else 0.0)
+        # Count leverage (including two-strike protection) lives in the swing
+        # model, so discipline is the batter's raw vision here.
+        effective_discipline = vision
 
         raw_zones = None
         if isinstance(batter, dict):

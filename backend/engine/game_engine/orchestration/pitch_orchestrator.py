@@ -11,16 +11,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
-try:
-    from ..batting_engine.batters import BatterInstanceManager, InGameBatterRatings
-    from ..batting_engine.engine import BatterActivity, BattingEngine
-    from ..gameday_math import nearest_zone_name
-    from ..pitching_engine import PitchingEngine
-except ImportError:  # direct script execution from backend/engine
-    from batting_engine.batters import BatterInstanceManager, InGameBatterRatings
-    from batting_engine.engine import BatterActivity, BattingEngine
-    from gameday_math import nearest_zone_name
-    from pitching_engine import PitchingEngine
+from ...batting_engine.batters import BatterInstanceManager, InGameBatterRatings
+from ...batting_engine.engine import BatterActivity, BattingEngine
+from ...pitching_engine import PitchingEngine
+from ..gameday_math import nearest_zone_name
 
 from .controllers import (
     AIBatterController,
@@ -65,6 +59,10 @@ class PendingPitch:
     zone_category: str
     is_strike: bool
     ratings: InGameBatterRatings
+    pitch_sequence: Tuple[Dict[str, Any], ...]
+    pitcher_ratings: Dict[str, Any]
+    score_diff: int
+    inning: int
 
 
 class PitchFlowOrchestrator:
@@ -116,6 +114,10 @@ class PitchFlowOrchestrator:
         pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
+        practice: bool = False,
+        pitch_sequence: Optional[list] = None,
+        score_diff: int = 0,
+        inning: int = 1,
     ) -> Dict[str, Any]:
         if self.has_pending:
             raise PitchFlowError(
@@ -143,6 +145,7 @@ class PitchFlowOrchestrator:
             target_zone=target_zone,
             custom_target=custom_target,
             situation=situation,
+            practice=practice,
         )
 
         is_strike = bool(delivery['is_strike'])
@@ -172,6 +175,10 @@ class PitchFlowOrchestrator:
             zone_category=str(delivery.get('realized_zone_cat', 'SHADOW')).upper(),
             is_strike=is_strike,
             ratings=ratings,
+            pitch_sequence=tuple(dict(pitch) for pitch in (pitch_sequence or [])),
+            pitcher_ratings=dict(delivery.get('adjusted_ratings') or {}),
+            score_diff=int(score_diff or 0),
+            inning=int(inning or 1),
         )
         self._reaction = None
         self._activity = None
@@ -204,6 +211,10 @@ class PitchFlowOrchestrator:
             is_strike=pending.is_strike,
             ratings=pending.ratings,
             approach=approach,
+            pitch_sequence=pending.pitch_sequence,
+            pitcher_ratings=pending.pitcher_ratings,
+            score_diff=pending.score_diff,
+            inning=pending.inning,
         )
 
     @staticmethod
@@ -220,6 +231,7 @@ class PitchFlowOrchestrator:
         *,
         batter_decision: Optional[str] = None,
         batter_approach: str = 'AUTO',
+        contact: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         self._require(PitchPhase.THROWN)
         pending = self._pending
@@ -233,7 +245,12 @@ class PitchFlowOrchestrator:
 
         reaction: Optional[BatterReaction]
         context = None
-        if batter_decision is not None:
+        if contact is not None:
+            # A physical contact report is always a player swing.
+            decision = 'SWING'
+            self._validate(decision, approach)
+            reaction = BatterReaction.explicit(decision, approach)
+        elif batter_decision is not None:
             decision = str(batter_decision).upper()
             self._validate(decision, approach)
             reaction = BatterReaction.explicit(decision, approach)
@@ -261,7 +278,7 @@ class PitchFlowOrchestrator:
             self._phase = PitchPhase.THROWN
             raise
         self._phase = PitchPhase.REACTION_LOCKED
-        return self._resolve_contact(pending, reaction)
+        return self._resolve_contact(pending, reaction, contact=contact)
 
     def submit_reaction(
         self, decision: str, approach: str = 'AUTO'
@@ -279,7 +296,10 @@ class PitchFlowOrchestrator:
         return self._resolve_contact(pending, reaction)
 
     def _resolve_contact(
-        self, pending: PendingPitch, reaction: BatterReaction
+        self,
+        pending: PendingPitch,
+        reaction: BatterReaction,
+        contact: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         try:
             batting_engine = BattingEngine(
@@ -295,6 +315,7 @@ class PitchFlowOrchestrator:
                 batter_approach=reaction.approach,
                 pitcher_hand=pending.pitcher_hand,
                 reaction=reaction,
+                contact=contact,
             )
         except Exception:
             self.reset()

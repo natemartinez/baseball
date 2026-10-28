@@ -6,7 +6,7 @@ batted-ball contact resolution.
 """
 
 from .engine import BattingEngine, BatterActivity
-from .batter_strategy import BatterStrategy
+from .batter_strategy import BatterStrategy, SwingEvaluation
 from .batters import (
     BatterInstanceManager,
     InGameBatterRatings,
@@ -22,6 +22,7 @@ __all__ = [
     'BattingEngine',
     'BatterActivity',
     'BatterStrategy',
+    'SwingEvaluation',
     'BatterInstanceManager',
     'InGameBatterRatings',
     'ContactResolver',

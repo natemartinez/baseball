@@ -8,32 +8,17 @@ import math
 import random
 from typing import Dict, Tuple, Any
 
-try:
-    from backend.engine.gameday_math import (
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        calculate_execution_sigma,
-        get_max_error_radius_inches,
-        sample_truncated_gaussian,
-        calculate_radial_miss_inches,
-        determine_situation_category,
-        ZONE_CENTERS,
-    )
-except ModuleNotFoundError as error:
-    if error.name != 'backend':
-        raise
-    from gameday_math import (
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        calculate_execution_sigma,
-        get_max_error_radius_inches,
-        sample_truncated_gaussian,
-        calculate_radial_miss_inches,
-        determine_situation_category,
-        ZONE_CENTERS,
-    )
+from ...game_engine.gameday_math import (
+    is_rulebook_strike,
+    classify_gameday_zone,
+    get_zone_nominal_target,
+    calculate_execution_sigma,
+    get_max_error_radius_inches,
+    sample_truncated_gaussian,
+    calculate_radial_miss_inches,
+    determine_situation_category,
+    ZONE_CENTERS,
+)
 
 
 def calculate_pitch_delivery(

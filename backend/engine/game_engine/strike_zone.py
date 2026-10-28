@@ -5,24 +5,13 @@ Provides 13-zone labels, continuous aim sampling inside those zones,
 """
 
 from typing import Dict, Tuple, Optional
-try:
-    from backend.engine.gameday_math import (
-        ZONE_CENTERS,
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        ZONE_X_MIN, ZONE_X_MAX, ZONE_Z_BOT, ZONE_Z_TOP
-    )
-except ModuleNotFoundError as error:
-    if error.name != 'backend':
-        raise
-    from gameday_math import (
-        ZONE_CENTERS,
-        is_rulebook_strike,
-        classify_gameday_zone,
-        get_zone_nominal_target,
-        ZONE_X_MIN, ZONE_X_MAX, ZONE_Z_BOT, ZONE_Z_TOP
-    )
+from .gameday_math import (
+    ZONE_CENTERS,
+    is_rulebook_strike,
+    classify_gameday_zone,
+    get_zone_nominal_target,
+    ZONE_X_MIN, ZONE_X_MAX, ZONE_Z_BOT, ZONE_Z_TOP
+)
 
 
 class StrikeZone:

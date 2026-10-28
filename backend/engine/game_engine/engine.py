@@ -4,41 +4,26 @@ Implements the full 6-stage simulation pipeline, count state machine,
 truncated spray-cloud delivery resolution, and emits standardized Gameday2DPitchPacket telemetry.
 """
 
+import os
 import random
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 
-try:
-    from backend.engine.gameday_math import determine_situation_category
-    from backend.engine.strike_zone import StrikeZone
-    from backend.engine.batting_engine import (
-        BatterInstanceManager,
-        normalize_traits,
-    )
-    from backend.engine.orchestration import (
-        PitchFlowError,
-        PitchFlowOrchestrator,
-    )
-    from backend.models.player import Player
-except ModuleNotFoundError as error:
-    # Only fall back when the package itself is unavailable (direct script
-    # execution from backend/engine). Never mask a missing symbol or a broken
-    # submodule import.
-    if error.name != 'backend':
-        raise
-    from gameday_math import determine_situation_category
-    from strike_zone import StrikeZone
-    from batting_engine import (
-        BatterInstanceManager,
-        normalize_traits,
-    )
-    from orchestration import (
-        PitchFlowError,
-        PitchFlowOrchestrator,
-    )
-    try:
-        from models.player import Player
-    except ImportError:
-        Player = None
+from .gameday_math import determine_situation_category
+from .strike_zone import StrikeZone
+from backend.engine.batting_engine import (
+    BatterInstanceManager,
+    normalize_traits,
+)
+from .orchestration import (
+    PitchFlowError,
+    PitchFlowOrchestrator,
+)
+from backend.models.player import Player
+
+
+SWING_DECISION_TELEMETRY = os.environ.get(
+    'SWING_DECISION_TELEMETRY', '0'
+).strip().lower() in ('1', 'true', 'on', 'yes')
 
 
 class GameEngine:
@@ -93,6 +78,9 @@ class GameEngine:
         self.pitch_count_away = 0
         self.session_pitch_count = 0
         self.recent_pitches_sequence: List[str] = []
+        # Full pitch history for the current plate appearance. The pending pitch
+        # is appended only after its outcome is known.
+        self.current_at_bat_pitches: List[Dict[str, Any]] = []
 
         self.strike_zone = StrikeZone()
         self.last_command_quality = 'TARGET_EXECUTED'
@@ -102,6 +90,11 @@ class GameEngine:
         )
         # Live per-batter game line: at_bats, hits, rbis, home_runs.
         self._batter_game_stats: Dict[str, Dict[str, int]] = {}
+        # Batting Practice sandbox: the real game is snapshotted and restored.
+        self._practice_active = False
+        self._practice_saved: Optional[Dict[str, Any]] = None
+        self._practice_baseline: Optional[Dict[str, Any]] = None
+        self._practice_pitch_count = 0
 
     def current_batter_obj(self) -> Any:
         lineup = self.away_lineup if self.top_bottom == 'TOP' else self.home_lineup
@@ -118,6 +111,30 @@ class GameEngine:
             self.away_batter_idx = (self.away_batter_idx + 1) % max(1, len(self.away_lineup))
         else:
             self.home_batter_idx = (self.home_batter_idx + 1) % max(1, len(self.home_lineup))
+        self.current_at_bat_pitches = []
+
+    def _batting_score_diff(self) -> int:
+        """Signed run differential for the team currently batting."""
+        if self.top_bottom == 'TOP':
+            return self.score[self.away_name] - self.score[self.home_name]
+        return self.score[self.home_name] - self.score[self.away_name]
+
+    @staticmethod
+    def _count_after_pitch(
+        balls: int, strikes: int, pitch_result: str
+    ) -> Tuple[int, int]:
+        result = str(pitch_result or '').upper()
+        if result == 'BALL':
+            if balls >= 3:
+                return 0, 0
+            return balls + 1, strikes
+        if result in ('CALLED_STRIKE', 'SWINGING_STRIKE'):
+            if strikes >= 2:
+                return 0, 0
+            return balls, strikes + 1
+        if result == 'FOUL':
+            return balls, min(2, strikes + 1)
+        return 0, 0
 
     def _advance_runners_on_hit(self, bases_taken: int, batter_summary: dict) -> int:
         """Advances existing runners and places batter. Returns runs scored."""
@@ -180,6 +197,7 @@ class GameEngine:
         self.strikes = 0
         self.bases = {'first': None, 'second': None, 'third': None}
         self.recent_pitches_sequence = []
+        self.current_at_bat_pitches = []
 
         if self.top_bottom == 'TOP':
             self.top_bottom = 'BOT'
@@ -286,9 +304,12 @@ class GameEngine:
         launch_angle: Optional[float],
         description: str,
         gameday_packet: Dict[str, Any],
+        spray_angle: Optional[float] = None,
+        batted_ball: Optional[Dict[str, Any]] = None,
+        swing_decision: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         radial_miss_in = delivery['radial_miss_in']
-        return {
+        details = {
             'pitch_name': delivery['selected_pitch'],
             'velocity_mph': delivery['velocity_mph'],
             'spin_rpm': delivery['spin_rpm'],
@@ -298,6 +319,8 @@ class GameEngine:
             'pitch_result': pitch_result_type,
             'exit_velocity_mph': exit_velo,
             'launch_angle_deg': launch_angle,
+            'spray_angle_deg': spray_angle,
+            'batted_ball': batted_ball,
             'description': description,
             'strategy_name': delivery['strat_result']['strategy_name'],
             'command_quality': 'PINPOINT' if radial_miss_in <= 2.0 else 'TARGET_EXECUTED' if radial_miss_in <= 4.0 else 'SLIGHT_MISS',
@@ -305,6 +328,9 @@ class GameEngine:
             'adjusted_ratings': delivery.get('adjusted_ratings', {}),
             'gameday_packet': gameday_packet,
         }
+        if SWING_DECISION_TELEMETRY and swing_decision is not None:
+            details['swing_decision'] = swing_decision
+        return details
 
     @property
     def has_pending_pitch(self) -> bool:
@@ -316,12 +342,179 @@ class GameEngine:
         """Current pitch-flow phase (owned by the orchestrator)."""
         return self.orchestrator.phase.value
 
+    # ─── Batting Practice sandbox ─────────────────────────────────────────────
+
+    def _copy_batter_stats(self) -> Dict[str, Dict[str, int]]:
+        return {key: dict(value) for key, value in self._batter_game_stats.items()}
+
+    def _reset_practice_state(self) -> None:
+        """Restores the frozen 0-0 drill state, keeping the practice pitch count."""
+        baseline = self._practice_baseline
+        if baseline is None:
+            return
+        self.inning = baseline['inning']
+        self.top_bottom = baseline['top_bottom']
+        self.outs = baseline['outs']
+        self.balls = baseline['balls']
+        self.strikes = baseline['strikes']
+        self.score = dict(baseline['score'])
+        self.bases = dict(baseline['bases'])
+        self.game_over = baseline['game_over']
+        self.away_batter_idx = baseline['away_batter_idx']
+        self.home_batter_idx = baseline['home_batter_idx']
+        self._batter_game_stats = {
+            key: dict(value) for key, value in baseline['batter_stats'].items()
+        }
+        self.recent_pitches_sequence = []
+        self.current_at_bat_pitches = []
+
+    def start_practice(self) -> Dict[str, Any]:
+        """
+        Snapshots the real game and switches the engine to a repeatable drill:
+        same batter/pitcher, 0-0, empty bases, no outs, frozen score/inning.
+        """
+        if self._practice_active:
+            return self.get_game_state_payload()
+        if self.has_pending_pitch:
+            raise PitchFlowError(
+                'A pitch is already in flight; resolve it before starting practice.'
+            )
+
+        self._practice_saved = {
+            'inning': self.inning,
+            'top_bottom': self.top_bottom,
+            'outs': self.outs,
+            'balls': self.balls,
+            'strikes': self.strikes,
+            'score': dict(self.score),
+            'bases': dict(self.bases),
+            'game_over': self.game_over,
+            'away_batter_idx': self.away_batter_idx,
+            'home_batter_idx': self.home_batter_idx,
+            'pitch_count_home': self.pitch_count_home,
+            'pitch_count_away': self.pitch_count_away,
+            'session_pitch_count': self.session_pitch_count,
+            'recent_pitches_sequence': list(self.recent_pitches_sequence),
+            'current_at_bat_pitches': [dict(pitch) for pitch in self.current_at_bat_pitches],
+            'batter_stats': self._copy_batter_stats(),
+            'last_command_quality': self.last_command_quality,
+        }
+        self._practice_baseline = {
+            'inning': self.inning,
+            'top_bottom': self.top_bottom,
+            'outs': 0,
+            'balls': 0,
+            'strikes': 0,
+            'score': dict(self.score),
+            'bases': {'first': None, 'second': None, 'third': None},
+            'game_over': False,
+            'away_batter_idx': self.away_batter_idx,
+            'home_batter_idx': self.home_batter_idx,
+            'batter_stats': self._copy_batter_stats(),
+            'current_at_bat_pitches': [],
+        }
+        self._practice_active = True
+        self._practice_pitch_count = 0
+        self.pitch_count_home = 0
+        self.pitch_count_away = 0
+        self.session_pitch_count = 0
+        self.orchestrator.reset()
+        self._reset_practice_state()
+        return self.get_game_state_payload()
+
+    def end_practice(self) -> Dict[str, Any]:
+        """Restores the real game snapshot and returns to normal play."""
+        if not self._practice_active:
+            return self.get_game_state_payload()
+
+        saved = self._practice_saved or {}
+        self.inning = saved.get('inning', self.inning)
+        self.top_bottom = saved.get('top_bottom', self.top_bottom)
+        self.outs = saved.get('outs', 0)
+        self.balls = saved.get('balls', 0)
+        self.strikes = saved.get('strikes', 0)
+        self.score = dict(saved.get('score', self.score))
+        self.bases = dict(saved.get('bases', self.bases))
+        self.game_over = bool(saved.get('game_over', False))
+        self.away_batter_idx = saved.get('away_batter_idx', 0)
+        self.home_batter_idx = saved.get('home_batter_idx', 0)
+        self.pitch_count_home = saved.get('pitch_count_home', 0)
+        self.pitch_count_away = saved.get('pitch_count_away', 0)
+        self.session_pitch_count = saved.get('session_pitch_count', 0)
+        self.recent_pitches_sequence = list(saved.get('recent_pitches_sequence', []))
+        self.current_at_bat_pitches = [
+            dict(pitch) for pitch in saved.get('current_at_bat_pitches', [])
+        ]
+        self._batter_game_stats = {
+            key: dict(value) for key, value in saved.get('batter_stats', {}).items()
+        }
+        self.last_command_quality = saved.get('last_command_quality', 'TARGET_EXECUTED')
+
+        self._practice_active = False
+        self._practice_saved = None
+        self._practice_baseline = None
+        self._practice_pitch_count = 0
+        self.orchestrator.reset()
+        return self.get_game_state_payload()
+
+    def practice_throw_pitch(
+        self,
+        pitch_type: str,
+        target_zone: Optional[str] = None,
+        custom_target: Optional[Dict[str, float]] = None,
+    ) -> Dict[str, Any]:
+        if not self._practice_active:
+            return {'status': 'error', 'message': 'Batting practice is not active'}
+        if not pitch_type:
+            return {'status': 'error', 'message': 'Practice pitch type is required'}
+        if not custom_target or 'x' not in custom_target or 'z' not in custom_target:
+            return {
+                'status': 'error',
+                'message': 'Practice pitches require an exact custom target',
+            }
+        self._practice_pitch_count += 1
+        return self.throw_pitch(
+            pitch_type=pitch_type,
+            target_zone=target_zone,
+            custom_target=custom_target,
+            practice=True,
+        )
+
+    def practice_resolve_pitch(
+        self,
+        batter_approach: str = 'AUTO',
+        batter_decision: Optional[str] = None,
+        contact: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        if not self._practice_active:
+            return {'status': 'error', 'message': 'Batting practice is not active'}
+        if batter_decision is None and contact is None:
+            batter_decision = 'TAKE'
+
+        outcome = self.resolve_pitch(
+            batter_approach=batter_approach,
+            batter_decision=batter_decision,
+            contact=contact,
+            practice=True,
+        )
+        if outcome.get('status') != 'success':
+            return outcome
+
+        # The activity was applied to the practice fields for result building;
+        # reset them so the next drill pitch starts from the same 0-0 snapshot.
+        self._reset_practice_state()
+        game_state = self.get_game_state_payload()
+        outcome['game_state'] = game_state
+        outcome['game'] = game_state
+        return outcome
+
     def throw_pitch(
         self,
         pitch_intent: Optional[str] = None,
         pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
+        practice: bool = False,
     ) -> Dict[str, Any]:
         """
         Stage 1 — Throw the ball.
@@ -332,6 +525,11 @@ class GameEngine:
         so the client can animate the ball before any outcome lands. Call
         resolve_pitch() to apply the per-ball result.
         """
+        if self._practice_active and not practice:
+            return {
+                'status': 'error',
+                'message': 'Batting practice is active; use the practice endpoints.',
+            }
         if self.game_over:
             return {'status': 'error', 'message': 'Game is over'}
         if self.has_pending_pitch:
@@ -375,6 +573,10 @@ class GameEngine:
                 pitch_type=pitch_type,
                 target_zone=target_zone,
                 custom_target=custom_target,
+                practice=practice,
+                pitch_sequence=[dict(pitch) for pitch in self.current_at_bat_pitches],
+                score_diff=self._batting_score_diff(),
+                inning=self.inning,
             )
         except PitchFlowError as error:
             return {'status': 'error', 'message': str(error)}
@@ -425,6 +627,8 @@ class GameEngine:
         self,
         batter_approach: str = 'AUTO',
         batter_decision: Optional[str] = None,
+        contact: Optional[Dict[str, Any]] = None,
+        practice: bool = False,
     ) -> Dict[str, Any]:
         """
         Stage 2 — Batter activity.
@@ -432,7 +636,15 @@ class GameEngine:
         Delegates the batter reaction and contact resolution to the
         orchestrator, then applies the returned BatterActivity exactly once.
         This is the hook to call once the pitch animation finishes.
+
+        ``contact`` is an optional player-contact report from the Rapier
+        batting layer. When present it overrides the ratings/RNG contact model.
         """
+        if self._practice_active and not practice:
+            return {
+                'status': 'error',
+                'message': 'Batting practice is active; use the practice endpoints.',
+            }
         if not self.has_pending_pitch:
             return {'status': 'error', 'message': 'No pitch in flight to resolve'}
 
@@ -440,6 +652,7 @@ class GameEngine:
             outcome = self.orchestrator.resolve_pitch(
                 batter_decision=batter_decision,
                 batter_approach=batter_approach,
+                contact=contact,
             )
         except PitchFlowError as error:
             return {'status': 'error', 'message': str(error)}
@@ -474,6 +687,20 @@ class GameEngine:
 
     def _finalize_resolved_pitch(self, pending: Any, activity: Any) -> Dict[str, Any]:
         """Applies the activity once and builds the resolved response."""
+        balls_after, strikes_after = self._count_after_pitch(
+            pending.balls, pending.strikes, activity.pitch_result
+        )
+        self.current_at_bat_pitches.append({
+            'pitch_name': pending.delivery.get('selected_pitch', '4-Seam Fastball'),
+            'pitch_category': pending.delivery.get('pitch_category', 'Fastball'),
+            'zone_name': pending.actual_zone_name,
+            'zone_category': pending.zone_category,
+            'is_strike': pending.is_strike,
+            'result': activity.pitch_result,
+            'balls': balls_after,
+            'strikes': strikes_after,
+        })
+
         # 3. GameEngine is the only state machine.
         self._apply_batter_activity(activity, pending.batter)
         self.orchestrator.mark_applied()
@@ -511,6 +738,9 @@ class GameEngine:
             launch_angle=launch_angle,
             description=description,
             gameday_packet=gameday_packet,
+            spray_angle=activity.spray_angle_deg,
+            batted_ball=activity.batted_ball,
+            swing_decision=getattr(activity, 'swing_decision', None),
         )
 
         self.orchestrator.finish()

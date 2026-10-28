@@ -7,7 +7,7 @@ situational multipliers, and normalized pitch selection probabilities.
 import random
 from typing import Dict, Any, Tuple, Optional, List
 
-from .pitch_objects import PITCH_CATEGORIES, PitchArsenal, Pitch
+from ..pitch_execution.pitch_objects import PITCH_CATEGORIES, PitchArsenal, Pitch
 
 
 class PitchStrategy:

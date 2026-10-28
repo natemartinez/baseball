@@ -86,7 +86,7 @@ def test_statcast_multi_pitch_simulation():
             shadow_hits += 1
 
         miss_radii.append(pkt['execution']['radialMissInches'])
-        from backend.engine.gameday_math import get_max_error_radius_inches
+        from backend.engine.game_engine.gameday_math import get_max_error_radius_inches
         max_radius_seen = max(
             max_radius_seen,
             pkt['execution'].get(
