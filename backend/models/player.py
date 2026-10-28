@@ -21,6 +21,10 @@ class Player:
         vitals: Optional[Dict[str, Any]] = None,
         stats: Optional[List[Dict[str, Any]]] = None,
         pitch_arsenal: Optional[List[Dict[str, Any]]] = None,
+        role: Optional[str] = None,
+        batting_order: Optional[int] = None,
+        roster_status: str = "active",
+        season: Optional[int] = None,
     ):
         self.id = id
         self.name = name
@@ -28,6 +32,10 @@ class Player:
         self.field_rating = int(field_rating)
         self.handedness = handedness
         self.position = position
+        self.role = role
+        self.batting_order = batting_order
+        self.roster_status = roster_status
+        self.season = season
 
         # Normalized game engine attributes
         self.ratings: Dict[str, float] = ratings or {}
@@ -106,6 +114,10 @@ class Player:
             vitals=vitals,
             stats=raw.get("stats") if isinstance(raw.get("stats"), list) else [],
             pitch_arsenal=arsenal,
+            role=raw.get("role"),
+            batting_order=raw.get("batting_order"),
+            roster_status=raw.get("roster_status", "active"),
+            season=raw.get("season"),
         )
 
     @classmethod
@@ -123,6 +135,10 @@ class Player:
             "field_rating": self.field_rating,
             "handedness": self.handedness,
             "is_pitcher": self.is_pitcher,
+            "role": self.role,
+            "batting_order": self.batting_order,
+            "roster_status": self.roster_status,
+            "season": self.season,
             "ratings": dict(self.ratings),
             "zones": dict(self.zones),
             "traits": list(self.traits),

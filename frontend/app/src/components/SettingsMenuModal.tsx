@@ -3,6 +3,7 @@ import {
   View,
   Text,
   Modal,
+  Platform,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -43,7 +44,9 @@ export function SettingsMenuModal() {
     toggleTrajectory,
     gamedayLog,
     isPitching,
-    isMockMode,
+    controlMode,
+    battingDrill,
+    setBattingDrillOpen,
   } = useGameStore();
 
   function close() {
@@ -73,12 +76,32 @@ export function SettingsMenuModal() {
       onPress: () => run(() => toggleDevMenu(true)),
     },
     {
+      key: 'batting-practice',
+      icon: '🏏',
+      label: battingDrill?.active ? 'BATTING DRILL' : 'BATTING PRACTICE',
+      description:
+        Platform.OS !== 'web'
+          ? 'Web only'
+          : battingDrill?.active
+            ? 'Pause / edit the current drill playlist'
+            : 'Build a pitch/location playlist for the AI',
+      accent: Colors.gameday.accentCyan,
+      disabled: Platform.OS !== 'web',
+      onPress: () => run(() => setBattingDrillOpen(true)),
+    },
+    {
       key: 'sim-at-bat',
       icon: '⏩',
       label: 'SIM AT-BAT',
-      description: 'Auto-play the current plate appearance',
+      description:
+        controlMode === 'BATTING' || battingDrill?.active
+          ? 'Disabled in Batting Practice'
+          : 'Auto-play the current plate appearance',
       accent: Colors.blue,
-      disabled: isPitching,
+      disabled:
+        isPitching ||
+        controlMode === 'BATTING' ||
+        Boolean(battingDrill?.active),
       pending: isPitching,
       onPress: () => run(() => simAtBat()),
     },
@@ -140,8 +163,8 @@ export function SettingsMenuModal() {
               <Text style={styles.headerIcon}>⚙️</Text>
               <View>
                 <Text style={styles.title}>SETTINGS & CONTROLS</Text>
-                <Text style={[styles.modeLabel, { color: isMockMode ? Colors.greenLight : '#FFB74D' }]}>
-                  {isMockMode ? 'MOCK ENGINE' : 'LIVE FLASK API'}
+                <Text style={[styles.modeLabel, { color: Colors.greenLight }]}>
+                  LIVE FLASK API
                 </Text>
               </View>
             </View>

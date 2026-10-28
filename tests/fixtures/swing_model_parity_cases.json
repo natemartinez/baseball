@@ -1,0 +1,1105 @@
+[
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.549999
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.75645353
+  },
+  {
+    "delivery": {
+      "pitchCategory": "OffSpeed",
+      "velocityMph": 86.0,
+      "horizontalBreakIn": 8.0,
+      "inducedVerticalBreakIn": 12.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 82.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.42449851
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.55222549
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "WASTE",
+      "zoneName": "chase-high",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "PATIENT",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.08196073
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AGGRESSIVE",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.90748727
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "CONTACT",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.30661341
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 3,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.13951389
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 3,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.24061087
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 3,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": [
+        {
+          "pitchCategory": "Breaking",
+          "result": "FOUL"
+        },
+        {
+          "pitchCategory": "Fastball",
+          "result": "BALL"
+        }
+      ]
+    },
+    "expectedProbability": 0.53734698
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.45
+      }
+    },
+    "situation": {
+      "balls": 2,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.50075
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.24,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.72724048
+  },
+  {
+    "delivery": {
+      "pitchCategory": "OffSpeed",
+      "velocityMph": 86.0,
+      "horizontalBreakIn": 8.0,
+      "inducedVerticalBreakIn": 12.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 82.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 2,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        true
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.85404265
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 6,
+      "inning": 7,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.27767978
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 3,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 1,
+      "inning": 8,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.75275003
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "WASTE",
+      "zoneName": "chase-high",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 98.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.18407187
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 0,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": [
+        {
+          "pitchCategory": "Fastball",
+          "result": "BALL"
+        },
+        {
+          "pitchCategory": "Fastball",
+          "result": "CALLED_STRIKE"
+        }
+      ]
+    },
+    "expectedProbability": 0.57215934
+  },
+  {
+    "delivery": {
+      "pitchCategory": "OffSpeed",
+      "velocityMph": 86.0,
+      "horizontalBreakIn": 8.0,
+      "inducedVerticalBreakIn": 12.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 82.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 2,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "CONTACT",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.85895853
+  },
+  {
+    "delivery": {
+      "pitchCategory": "OffSpeed",
+      "velocityMph": 86.0,
+      "horizontalBreakIn": 8.0,
+      "inducedVerticalBreakIn": 12.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 82.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 0,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "PATIENT",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.42205738
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 0,
+      "outs": 2,
+      "runners": [
+        true,
+        true,
+        true
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AGGRESSIVE",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.87026833
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Breaking",
+      "velocityMph": 84.0,
+      "horizontalBreakIn": 10.0,
+      "inducedVerticalBreakIn": 20.0,
+      "zoneCategory": "CHASE",
+      "zoneName": "chase-away",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 94.0
+    },
+    "ratings": {
+      "vision": 45.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.6758285
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "SHADOW",
+      "zoneName": "lower-away",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 95.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 1,
+      "strikes": 1,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.78426001
+  },
+  {
+    "delivery": {
+      "pitchCategory": "OffSpeed",
+      "velocityMph": 86.0,
+      "horizontalBreakIn": 8.0,
+      "inducedVerticalBreakIn": 12.0,
+      "zoneCategory": "WASTE",
+      "zoneName": "chase-high",
+      "isStrike": false,
+      "pitcherEffectiveBreak": 82.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.4,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 2,
+      "strikes": 1,
+      "outs": 1,
+      "runners": [
+        true,
+        false,
+        false
+      ],
+      "scoreDiff": 1,
+      "inning": 8,
+      "approach": "AUTO",
+      "pitchSequence": []
+    },
+    "expectedProbability": 0.12299885
+  },
+  {
+    "delivery": {
+      "pitchCategory": "Fastball",
+      "velocityMph": 93.0,
+      "horizontalBreakIn": 6.0,
+      "inducedVerticalBreakIn": 10.0,
+      "zoneCategory": "HEART",
+      "zoneName": "heart",
+      "isStrike": true,
+      "pitcherEffectiveBreak": 80.0
+    },
+    "ratings": {
+      "vision": 80.0,
+      "hotZones": {
+        "upper-in": 0.4,
+        "upper-middle": 0.4,
+        "upper-away": 0.4,
+        "middle-in": 0.4,
+        "heart": 0.65,
+        "middle-away": 0.4,
+        "lower-in": 0.4,
+        "lower-middle": 0.4,
+        "lower-away": 0.4,
+        "chase-high": 0.4,
+        "chase-low": 0.4,
+        "chase-in": 0.4,
+        "chase-away": 0.4
+      }
+    },
+    "situation": {
+      "balls": 3,
+      "strikes": 2,
+      "outs": 0,
+      "runners": [
+        false,
+        false,
+        false
+      ],
+      "scoreDiff": 0,
+      "inning": 1,
+      "approach": "AUTO",
+      "pitchSequence": [
+        {
+          "pitchCategory": "Breaking",
+          "result": "SWINGING_STRIKE"
+        }
+      ]
+    },
+    "expectedProbability": 0.90893224
+  }
+]

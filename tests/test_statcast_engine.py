@@ -30,6 +30,16 @@ def test_statcast_health():
     assert data.get('status') == 'ok'
 
 
+def test_root_is_api_only():
+    """The backend root no longer serves the legacy HTML page."""
+    client = get_test_client()
+    res = client.get('/')
+    assert res.status_code == 200
+    assert res.is_json
+    assert 'text/html' not in res.content_type
+    assert res.get_json()['service'] == 'baseball-simulation-api'
+
+
 def test_statcast_initial_state():
     """2. Initial State Endpoint."""
     client = get_test_client()
@@ -76,7 +86,7 @@ def test_statcast_multi_pitch_simulation():
             shadow_hits += 1
 
         miss_radii.append(pkt['execution']['radialMissInches'])
-        from backend.engine.gameday_math import get_max_error_radius_inches
+        from backend.engine.game_engine.gameday_math import get_max_error_radius_inches
         max_radius_seen = max(
             max_radius_seen,
             pkt['execution'].get(

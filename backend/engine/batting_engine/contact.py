@@ -3,13 +3,15 @@ Batted-Ball Contact & Collision Resolution.
 
 Given a realized pitch and an in-game batter profile, resolves swing-and-miss,
 fouls, and balls in play. In-play outcomes derive exit velocity, launch angle,
-spray direction, and a result from the existing PitchResultType taxonomy.
+and spray direction from the batter/pitch model, then classify the result from
+the actual landing point against each fielder's baseline reach radius.
 """
 
 import random
 from typing import Any, Dict, Optional
 
 from .batters import InGameBatterRatings
+from .contact_outcome import resolve_contact_outcome
 
 
 class ContactResolver:
@@ -96,7 +98,7 @@ class ContactResolver:
         strikes: int,
         approach_mode: str,
     ) -> float:
-        base = {'Fastball': 0.17, 'Breaking': 0.27, 'OffSpeed': 0.23}.get(
+        base = {'Fastball': 0.21, 'Breaking': 0.31, 'OffSpeed': 0.27}.get(
             pitch_category, 0.20
         )
         contact_adj = (50.0 - self.ratings.effective_contact) * 0.0030
@@ -155,15 +157,15 @@ class ContactResolver:
         slugging = self.ratings.hot_zones.get(actual_zone_name, 0.400)
 
         base_ev = (
-            82.0
-            + self.ratings.power * 0.11
-            + (slugging - 0.400) * 10.0
-            + (velocity - 93.0) * 0.10
+            84.5
+            + self.ratings.power * 0.145
+            + (slugging - 0.400) * 13.0
+            + (velocity - 93.0) * 0.13
         )
-        exit_velocity = round(self.rng.gauss(base_ev, 5.2), 1)
+        exit_velocity = round(self.rng.gauss(base_ev, 6.8), 1)
         exit_velocity = max(45.0, min(122.0, exit_velocity))
 
-        mean_launch = 12.0 + (realized_z - 2.5) * 9.0
+        mean_launch = 21.0 + (realized_z - 2.5) * 9.0
         if pitch_category == 'Breaking':
             mean_launch -= 4.0
         elif pitch_category == 'OffSpeed':
@@ -173,7 +175,7 @@ class ContactResolver:
         if pitch_category == 'Fastball' and realized_z >= 3.0:
             mean_launch += 4.0
         launch_angle = round(self.rng.gauss(mean_launch, 13.0), 1)
-        launch_angle = max(-25.0, min(78.0, launch_angle))
+        launch_angle = max(-10.0, min(78.0, launch_angle))
 
         inside = (
             (self.ratings.batter_side == 'R' and realized_x < 0.0)
@@ -186,130 +188,36 @@ class ContactResolver:
         spray_angle = round(self.rng.gauss(pull_bias, 16.0), 1)
         spray_angle = max(-65.0, min(65.0, spray_angle))
 
-        contact_quality = self._contact_quality(exit_velocity, launch_angle)
-        call = self._classify_outcome(
-            exit_velocity=exit_velocity,
-            launch_angle=launch_angle,
-            spray_angle=spray_angle,
+        # Every fair in-play ball is classified from its actual landing point.
+        # A ball inside any fielder's baseline reach is an out; a ball outside
+        # every radius is a hit. This keeps the visual landing and the call
+        # consistent for both AI and player-controlled contact.
+        outcome = resolve_contact_outcome(
+            exit_velocity,
+            launch_angle,
+            spray_angle,
+            batter_speed=self.ratings.speed,
         )
+        if outcome is None:
+            # Defensive fallback: valid clamped inputs should always resolve.
+            return {
+                'call': 'SINGLE',
+                'description': 'Ball in play.',
+                'is_in_play': True,
+                'exit_velocity_mph': exit_velocity,
+                'launch_angle_deg': launch_angle,
+                'spray_angle_deg': spray_angle,
+                'contact_quality': 'WEAK',
+                'batted_ball': None,
+            }
 
         return {
-            'call': call,
-            'description': self._describe(call, exit_velocity, launch_angle, spray_angle),
-            'is_in_play': True,
-            'exit_velocity_mph': exit_velocity,
-            'launch_angle_deg': launch_angle,
-            'spray_angle_deg': spray_angle,
-            'contact_quality': contact_quality,
+            'call': outcome['call'],
+            'description': outcome['description'],
+            'is_in_play': outcome['is_in_play'],
+            'exit_velocity_mph': outcome['exit_velocity_mph'],
+            'launch_angle_deg': outcome['launch_angle_deg'],
+            'spray_angle_deg': outcome['spray_angle_deg'],
+            'contact_quality': outcome['contact_quality'],
+            'batted_ball': outcome['batted_ball'],
         }
-
-    def _contact_quality(self, exit_velocity: float, launch_angle: float) -> str:
-        if exit_velocity >= 98.0 and 12.0 <= launch_angle <= 34.0:
-            return 'BARREL'
-        if exit_velocity >= 88.0:
-            return 'SOLID'
-        return 'WEAK'
-
-    def _classify_outcome(
-        self,
-        *,
-        exit_velocity: float,
-        launch_angle: float,
-        spray_angle: float,
-    ) -> str:
-        speed = self.ratings.speed
-
-        if (
-            exit_velocity >= 92.0
-            and 16.0 <= launch_angle <= 40.0
-            and abs(spray_angle) <= 48.0
-        ):
-            return 'HOME_RUN'
-
-        if (
-            exit_velocity >= 92.0
-            and 10.0 <= launch_angle <= 30.0
-            and speed >= 78.0
-            and self.rng.random() < 0.10
-        ):
-            return 'TRIPLE'
-
-        if (
-            exit_velocity >= 92.0
-            and 8.0 <= launch_angle <= 32.0
-            and self.rng.random() < 0.50
-        ):
-            return 'DOUBLE'
-        if (
-            exit_velocity >= 86.0
-            and launch_angle >= 22.0
-            and self.rng.random() < 0.30
-        ):
-            return 'DOUBLE'
-        if speed >= 82.0 and launch_angle < 8.0 and self.rng.random() < 0.10:
-            return 'DOUBLE'
-
-        hit_probability = self._hit_probability(exit_velocity, launch_angle, spray_angle)
-        if self.rng.random() < hit_probability:
-            return 'SINGLE'
-        return 'IN_PLAY_OUT'
-
-    def _hit_probability(
-        self,
-        exit_velocity: float,
-        launch_angle: float,
-        spray_angle: float,
-    ) -> float:
-        """Approximate the share of non-extra-base contact that falls for a hit."""
-        if exit_velocity >= 95.0:
-            prob = 0.50
-        elif exit_velocity >= 88.0:
-            prob = 0.36
-        elif exit_velocity >= 80.0:
-            prob = 0.24
-        elif exit_velocity >= 70.0:
-            prob = 0.15
-        else:
-            prob = 0.08
-
-        if launch_angle < 5.0:
-            prob *= 0.72
-        elif launch_angle > 40.0:
-            prob *= 0.15
-        elif 10.0 <= launch_angle <= 30.0:
-            prob *= 1.10
-
-        if abs(spray_angle) > 45.0:
-            prob *= 0.85
-
-        if self.ratings.speed >= 80.0 and launch_angle < 10.0:
-            prob *= 1.15
-
-        return max(0.02, min(0.80, prob))
-
-    def _describe(
-        self,
-        call: str,
-        exit_velocity: float,
-        launch_angle: float,
-        spray_angle: float,
-    ) -> str:
-        field = 'left-center'
-        if spray_angle >= 22.0:
-            field = 'right field'
-        elif spray_angle <= -22.0:
-            field = 'left field'
-
-        if call == 'HOME_RUN':
-            return f'CRUSHED! Home run to {field} ({exit_velocity} MPH, {launch_angle} degrees)!'
-        if call == 'TRIPLE':
-            return f'Triple into the gap at {field} ({exit_velocity} MPH, {launch_angle} degrees)!'
-        if call == 'DOUBLE':
-            return f'Line drive into the gap at {field} ({exit_velocity} MPH, {launch_angle} degrees)!'
-        if call == 'SINGLE':
-            return f'Base hit into {field} ({exit_velocity} MPH, {launch_angle} degrees)!'
-        if launch_angle < 8.0:
-            return f'Ground ball out ({exit_velocity} MPH, {launch_angle} degrees).'
-        if launch_angle > 38.0:
-            return f'High pop fly out ({exit_velocity} MPH, {launch_angle} degrees).'
-        return f'Fly out caught in {field} ({exit_velocity} MPH, {launch_angle} degrees).'

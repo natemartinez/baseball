@@ -5,6 +5,7 @@ import { PerspectiveCamera } from '@react-three/drei';
 
 import { FieldScene } from './gamefield/FieldScene';
 import { FieldScrims } from './gamefield/FieldScrims';
+import { PITCH_SHOT } from './gamefield/cameraShots';
 import type { GameFieldProps } from './gamefield/types';
 import { Colors } from '../theme/colors';
 
@@ -21,7 +22,18 @@ export const GameField = React.memo(function GameField({
   onPlateProjected,
   activePitch,
   onPitchComplete,
+  activeBattedBall,
+  onBattedBallComplete,
+  cameraMode,
+  controlMode,
+  pitchPhase,
+  battingInputEnabled,
+  battingChargeRef,
+  onBattingContact,
+  onBattingPitchArrival,
 }: GameFieldProps) {
+  const mode = cameraMode ?? 'PITCH';
+  const isBatting = controlMode === 'BATTING';
   return (
     <View accessible={false} style={styles.root}>
       <Canvas
@@ -30,17 +42,25 @@ export const GameField = React.memo(function GameField({
       >
         <PerspectiveCamera
           makeDefault
-          position={[0, 4.0, 5.5]}
-          fov={72}
-          onUpdate={(camera) => camera.lookAt(0, 1.5, -60.5)}
+          position={PITCH_SHOT.position}
+          fov={PITCH_SHOT.fov}
         />
         <FieldScene
           onPlateProjected={onPlateProjected}
           activePitch={activePitch}
           onPitchComplete={onPitchComplete}
+          activeBattedBall={activeBattedBall}
+          onBattedBallComplete={onBattedBallComplete}
+          cameraMode={mode}
+          controlMode={controlMode}
+          pitchPhase={pitchPhase}
+          battingInputEnabled={battingInputEnabled}
+          battingChargeRef={battingChargeRef}
+          onBattingContact={onBattingContact}
+          onBattingPitchArrival={onBattingPitchArrival}
         />
       </Canvas>
-      <FieldScrims />
+      <FieldScrims birdseye={mode === 'BIRDSEYE'} batting={isBatting} />
     </View>
   );
 });

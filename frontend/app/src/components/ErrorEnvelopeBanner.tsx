@@ -7,6 +7,7 @@ interface ErrorEnvelopeBannerProps {
   message: string;
   errorEnvelope?: ApiErrorResponse | null;
   onDismiss: () => void;
+  onRetry?: () => void;
 }
 
 /**
@@ -18,6 +19,7 @@ export function ErrorEnvelopeBanner({
   message,
   errorEnvelope,
   onDismiss,
+  onRetry,
 }: ErrorEnvelopeBannerProps) {
   const isApiError = errorEnvelope !== null && errorEnvelope !== undefined;
   const headerText = isApiError ? `API ERROR: ${errorEnvelope.error_code}` : 'SYSTEM ERROR';
@@ -31,14 +33,26 @@ export function ErrorEnvelopeBanner({
           <Text style={styles.timestamp}>Timestamp: {errorEnvelope.timestamp}</Text>
         )}
       </View>
-      <TouchableOpacity
-        onPress={onDismiss}
-        style={styles.dismissBtn}
-        accessibilityLabel="Dismiss error"
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={styles.dismissText}>✕</Text>
-      </TouchableOpacity>
+      <View style={styles.actionsRow}>
+        {onRetry && (
+          <TouchableOpacity
+            onPress={onRetry}
+            style={styles.retryBtn}
+            accessibilityLabel="Retry connection"
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.retryText}>🔄 RETRY</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          onPress={onDismiss}
+          style={styles.dismissBtn}
+          accessibilityLabel="Dismiss error"
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.dismissText}>✕</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -77,6 +91,24 @@ const styles = StyleSheet.create({
     color: '#EF9A9A',
     fontSize: 9,
     marginTop: 2,
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  retryBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  retryText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
   },
   dismissBtn: {
     padding: 4,

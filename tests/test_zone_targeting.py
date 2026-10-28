@@ -5,7 +5,7 @@ import random
 import pytest
 
 from backend.api.app import create_app
-from backend.engine.gameday_math import (
+from backend.engine.game_engine.gameday_math import (
     CHASE_BORDER_FT,
     ZONE_TARGET_BOUNDS,
     classify_gameday_zone,
@@ -14,7 +14,7 @@ from backend.engine.gameday_math import (
     is_rulebook_strike,
     sample_zone_target,
 )
-from backend.engine.pitching_engine.calculations import calculate_pitch_delivery
+from backend.engine.pitching_engine.pitch_execution.calculations import calculate_pitch_delivery
 
 CHASE_ZONES = ("chase-high", "chase-low", "chase-in", "chase-away")
 INNER_ZONES = tuple(name for name in ZONE_TARGET_BOUNDS if name not in CHASE_ZONES)

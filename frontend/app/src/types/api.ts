@@ -75,6 +75,27 @@ export type PitchResultType =
 
 export type BatterDecision = 'TAKE' | 'SWING';
 
+/** One exact pitch + target entry in a Batting Practice drill playlist. */
+export interface BattingDrillEntry {
+  id: string;
+  pitchName: string;
+  targetX: number;
+  targetZ: number;
+  targetZone?: string;
+}
+
+/** A Rapier bat–ball contact report from Batting Practice. */
+export interface SwingContactReport {
+  contacted: boolean;
+  exit_velocity_mph?: number;
+  launch_angle_deg?: number;
+  spray_angle_deg?: number;
+  contact_offset_ft?: number;
+  bat_speed_mph?: number;
+  charge?: number;
+  timing_offset_ms?: number;
+}
+
 export type PitchIntent = 'STRIKE' | 'CHASE' | 'WASTE' | 'CORNER' | 'BALL';
 
 export type CommandQuality =
@@ -227,6 +248,22 @@ export interface GameState {
   strategy_intent?: StrategyIntentDecision;
 }
 
+export type BattedBallSample = [number, number, number];
+
+export interface BattedBallTelemetry {
+  exit_velocity_mph: number;
+  launch_angle_deg: number;
+  spray_angle_deg: number;
+  hang_time_s: number;
+  apex_height_ft: number;
+  distance_ft: number;
+  landing_x_ft: number;
+  landing_y_ft: number;
+  sample_count: number;
+  samples: BattedBallSample[];
+  model_version: string;
+}
+
 export interface PitchDetails {
   pitch_name: string;
   velocity_mph: number;
@@ -239,11 +276,15 @@ export interface PitchDetails {
   pitch_result: PitchResultType | null;
   exit_velocity_mph?: number;
   launch_angle_deg?: number;
+  spray_angle_deg?: number | null;
+  batted_ball?: BattedBallTelemetry | null;
   description: string;
   strategy_name?: string;
   command_quality?: CommandQuality;
   statcast?: StatcastMetrics;
   gameday_packet?: Gameday2DPitchPacket;
+  /** Present only when SWING_DECISION_TELEMETRY is enabled on the backend. */
+  swing_decision?: Record<string, unknown>;
 }
 
 /** A pitch whose reaction and outcome have been revealed. */
@@ -285,6 +326,10 @@ export interface BatterReactionContext {
   is_strike: boolean;
   approach: string;
   ratings: Record<string, unknown>;
+  pitch_sequence?: Array<Record<string, unknown>>;
+  pitcher_ratings?: Record<string, unknown>;
+  score_diff?: number;
+  inning?: number;
 }
 
 export interface ApiErrorResponse {
@@ -321,6 +366,29 @@ export interface InitialStateResponse {
   rotations: TeamRotation[];
 }
 
+export interface TeamDto {
+  id: number;
+  name: string;
+  abbreviation?: string | null;
+}
+
+export interface TeamsResponse {
+  status: string;
+  teams: TeamDto[];
+  count: number;
+}
+
+export interface TeamRosterResponse {
+  team_id: number;
+  team_name: string;
+  season: number;
+  position_players: Record<string, unknown>[];
+  pitchers: {
+    starters: Record<string, unknown>[];
+    bullpen: Record<string, unknown>[];
+  };
+}
+
 // ─── Request Types ─────────────────────────────────────────────────────────────
 
 export interface StartGameRequest {
@@ -339,6 +407,7 @@ export interface PitchRequest {
 export interface ResolvePitchRequest {
   batter_decision?: BatterDecision;
   batter_approach?: string;
+  contact?: SwingContactReport;
 }
 
 export interface SwapLineupRequest {

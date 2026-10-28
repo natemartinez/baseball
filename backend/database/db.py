@@ -20,18 +20,47 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     """Helper to deserialize raw JSON columns into standard Python objects."""
     keys = row.keys()
     pitch_arsenal_raw = row["pitch_arsenal"] if "pitch_arsenal" in keys else None
-    return {
+
+    vitals = json.loads(row["vitals"]) if "vitals" in keys and row["vitals"] else {}
+    if "team" in keys and row["team"]:
+        vitals["team"] = row["team"]
+
+    number = (
+        row["jersey_number"]
+        if "jersey_number" in keys and row["jersey_number"] is not None
+        else (row["number"] if "number" in keys else "00")
+    )
+    position = (
+        row["roster_position"]
+        if "roster_position" in keys and row["roster_position"] is not None
+        else (row["position"] if "position" in keys else "DH")
+    )
+
+    data = {
         "id": row["id"],
         "name": row["name"],
-        "position": row["position"],
-        "number": row["number"],
-        "vitals": json.loads(row["vitals"]),
-        "stats": json.loads(row["stats"]),
-        "zones": json.loads(row["zones"]),
-        "ratings": json.loads(row["ratings"]),
-        "traits": json.loads(row["traits"]),
+        "position": str(position),
+        "number": str(number),
+        "vitals": vitals,
+        "stats": json.loads(row["stats"]) if "stats" in keys and row["stats"] else [],
+        "zones": json.loads(row["zones"]) if "zones" in keys and row["zones"] else [],
+        "ratings": json.loads(row["ratings"]) if "ratings" in keys and row["ratings"] else [],
+        "traits": json.loads(row["traits"]) if "traits" in keys and row["traits"] else [],
         "pitch_arsenal": json.loads(pitch_arsenal_raw) if pitch_arsenal_raw else [],
     }
+
+    if "team" in keys and row["team"]:
+        data["team"] = row["team"]
+    if "role" in keys and row["role"] is not None:
+        data["role"] = row["role"]
+    if "roster_status" in keys and row["roster_status"] is not None:
+        data["roster_status"] = row["roster_status"]
+    if "batting_order" in keys and row["batting_order"] is not None:
+        data["batting_order"] = row["batting_order"]
+    if "season" in keys and row["season"] is not None:
+        data["season"] = row["season"]
+
+    return data
 
 
 def init_db():
@@ -77,12 +106,28 @@ def init_db():
                 player_id INTEGER NOT NULL,
                 team_id INTEGER NOT NULL,
                 season INTEGER NOT NULL,
+                jersey_number TEXT,
+                position TEXT,
+                role TEXT DEFAULT 'starter',
+                batting_order INTEGER,
                 roster_status TEXT DEFAULT 'active',
                 FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
                 FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
-                UNIQUE(player_id, team_id, season)
+                UNIQUE(player_id, season)
             )
         """)
+
+        # Migration: add new roster columns if table existed under older schema
+        cursor.execute("PRAGMA table_info(rosters);")
+        roster_cols = [col[1] for col in cursor.fetchall()]
+        for col_name, col_type in [
+            ("jersey_number", "TEXT"),
+            ("position", "TEXT"),
+            ("role", "TEXT DEFAULT 'starter'"),
+            ("batting_order", "INTEGER"),
+        ]:
+            if col_name not in roster_cols:
+                cursor.execute(f"ALTER TABLE rosters ADD COLUMN {col_name} {col_type};")
 
         # Indexes for fast B-tree seeks
         cursor.execute("""
@@ -104,6 +149,32 @@ def get_or_create_team(cursor: sqlite3.Cursor, team_name: str) -> int:
     return cursor.lastrowid
 
 
+def get_all_teams() -> list[dict[str, Any]]:
+    """Returns all registered teams from SQLite ordered by primary key ID."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, abbreviation FROM teams ORDER BY id ASC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_team_by_id_or_name(identifier: Any) -> Optional[dict[str, Any]]:
+    """Fetches a team record by ID or exact name."""
+    if identifier is None:
+        return None
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        if str(identifier).isdigit():
+            cursor.execute("SELECT id, name, abbreviation FROM teams WHERE id = ?", (int(identifier),))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+        cursor.execute("SELECT id, name, abbreviation FROM teams WHERE name = ? COLLATE NOCASE", (str(identifier),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
 def add_player(
     name: str,
     vitals: dict[str, Any],
@@ -115,6 +186,11 @@ def add_player(
     traits: list[dict[str, Any]],
     pitch_arsenal: Optional[list[dict[str, Any]]] = None,
     season: int = 2026,
+    team_name: Optional[str] = None,
+    jersey_number: Optional[str] = None,
+    role: str = "starter",
+    batting_order: Optional[int] = None,
+    roster_status: str = "active",
     **kwargs: Any,
 ) -> tuple[int, bool]:
     """Inserts a new player or updates an existing record matched by name.
@@ -122,6 +198,10 @@ def add_player(
     Returns:
         tuple[int, bool]: (player_id, is_created)
     """
+    clean_vitals = dict(vitals)
+    resolved_team = team_name or clean_vitals.pop("team", None)
+    clean_vitals.pop("team", None)
+
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("PRAGMA foreign_keys = ON;")
         cursor = conn.cursor()
@@ -140,9 +220,9 @@ def add_player(
                 WHERE id = ?
                 """,
                 (
-                    json.dumps(vitals),
+                    json.dumps(clean_vitals),
                     position,
-                    number,
+                    str(number),
                     json.dumps(stats),
                     json.dumps(zones),
                     json.dumps(ratings),
@@ -159,9 +239,9 @@ def add_player(
                 """,
                 (
                     name,
-                    json.dumps(vitals),
+                    json.dumps(clean_vitals),
                     position,
-                    number,
+                    str(number),
                     json.dumps(stats),
                     json.dumps(zones),
                     json.dumps(ratings),
@@ -172,16 +252,34 @@ def add_player(
             player_id = cursor.lastrowid
             is_created = True
 
-        # 2. Relate player to team in rosters table (replaces status if exists)
-        team_name = vitals.get("team")
-        if team_name:
-            team_id = get_or_create_team(cursor, team_name)
+        # 2. Relate player to team in rosters table
+        if resolved_team:
+            team_id = get_or_create_team(cursor, resolved_team)
+            resolved_jersey = str(jersey_number or number)
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO rosters (player_id, team_id, season, roster_status)
-                VALUES (?, ?, ?, 'active')
+                INSERT INTO rosters (
+                    player_id, team_id, season, jersey_number, position, role, batting_order, roster_status
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(player_id, season) DO UPDATE SET
+                    team_id = excluded.team_id,
+                    jersey_number = excluded.jersey_number,
+                    position = excluded.position,
+                    role = excluded.role,
+                    batting_order = excluded.batting_order,
+                    roster_status = excluded.roster_status
                 """,
-                (player_id, team_id, season),
+                (
+                    player_id,
+                    team_id,
+                    season,
+                    resolved_jersey,
+                    position,
+                    role,
+                    batting_order,
+                    roster_status,
+                ),
             )
 
         return player_id, is_created
@@ -196,21 +294,32 @@ def get_team_roster(
 
         cursor.execute(
             """
-            SELECT p.*
+            SELECT 
+                p.*,
+                r.jersey_number,
+                r.position AS roster_position,
+                r.role,
+                r.batting_order,
+                r.roster_status,
+                r.season,
+                t.name AS team
             FROM players p
             JOIN rosters r ON p.id = r.player_id
             JOIN teams t ON r.team_id = t.id
             WHERE t.name = ? 
               AND r.season = ? 
               AND r.roster_status = 'active'
-            ORDER BY p.name ASC
+            ORDER BY 
+              CASE WHEN r.batting_order IS NULL THEN 1 ELSE 0 END,
+              r.batting_order ASC,
+              p.name ASC
             """,
             (team_name, season),
         )
 
         return [_row_to_dict(row) for row in cursor.fetchall()]
 
-def get_player(player_id: int) -> Optional[Player]:
+def get_player(player_id: int, season: int = 2026) -> Optional[Player]:
     """
     Fetches a player from SQLite by primary key ID and hydrates them into
     an authoritative domain Player object.
@@ -219,7 +328,24 @@ def get_player(player_id: int) -> Optional[Player]:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        cursor.execute("SELECT * FROM players WHERE id = ?", (player_id,))
+        cursor.execute(
+            """
+            SELECT 
+                p.*,
+                r.jersey_number,
+                r.position AS roster_position,
+                r.role,
+                r.batting_order,
+                r.roster_status,
+                r.season,
+                t.name AS team
+            FROM players p
+            LEFT JOIN rosters r ON p.id = r.player_id AND r.season = ?
+            LEFT JOIN teams t ON r.team_id = t.id
+            WHERE p.id = ?
+            """,
+            (season, player_id),
+        )
         row = cursor.fetchone()
         if not row:
             return None

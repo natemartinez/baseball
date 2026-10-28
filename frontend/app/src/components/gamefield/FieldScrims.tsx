@@ -8,7 +8,15 @@ import { Colors } from '../../theme/colors';
  * Screen-space scrims that keep the HUD legible over the 3D field.
  * Rendered outside the Canvas so it works on web and native.
  */
-export const FieldScrims = React.memo(function FieldScrims() {
+export const FieldScrims = React.memo(function FieldScrims({
+  birdseye = false,
+  batting = false,
+}: {
+  /** Omit the bottom scrim so the launch point at home plate stays readable. */
+  birdseye?: boolean;
+  /** Omit the bottom scrim so the batting bat/plate are not dimmed. */
+  batting?: boolean;
+}) {
   return (
     <Svg
       pointerEvents="none"
@@ -31,7 +39,9 @@ export const FieldScrims = React.memo(function FieldScrims() {
         </LinearGradient>
       </Defs>
       <Rect x="0" y="0" width="100" height="14" fill="url(#gameFieldTopScrim)" />
-      <Rect x="0" y="74" width="100" height="26" fill="url(#gameFieldBottomScrim)" />
+      {!birdseye && !batting && (
+        <Rect x="0" y="74" width="100" height="26" fill="url(#gameFieldBottomScrim)" />
+      )}
     </Svg>
   );
 });

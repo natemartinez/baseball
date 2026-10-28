@@ -16,6 +16,7 @@ import { Colors } from '../../theme/colors';
 import { StrategyIngestColumn } from './StrategyIngestColumn';
 import { GamedayVisualizerColumn } from './GamedayVisualizerColumn';
 import { CalibrationDiagnosticsColumn } from './CalibrationDiagnosticsColumn';
+import { SeedLabColumn } from './SeedLabColumn';
 import { getPitchTypeColor, getResultRingColor } from '../../services/gamedayMath';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -75,10 +76,6 @@ export function GamedayDevMenuModal() {
     setGamedayFilters,
     clearDebugLog,
     runFastCalibration,
-    isMockMode,
-    backendUrl,
-    setBackendUrl,
-    toggleMockMode,
     gameState,
   } = useGameStore();
 
@@ -124,67 +121,13 @@ export function GamedayDevMenuModal() {
           </View>
 
           <View style={styles.headerActionGroup}>
-            {/* Interactive Backend Selector Pill */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => {
-                if (isMockMode) {
-                  setBackendUrl('http://localhost:5050');
-                } else if (backendUrl.includes('5050')) {
-                  setBackendUrl('http://localhost:3000');
-                } else {
-                  toggleMockMode(true);
-                }
-              }}
-              style={[
-                styles.modeBadge,
-                {
-                  backgroundColor: isMockMode
-                    ? 'rgba(16, 185, 129, 0.15)'
-                    : backendUrl.includes('5050')
-                    ? 'rgba(59, 130, 246, 0.15)'
-                    : 'rgba(249, 115, 22, 0.15)',
-                },
-                {
-                  borderColor: isMockMode
-                    ? Colors.gameday.statusPass
-                    : backendUrl.includes('5050')
-                    ? '#3B82F6'
-                    : Colors.gameday.statusWarn,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.modeDot,
-                  {
-                    backgroundColor: isMockMode
-                      ? Colors.gameday.statusPass
-                      : backendUrl.includes('5050')
-                      ? '#3B82F6'
-                      : Colors.gameday.statusWarn,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.modeText,
-                  {
-                    color: isMockMode
-                      ? Colors.gameday.statusPass
-                      : backendUrl.includes('5050')
-                      ? '#60A5FA'
-                      : Colors.gameday.statusWarn,
-                  },
-                ]}
-              >
-                {isMockMode
-                  ? 'MOCK ENGINE ⇄'
-                  : backendUrl.includes('5050')
-                  ? 'PYTHON FLASK (5050) ⇄'
-                  : 'NODE SERVER (3000) ⇄'}
+            {/* Authoritative engine indicator */}
+            <View style={[styles.modeBadge, styles.modeBadgeLive]}>
+              <View style={[styles.modeDot, { backgroundColor: Colors.gameday.statusPass }]} />
+              <Text style={[styles.modeText, { color: Colors.gameday.statusPass }]}>
+                FLASK API
               </Text>
-            </TouchableOpacity>
+            </View>
 
             {/* Clear Log Button */}
             {gamedayLog.length > 0 && (
@@ -293,7 +236,7 @@ export function GamedayDevMenuModal() {
             <Text
               style={[styles.tabButtonText, activeDevTab === 'strategy' && styles.tabButtonTextActive]}
             >
-              1. STRATEGY
+              1 STRAT
             </Text>
           </TouchableOpacity>
 
@@ -304,7 +247,7 @@ export function GamedayDevMenuModal() {
             <Text
               style={[styles.tabButtonText, activeDevTab === 'gameday' && styles.tabButtonTextActive]}
             >
-              2. GAMEDAY 2D
+              2 GAMEDAY
             </Text>
           </TouchableOpacity>
 
@@ -315,7 +258,7 @@ export function GamedayDevMenuModal() {
             <Text
               style={[styles.tabButtonText, activeDevTab === 'calibration' && styles.tabButtonTextActive]}
             >
-              3. CALIBRATION
+              3 CAL
             </Text>
           </TouchableOpacity>
 
@@ -326,7 +269,18 @@ export function GamedayDevMenuModal() {
             <Text
               style={[styles.tabButtonText, activeDevTab === 'split' && styles.tabButtonTextActive]}
             >
-              ⚡ 3-COL SPLIT
+              ⚡ SPLIT
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.tabButton, activeDevTab === 'scenarios' && styles.tabButtonActive]}
+            onPress={() => setActiveDevTab('scenarios')}
+          >
+            <Text
+              style={[styles.tabButtonText, activeDevTab === 'scenarios' && styles.tabButtonTextActive]}
+            >
+              🌱 SEEDS
             </Text>
           </TouchableOpacity>
         </View>
@@ -412,6 +366,13 @@ export function GamedayDevMenuModal() {
               </View>
             </ScrollView>
           )}
+
+          {activeDevTab === 'scenarios' && (
+            <ScrollView style={styles.tabScroll}>
+              <SeedLabColumn />
+              <View style={styles.bottomSpacer} />
+            </ScrollView>
+          )}
         </View>
       </SafeAreaView>
     </Modal>
@@ -469,6 +430,10 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
     borderWidth: 1,
+  },
+  modeBadgeLive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    borderColor: Colors.gameday.statusPass,
   },
   modeDot: {
     width: 6,

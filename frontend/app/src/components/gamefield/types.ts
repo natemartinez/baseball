@@ -1,4 +1,10 @@
-import type { PlayerSummary } from '../../types/api';
+import type { MutableRefObject } from 'react';
+import type {
+  BattedBallSample,
+  PlayerSummary,
+  SwingContactReport,
+} from '../../types/api';
+import type { ControlMode, PitchPhase } from '../../store/gameStore';
 
 export interface ProjectedPlatePosition {
   xRatio: number;
@@ -22,10 +28,36 @@ export interface ActivePitchData {
   flightTime: number;
 }
 
+export interface ActiveBattedBallData {
+  id: string;
+  hangTime: number;
+  samples: BattedBallSample[];
+}
+
+export type GameCameraMode = 'PITCH' | 'BIRDSEYE';
+
+export interface BattingLayerProps {
+  activePitch: ActivePitchData | null;
+  pitchPhase: PitchPhase;
+  inputEnabled: boolean;
+  chargeRef: MutableRefObject<number>;
+  onContact: (contact: SwingContactReport) => void;
+  onPitchArrival: (swingAttempted: boolean) => void;
+}
+
 export interface GameFieldProps {
   batter?: PlayerSummary | null;
   pitcher?: PlayerSummary | null;
   onPlateProjected?: (position: ProjectedPlatePosition) => void;
   activePitch?: ActivePitchData | null;
   onPitchComplete?: () => void;
+  activeBattedBall?: ActiveBattedBallData | null;
+  onBattedBallComplete?: () => void;
+  cameraMode?: GameCameraMode;
+  controlMode?: ControlMode;
+  pitchPhase?: PitchPhase;
+  battingInputEnabled?: boolean;
+  battingChargeRef?: MutableRefObject<number>;
+  onBattingContact?: (contact: SwingContactReport) => void;
+  onBattingPitchArrival?: (swingAttempted: boolean) => void;
 }

@@ -1,0 +1,168 @@
+{
+  "model_version": "plate-discipline-v1",
+  "zone_logit": {
+    "heart": 1.45,
+    "shadow_strike": 1.1,
+    "shadow_ball": -0.52,
+    "chase": -0.58,
+    "waste": -1.9
+  },
+  "count_logit": {
+    "0-0": -1.38,
+    "1-0": 0.05,
+    "2-0": 0.15,
+    "0-1": -0.05,
+    "1-1": 0.0,
+    "2-1": 0.1,
+    "3-1": -0.05
+  },
+  "three_ball_no_strike": {
+    "heart": -1.28,
+    "shadow_strike": -1.95,
+    "shadow_ball": -2.8,
+    "chase": -2.8,
+    "waste": -3.4
+  },
+  "two_strike": {
+    "general": 0.2,
+    "in_zone": 0.25,
+    "shadow_ball": 0.15,
+    "chase": 0.45,
+    "waste": 0.05
+  },
+  "discipline": {
+    "center": 60.0,
+    "scale": 20.0,
+    "clamp": 1.5,
+    "strike": 0.12,
+    "ball": -0.3
+  },
+  "hot_cold": {
+    "center": 0.4,
+    "scale": 0.15,
+    "clamp": 1.0,
+    "strike": 0.25,
+    "ball": 0.1
+  },
+  "pitch_type": {
+    "Fastball": {
+      "strike": 0.0,
+      "ball": 0.0,
+      "two_strike_ball": 0.0
+    },
+    "Breaking": {
+      "strike": -0.12,
+      "ball": 0.18,
+      "two_strike_ball": 0.1
+    },
+    "OffSpeed": {
+      "strike": -0.06,
+      "ball": 0.08,
+      "two_strike_ball": 0.04
+    }
+  },
+  "velocity": {
+    "center": 93.0,
+    "scale": 6.0,
+    "clamp": 1.5,
+    "strike": -0.04,
+    "ball": -0.03
+  },
+  "movement": {
+    "center": 20.0,
+    "scale": 15.0,
+    "clamp": 1.5,
+    "strike": -0.04,
+    "ball": 0.06
+  },
+  "pitcher_stuff": {
+    "center": 80.0,
+    "scale": 15.0,
+    "clamp": 1.5,
+    "ball": 0.08
+  },
+  "sequence": {
+    "max_abs": 0.15,
+    "same_type": {
+      "strike": 0.03,
+      "ball": -0.08
+    },
+    "prior_breaking": {
+      "strike": 0.02,
+      "ball": -0.04,
+      "max_count": 3
+    },
+    "consecutive_same_type": {
+      "strike": 0.04,
+      "ball": -0.1
+    },
+    "last_result": {
+      "BALL": {
+        "strike": 0.0,
+        "ball": -0.02
+      },
+      "CALLED_STRIKE": {
+        "strike": 0.02,
+        "ball": 0.02
+      },
+      "SWINGING_STRIKE": {
+        "strike": 0.02,
+        "ball": 0.05
+      },
+      "FOUL": {
+        "strike": 0.02,
+        "ball": 0.03
+      }
+    }
+  },
+  "situation": {
+    "max_abs": 0.08,
+    "runner_on_third_lt2": {
+      "strike": 0.06,
+      "ball": 0.02
+    },
+    "two_outs": {
+      "strike": 0.02,
+      "ball": 0.01
+    },
+    "close_late": {
+      "strike": 0.03,
+      "ball": 0.01
+    },
+    "blowout": {
+      "strike": -0.02,
+      "ball": -0.01
+    }
+  },
+  "approach": {
+    "max_abs": 0.35,
+    "AUTO": {
+      "overall": 0.0,
+      "strike": 0.0,
+      "ball": 0.0,
+      "waste": 0.0
+    },
+    "AGGRESSIVE": {
+      "overall": 0.25,
+      "strike": 0.1,
+      "ball": 0.1,
+      "waste": 0.0
+    },
+    "PATIENT": {
+      "overall": 0.0,
+      "strike": -0.08,
+      "ball": -0.25,
+      "waste": 0.0
+    },
+    "CONTACT": {
+      "overall": 0.0,
+      "strike": 0.15,
+      "ball": 0.08,
+      "waste": -0.1
+    }
+  },
+  "bounds": {
+    "min_probability": 0.01,
+    "max_probability": 0.99
+  }
+}
