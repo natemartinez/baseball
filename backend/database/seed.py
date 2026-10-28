@@ -16,7 +16,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.database.db import DB_PATH, add_player, init_db
 from backend.engine.batting_engine.batters import LEAGUE_AVG_SLG
-from backend.engine.pitching_engine.pitch_objects import movement_for
+from backend.engine.pitching_engine.pitch_execution.pitch_objects import movement_for
 
 MOCK_DB_PATH = ROOT_DIR / 'backend' / 'mock' / 'mock_baseball_db.json'
 
@@ -68,9 +68,31 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         'New York Mets': 'New York Mets'
     }
 
+    NUMERIC_ZONE_MAP = {
+        1: 'upper-in',    2: 'upper-middle', 3: 'upper-away',
+        4: 'middle-in',   5: 'heart',        6: 'middle-away',
+        7: 'lower-in',    8: 'lower-middle', 9: 'lower-away',
+    }
+
+    batting_order_counts = {}
+
     for p in raw_players:
         team_abbr = p.get('team', 'NYY')
         team_full = team_name_map.get(team_abbr, 'New York Yankees')
+        pos = p.get('position', 'DH')
+        is_pitcher = pos in ('P', 'SP', 'RP', 'CP') or len(p.get('arsenal', [])) > 0
+        role = p.get('role')
+        if role in ('pitcher', 'batter', None):
+            role = 'starter'
+
+        if not is_pitcher:
+            order = batting_order_counts.get(team_full, 0) + 1
+            batting_order_counts[team_full] = order
+            batting_order = order
+        else:
+            batting_order = None
+
+        jersey_num = str(p.get('jersey_number', p.get('number', '99')))
 
         vitals = {
             'age': p.get('age', 28),
@@ -79,7 +101,6 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
             'weight': p.get('weight', 215),
             'bats': p.get('bats', 'R'),
             'throws': p.get('throws', 'R'),
-            'team': team_full,
         }
 
         # Convert ratings to list format
@@ -108,9 +129,15 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
                 if not isinstance(item, dict):
                     continue
                 raw_name = item.get('zone')
-                if not isinstance(raw_name, str):
+                if raw_name is None:
                     raw_name = item.get('name', 'heart')
-                zone_name = str(raw_name or 'heart')
+
+                if isinstance(raw_name, int) and raw_name in NUMERIC_ZONE_MAP:
+                    zone_name = NUMERIC_ZONE_MAP[raw_name]
+                elif isinstance(raw_name, str) and raw_name.isdigit() and int(raw_name) in NUMERIC_ZONE_MAP:
+                    zone_name = NUMERIC_ZONE_MAP[int(raw_name)]
+                else:
+                    zone_name = str(raw_name or 'heart')
 
                 slugging = item.get('slugging', item.get('slg'))
                 if slugging is None:
@@ -164,17 +191,23 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         pid, is_created = add_player(
             name=p.get('name', 'Player'),
             vitals=vitals,
-            position=p.get('position', 'DH'),
-            number=str(p.get('jersey_number', p.get('number', '99'))),
+            position=pos,
+            number=jersey_num,
             stats=stats_list if isinstance(stats_list, list) else [stats_list],
             zones=zones_list,
             ratings=ratings_list,
             traits=traits_list,
             pitch_arsenal=pitch_arsenal,
-            season=season
+            team_name=team_full,
+            jersey_number=jersey_num,
+            role=role,
+            batting_order=batting_order,
+            roster_status='active',
+            season=season,
         )
         action = 'Added' if is_created else 'Updated'
-        print(f'  + {action} [{pid}] {p.get("name")} ({p.get("position")}) -> {team_full}')
+        order_str = f' [#{batting_order}]' if batting_order else ''
+        print(f'  + {action} [{pid}] #{jersey_num} {p.get("name")} ({pos}){order_str} -> {team_full} ({role})')
 
     print('Database seeding completed successfully.')
 
