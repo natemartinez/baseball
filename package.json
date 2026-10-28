@@ -3,9 +3,14 @@
     "dev": "./scripts/dev.sh",
     "dev:backend": ".venv/bin/python main.py",
     "dev:frontend": "cd frontend/app && npx expo start --web",
-    "test": "./scripts/run_tests.sh"
+    "test": "./scripts/run_tests.sh",
+    "check:swing": "node --experimental-strip-types scripts/check_swing_parity.ts"
   },
   "devDependencies": {
     "@types/three": "^0.186.0"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "@react-three/rapier": "^2.2.0"
   }
 }
