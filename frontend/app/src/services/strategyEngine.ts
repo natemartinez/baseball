@@ -15,6 +15,47 @@ function round1(val: number): number {
   return Math.round(val * 10) / 10;
 }
 
+function isFourSeam(name: string): boolean {
+  const lowered = name.toLowerCase();
+  return ['four-seam', '4-seam', 'fourseam', '4seam'].some((token) => lowered.includes(token));
+}
+
+function isSinker(name: string): boolean {
+  const lowered = name.toLowerCase();
+  return ['sinker', 'two-seam', '2-seam', 'twoseam', '2seam'].some((token) => lowered.includes(token));
+}
+
+/**
+ * Mirrors the backend pitch-specific target bias so the local fallback
+ * recommendation stays consistent with the engine. Chase zones are untouched.
+ */
+export function pitchSpecificZone(
+  zone: string,
+  pitchName: string,
+  pitcherHand: 'R' | 'L',
+  batterSide: 'R' | 'L',
+): string {
+  if (!zone || zone === 'waste' || zone.startsWith('chase-')) return zone;
+
+  if (isFourSeam(pitchName)) {
+    if (zone.startsWith('upper-')) return zone;
+    if (zone.startsWith('lower-')) return zone.replace('lower-', 'upper-');
+    if (zone === 'middle-in') return 'upper-in';
+    if (zone === 'middle-away') return 'upper-away';
+    if (zone === 'heart') return 'upper-middle';
+    return batterSide === 'R' ? 'upper-in' : 'upper-away';
+  }
+
+  if (isSinker(pitchName)) {
+    if (zone.startsWith('lower-')) return zone;
+    if (zone.startsWith('upper-')) return zone.replace('upper-', 'lower-');
+    if (zone === 'heart') return 'lower-middle';
+    return pitcherHand === 'R' ? 'lower-in' : 'lower-away';
+  }
+
+  return zone;
+}
+
 /**
  * Pure strategy calculation engine.
  * Derives count leverage, tactical situation tags, AI strategy rationale,
@@ -89,7 +130,7 @@ export function calculateStrategyAndIntent(state: GameState): StrategyIntentDeci
       spin_rpm: 2480,
       break_rating: 90,
       control_rating: 84,
-      statcast: { whiff_pct: 28.5, chase_pct: 24.2, gb_pct: 38.0, stuff_plus: 118, zone_pct: 56.0, run_value: -4 },
+      statcast: { whiff_pct: 25.0, chase_pct: 24.2, gb_pct: 34.0, stuff_plus: 118, zone_pct: 56.0, run_value: -4 },
     },
     {
       name: 'Spin Monster Sweeper',
@@ -105,7 +146,7 @@ export function calculateStrategyAndIntent(state: GameState): StrategyIntentDeci
       spin_rpm: 2310,
       break_rating: 88,
       control_rating: 85,
-      statcast: { whiff_pct: 22.0, chase_pct: 28.0, gb_pct: 64.0, stuff_plus: 112, zone_pct: 58.0, run_value: -7 },
+      statcast: { whiff_pct: 14.0, chase_pct: 28.0, gb_pct: 57.0, stuff_plus: 112, zone_pct: 58.0, run_value: -7 },
     },
   ];
 
@@ -232,7 +273,16 @@ export function calculateStrategyAndIntent(state: GameState): StrategyIntentDeci
   });
 
   const topPitch = rankedPitchWeights[0]?.pitch_name ?? arsenal[0].name;
-  const topZone = rankedZoneWeights[0]?.zone ?? STRIKE_ZONES.LOWER_AWAY;
+  const pitcherHand: 'R' | 'L' = pitcher.throws === 'L' ? 'L' : 'R';
+  const batterRaw = batter.handedness ?? 'R';
+  const batterSide: 'R' | 'L' =
+    batterRaw === 'S' ? (pitcherHand === 'R' ? 'L' : 'R') : batterRaw === 'L' ? 'L' : 'R';
+  const topZone = pitchSpecificZone(
+    rankedZoneWeights[0]?.zone ?? STRIKE_ZONES.LOWER_AWAY,
+    topPitch,
+    pitcherHand,
+    batterSide,
+  );
 
   return {
     strategy_name: strategyName,

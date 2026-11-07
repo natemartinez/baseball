@@ -3,7 +3,8 @@
  *
  * The formula is the existing PitchVisualizer quadratic break model:
  * horizontal position is linear-to-target plus pfx·t², vertical is gravity
- * plus IVB·t², and depth is linear to the plate. Keeping one implementation
+ * plus IVB·t², and depth is linear to the plate. `pfx[0]` is already resolved
+ * into scene-space X for the pitcher's hand. Keeping one implementation
  * ensures the physics ball and the existing renderer cannot diverge.
  */
 const GRAVITY = 32.174;

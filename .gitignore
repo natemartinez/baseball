@@ -21,3 +21,6 @@ yahoo_auth.py
 .DS_Store
 .parcel-cache/
 dist/
+
+.agents/
+.vscode/

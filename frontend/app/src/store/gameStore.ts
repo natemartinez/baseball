@@ -11,6 +11,7 @@ import type {
   TeamLineup,
   TeamRotation,
   ApiErrorResponse,
+  TimingTier,
 } from '../types/api';
 import { STRIKE_ZONES, INNER_ZONES, CHASE_ZONES, BaseballApiError } from '../types/api';
 import type {
@@ -27,6 +28,14 @@ import {
   isRulebookStrike,
 } from '../services/gamedayMath';
 import { calculateStrategyAndIntent } from '../services/strategyEngine';
+import {
+  calculateConfidenceDelta,
+  applyHolisticConfidenceUpdate,
+} from '../services/confidenceModel';
+import {
+  computeBaselineEffectiveness,
+  updatePitchEffectiveness,
+} from '../services/effectivenessModel';
 
 function ensureStrategyIntent(game?: GameState | null): GameState | null | undefined {
   if (!game) return game;
@@ -43,7 +52,7 @@ function ensureStrategyIntent(game?: GameState | null): GameState | null | undef
 function seededGamePatch(
   response: InitialStateResponse,
   seed: number,
-  previousIntent: string,
+  previousPitchName: string,
 ): Partial<GameUiState> {
   const firstPitch = response.game?.current_pitcher?.arsenal?.[0]?.name;
   return {
@@ -66,11 +75,15 @@ function seededGamePatch(
     battingDrill: null,
     isBattingDrillOpen: false,
     practiceSaved: null,
-    selectedPitchIntent: previousIntent || firstPitch || 'Four-Seam Fastball',
+    selectedPitchName: previousPitchName || firstPitch || 'Four-Seam Fastball',
     selectedTargetZone: STRIKE_ZONES.HEART,
     isPitching: false,
     errorMessage: null,
     errorEnvelope: null,
+    pitcherStamina: {},
+    pitcherConfidence: {},
+    pitcherConsecutiveMisses: {},
+    pitcherEffectiveness: {},
   };
 }
 
@@ -129,7 +142,7 @@ export interface GameUiState {
   pitchTypeFilter: string;
 
   // UI interaction state
-  selectedPitchIntent: string;
+  selectedPitchName: string;
   selectedTargetZone: string;
   isLineupDialogOpen: boolean;
   /** Seed used to start the current game; null for an unseeded game. */
@@ -154,6 +167,13 @@ export interface GameUiState {
   isPitching: boolean;
   errorMessage: string | null;
   errorEnvelope: ApiErrorResponse | null;
+
+  // Pitcher in-game meters
+  pitcherStamina: Record<number, number>;
+  pitcherConfidence: Record<number, Record<string, number>>;
+  pitcherConsecutiveMisses: Record<number, Record<string, number>>;
+  /** Per-pitcher, per-pitch physical stuff effectiveness (0–100). Starts at pitch's baseline stuff rating. */
+  pitcherEffectiveness: Record<number, Record<string, number>>;
 }
 
 // ─── Actions ──────────────────────────────────────────────────────────────────
@@ -165,7 +185,7 @@ export interface GameActions {
   resetGame(): Promise<void>;
 
   // Gameplay
-  throwPitch(): Promise<void>;
+  throwPitch(timingTier?: TimingTier, timingLabel?: string, pitchEffectiveness?: number): Promise<void>;
   resolvePitch(options?: {
     batterDecision?: BatterDecision;
     batterApproach?: string;
@@ -212,7 +232,7 @@ export interface GameActions {
   toggleTrajectory(open?: boolean): void
 
   // UI mutations
-  setSelectedPitchIntent(intent: string): void;
+  setSelectedPitchName(pitchName: string): void;
   setSelectedTargetZone(zone: string): void;
   setGloveTarget(x: number, z: number): void;
   setLineupDialogOpen(open: boolean): void;
@@ -252,7 +272,7 @@ const initialState: GameUiState = {
   situationFilter: 'ALL',
   batterFilter: 'ALL',
   pitchTypeFilter: 'ALL',
-  selectedPitchIntent: 'Spin Monster Sweeper',
+  selectedPitchName: 'Spin Monster Sweeper',
   selectedTargetZone: STRIKE_ZONES.HEART,
   isLineupDialogOpen: false,
   activeSeed: null,
@@ -264,6 +284,10 @@ const initialState: GameUiState = {
   isPitching: false,
   errorMessage: null,
   errorEnvelope: null,
+  pitcherStamina: {},
+  pitcherConfidence: {},
+  pitcherConsecutiveMisses: {},
+  pitcherEffectiveness: {},
 };
 
 export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
@@ -299,8 +323,12 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         battingDrill: null,
         isBattingDrillOpen: false,
         practiceSaved: null,
-        selectedPitchIntent: s.selectedPitchIntent || firstPitch || 'Four-Seam Fastball',
+        selectedPitchName: s.selectedPitchName || firstPitch || 'Four-Seam Fastball',
         selectedTargetZone: s.selectedTargetZone || STRIKE_ZONES.HEART,
+        pitcherStamina: {},
+        pitcherConfidence: {},
+        pitcherConsecutiveMisses: {},
+        pitcherEffectiveness: {},
       }));
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
@@ -330,8 +358,12 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         isBattingDrillOpen: false,
         practiceSaved: null,
         loadingState: 'success',
-        selectedPitchIntent: s.selectedPitchIntent || firstPitch || 'Four-Seam Fastball',
+        selectedPitchName: s.selectedPitchName || firstPitch || 'Four-Seam Fastball',
         selectedTargetZone: s.selectedTargetZone || STRIKE_ZONES.HEART,
+        pitcherStamina: {},
+        pitcherConfidence: {},
+        pitcherConsecutiveMisses: {},
+        pitcherEffectiveness: {},
       }));
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
@@ -365,8 +397,12 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         isBattingDrillOpen: false,
         practiceSaved: null,
         isPitching: false,
-        selectedPitchIntent: firstPitch || s.selectedPitchIntent || 'Four-Seam Fastball',
+        selectedPitchName: firstPitch || s.selectedPitchName || 'Four-Seam Fastball',
         selectedTargetZone: STRIKE_ZONES.HEART,
+        pitcherStamina: {},
+        pitcherConfidence: {},
+        pitcherConsecutiveMisses: {},
+        pitcherEffectiveness: {},
       }));
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
@@ -385,7 +421,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     set({ isPitching: true, errorMessage: null, errorEnvelope: null });
     try {
       const response = await api.reset(seed);
-      set((s) => seededGamePatch(response, seed, s.selectedPitchIntent));
+      set((s) => seededGamePatch(response, seed, s.selectedPitchName));
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
       set({ isPitching: false, errorMessage: message, errorEnvelope: envelope });
@@ -444,7 +480,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         loop: options?.loop ?? drill.loop,
         intervalMs: options?.intervalMs ?? drill.intervalMs,
       },
-      selectedPitchIntent: nextEntries[0].pitchName,
+      selectedPitchName: nextEntries[0].pitchName,
       selectedTargetZone: nextEntries[0].targetZone ?? STRIKE_ZONES.HEART,
     });
   },
@@ -497,7 +533,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         gamedayLog: [],
         selectedPitchPacketIndex: null,
         customTargetCoords: null,
-        selectedPitchIntent: first.pitchName ?? firstPitch ?? 'Four-Seam Fastball',
+        selectedPitchName: first.pitchName ?? firstPitch ?? 'Four-Seam Fastball',
         selectedTargetZone: first.targetZone ?? STRIKE_ZONES.HEART,
         isPitching: false,
       }));
@@ -584,7 +620,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         pitchesThrown: battingDrill.pitchesThrown + 1,
         playing: nextPlaying,
       },
-      selectedPitchIntent: entry.pitchName,
+      selectedPitchName: entry.pitchName,
       selectedTargetZone: entry.targetZone ?? STRIKE_ZONES.HEART,
     });
 
@@ -610,10 +646,10 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   // ─── Gameplay ──────────────────────────────────────────────────────────────
 
-  async throwPitch() {
+  async throwPitch(timingTier?: TimingTier, timingLabel?: string, pitchEffectiveness?: number) {
     if (get().battingDrill?.active) return;
     const {
-      selectedPitchIntent,
+      selectedPitchName,
       selectedTargetZone,
       customTargetCoords,
       isPitching,
@@ -630,9 +666,12 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     });
     try {
       const result = await api.throwPitch(
-        selectedPitchIntent || undefined,
+        selectedPitchName || undefined,
         selectedTargetZone || undefined,
         customTargetCoords || undefined,
+        timingTier,
+        timingLabel,
+        pitchEffectiveness,
       );
       // Publish only the delivery. No game state, feed, or log entry changes
       // until revealPitch().
@@ -697,6 +736,79 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       pendingResolution.game_state.balls === 0 &&
       pendingResolution.game_state.strikes === 0;
 
+    const pitcherId =
+      pendingResolution.game_state.current_pitcher?.id ??
+      get().gameState?.current_pitcher?.id ??
+      0;
+    const pitchName = pitch.pitch_name;
+    const pitchResult = pitch.pitch_result;
+
+    // Stamina calculation: decrements slowly on every pitch no matter what
+    const currentStamina = get().pitcherStamina[pitcherId] ?? 100;
+    const baseStaminaRating =
+      pendingResolution.game_state.current_pitcher?.stamina ??
+      get().gameState?.current_pitcher?.stamina ??
+      80;
+    const staminaDrop = Math.max(0.75, Math.min(1.5, 100 / Math.max(65, baseStaminaRating)));
+    const newStamina = Math.max(0, Math.min(100, Math.round((currentStamina - staminaDrop) * 10) / 10));
+
+    // Confidence & consecutive miss calculations
+    const prevPitcherMisses = get().pitcherConsecutiveMisses[pitcherId] ?? {};
+    const currentMissStreak = prevPitcherMisses[pitchName] ?? 0;
+    const isWalk = atBatEnded && pitchResult === 'BALL';
+
+    const { primaryDelta, newMissStreak } = calculateConfidenceDelta(
+      pitchResult,
+      currentMissStreak,
+      isWalk,
+    );
+
+    const updatedMisses = {
+      ...prevPitcherMisses,
+      [pitchName]: newMissStreak,
+    };
+
+    const arsenal =
+      pendingResolution.game_state.current_pitcher?.arsenal ??
+      get().gameState?.current_pitcher?.arsenal ??
+      [];
+    const allPitchNames = arsenal.map((p) => p.name);
+
+    const prevConfMap = get().pitcherConfidence[pitcherId] ?? {};
+    const newConfMap = applyHolisticConfidenceUpdate(
+      prevConfMap,
+      allPitchNames,
+      pitchName,
+      primaryDelta,
+    );
+
+    // ── Effectiveness Update (per-pitch, not holistic) ───────────────────
+    // Effectiveness is physical stuff quality, updated pitch-specifically from outcomes.
+    const prevEffMap = get().pitcherEffectiveness[pitcherId] ?? {};
+    const currentPitchEff = prevEffMap[pitchName] ?? (() => {
+      // Initialize from baseline if first time this pitch is tracked
+      const arsenalItem = arsenal.find((p) => p.name === pitchName);
+      if (arsenalItem) {
+        return computeBaselineEffectiveness(
+          arsenalItem.velocity_mph ?? 93,
+          arsenalItem.break_rating ?? 75,
+          arsenalItem.spin_rpm ?? 2400,
+          arsenalItem.control_rating ?? 75,
+        );
+      }
+      return 80.0;
+    })();
+
+    const pitchConfidenceForEff = newConfMap[pitchName] ?? 50;
+    const newPitchEff = updatePitchEffectiveness(
+      currentPitchEff,
+      pitchResult,
+      newStamina,
+      pitchConfidenceForEff,
+      currentPitchEff, // use current as baseline approximation
+    );
+    const newEffMap = { ...prevEffMap, [pitchName]: newPitchEff };
+
     set((s) => ({
       gameState: ensureStrategyIntent(pendingResolution.game_state) as GameState,
       latestPitch: pitch,
@@ -713,6 +825,22 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       pendingThrow: null,
       pendingResolution: null,
       isPitching: false,
+      pitcherStamina: {
+        ...s.pitcherStamina,
+        [pitcherId]: newStamina,
+      },
+      pitcherConfidence: {
+        ...s.pitcherConfidence,
+        [pitcherId]: newConfMap,
+      },
+      pitcherConsecutiveMisses: {
+        ...s.pitcherConsecutiveMisses,
+        [pitcherId]: updatedMisses,
+      },
+      pitcherEffectiveness: {
+        ...s.pitcherEffectiveness,
+        [pitcherId]: newEffMap,
+      },
     }));
   },
 
@@ -753,6 +881,69 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       const atBatEnded =
         result.game_state.balls === 0 && result.game_state.strikes === 0;
 
+      const pitcherId =
+        result.game_state.current_pitcher?.id ??
+        get().gameState?.current_pitcher?.id ??
+        0;
+      const pitchName = result.pitch_details.pitch_name;
+      const pitchResult = result.pitch_details.pitch_result;
+      const currentStamina = get().pitcherStamina[pitcherId] ?? 100;
+      const newStamina = Math.max(0, Math.min(100, Math.round((currentStamina - 3.8) * 10) / 10));
+
+      const prevPitcherMisses = get().pitcherConsecutiveMisses[pitcherId] ?? {};
+      const currentMissStreak = prevPitcherMisses[pitchName] ?? 0;
+      const isWalk = atBatEnded && pitchResult === 'BALL';
+
+      const { primaryDelta, newMissStreak } = calculateConfidenceDelta(
+        pitchResult,
+        currentMissStreak,
+        isWalk,
+      );
+
+      const updatedMisses = {
+        ...prevPitcherMisses,
+        [pitchName]: newMissStreak,
+      };
+
+      const arsenal =
+        result.game_state.current_pitcher?.arsenal ??
+        get().gameState?.current_pitcher?.arsenal ??
+        [];
+      const allPitchNames = arsenal.map((p) => p.name);
+
+      const prevConfMap = get().pitcherConfidence[pitcherId] ?? {};
+      const newConfMap = applyHolisticConfidenceUpdate(
+        prevConfMap,
+        allPitchNames,
+        pitchName,
+        primaryDelta,
+      );
+
+      // ── Effectiveness Update (per-pitch, not holistic) ───────────────────
+      const prevEffMapSim = get().pitcherEffectiveness[pitcherId] ?? {};
+      const currentPitchEffSim = prevEffMapSim[pitchName] ?? (() => {
+        const arsenalItem = arsenal.find((p) => p.name === pitchName);
+        if (arsenalItem) {
+          return computeBaselineEffectiveness(
+            arsenalItem.velocity_mph ?? 93,
+            arsenalItem.break_rating ?? 75,
+            arsenalItem.spin_rpm ?? 2400,
+            arsenalItem.control_rating ?? 75,
+          );
+        }
+        return 80.0;
+      })();
+
+      const pitchConfidenceForEffSim = newConfMap[pitchName] ?? 50;
+      const newPitchEffSim = updatePitchEffectiveness(
+        currentPitchEffSim,
+        pitchResult,
+        newStamina,
+        pitchConfidenceForEffSim,
+        currentPitchEffSim,
+      );
+      const newEffMapSim = { ...prevEffMapSim, [pitchName]: newPitchEffSim };
+
       set((s) => ({
         gameState: ensureStrategyIntent(result.game_state) as GameState,
         latestPitch: result.pitch_details,
@@ -764,6 +955,10 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         gamedayLog: packet ? [packet, ...s.gamedayLog].slice(0, 100) : s.gamedayLog,
         selectedPitchPacketIndex: null,
         isPitching: false,
+        pitcherStamina: { ...s.pitcherStamina, [pitcherId]: newStamina },
+        pitcherConfidence: { ...s.pitcherConfidence, [pitcherId]: newConfMap },
+        pitcherConsecutiveMisses: { ...s.pitcherConsecutiveMisses, [pitcherId]: updatedMisses },
+        pitcherEffectiveness: { ...s.pitcherEffectiveness, [pitcherId]: newEffMapSim },
       }));
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
@@ -957,8 +1152,8 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   // ─── UI mutations ──────────────────────────────────────────────────────────
 
-  setSelectedPitchIntent(intent: string) {
-    set({ selectedPitchIntent: intent });
+  setSelectedPitchName(pitchName: string) {
+    set({ selectedPitchName: pitchName });
   },
 
   setSelectedTargetZone(zone: string) {

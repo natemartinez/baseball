@@ -106,7 +106,7 @@ export function GamedayDevMenuModal() {
       onRequestClose={() => toggleDevMenu(false)}
     >
       <SafeAreaView style={styles.modalRoot}>
-        <StatusBar barStyle="light-content" backgroundColor="#050B14" />
+        <StatusBar barStyle="light-content" />
 
         {/* ── Top Header ─────────────────────────────────────────── */}
         <View style={styles.header}>

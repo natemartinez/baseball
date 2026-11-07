@@ -12,7 +12,7 @@ import Svg, {
 import type { Gameday2DPitchPacket } from '../../types/gameday';
 import { Colors } from '../../theme/colors';
 
-const GLOVE_ICON = require('../../../assets/glove-icon.png');
+const BALL_ICON = require('../../../assets/ball-icon.png');
 import {
   statcastToSvg,
   svgToStatcast,
@@ -105,8 +105,8 @@ export function GamedayVisualizerColumn({
   );
   const pxPerInch =
     (SVG_WIDTH / (VIEWPORT_X_MAX - VIEWPORT_X_MIN)) / 12;
-  // The asset has ~9% padding; compensate so the glove fills the error area.
-  const gloveSize = Math.max(
+  // The asset has ~9% padding; compensate so the ball fills the error area.
+  const markerSize = Math.max(
     16,
     (2 * sprayCloud.radiusInches * pxPerInch) / 0.81,
   );
@@ -189,7 +189,7 @@ export function GamedayVisualizerColumn({
             HEART (50%)
           </SvgText>
 
-          {/* Spray Cloud + hard error ring around the glove target */}
+          {/* Spray Cloud + hard error ring around the target */}
           {sprayCloud.points.map((point, index) => {
             const p = statcastToSvg(point.x, point.z, SVG_WIDTH, SVG_HEIGHT);
             return (
@@ -227,16 +227,16 @@ export function GamedayVisualizerColumn({
             </G>
           )}
 
-          {/* Catcher's glove asset — fills the old error-circle area */}
+          {/* Baseball asset — fills the old error-circle area */}
           <SvgImage
-            href={GLOVE_ICON}
-            x={targetSvg.svgX - gloveSize / 2}
-            y={targetSvg.svgY - gloveSize / 2}
-            width={gloveSize}
-            height={gloveSize}
+            href={BALL_ICON}
+            x={targetSvg.svgX - markerSize / 2}
+            y={targetSvg.svgY - markerSize / 2}
+            width={markerSize}
+            height={markerSize}
             preserveAspectRatio="xMidYMid meet"
           />
-          <SvgText x={targetSvg.svgX} y={targetSvg.svgY - gloveSize / 2 - 6} fill="#FFD54F" fontSize="9" fontWeight="800" textAnchor="middle">
+          <SvgText x={targetSvg.svgX} y={targetSvg.svgY - markerSize / 2 - 6} fill="#FFD54F" fontSize="9" fontWeight="800" textAnchor="middle">
             {customTarget ? 'CUSTOM' : 'TARGET'}
           </SvgText>
 
@@ -305,6 +305,15 @@ export function GamedayVisualizerColumn({
                 {packet.execution.realizedZoneCategory} ({packet.result.isStrike ? 'STRIKE' : 'BALL'})
               </Text>
             </View>
+
+            {packet.execution.shape && (
+              <View style={styles.telemetryRow}>
+                <Text style={styles.telemetryKey}>Shape:</Text>
+                <Text style={[styles.telemetryVal, { color: Colors.amberLight }]}>
+                  VAA {packet.execution.shape.verticalApproachAngleDeg.toFixed(1)}° • offset {packet.execution.shape.verticalOffsetInches.toFixed(1)}"
+                </Text>
+              </View>
+            )}
 
             {packet.execution.isHeartZoneLeak && (
               <View style={styles.alertBanner}>

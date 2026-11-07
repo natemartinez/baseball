@@ -16,12 +16,40 @@ dirtSkirtShape.absarc(0, shapeY(-60.5), 95, Math.PI * 0.75, Math.PI * 0.25, true
 dirtSkirtShape.lineTo(63.64, shapeY(-63.64)); // 1B edge
 dirtSkirtShape.closePath();
 
-/** 90x90 ft infield grass diamond with a 9-ft pitcher's-mound cutout. */
+/**
+ * 26-ft diameter (13-ft radius) home plate sand/dirt circle.
+ * Encompasses home plate, both batter's boxes, and the catcher/umpire area.
+ */
+export const HOME_PLATE_CIRCLE_RADIUS: number = 13.0;
+export const HOME_PLATE_CIRCLE_POS: [number, number, number] = [0, 0.006, 0];
+
+export const homePlateCircleShape: THREE.Shape = new THREE.Shape();
+homePlateCircleShape.absarc(0, 0, HOME_PLATE_CIRCLE_RADIUS, 0, Math.PI * 2, false);
+
+/** 90x90 ft infield grass diamond with a 9-ft pitcher's-mound cutout and 13-ft home plate circle cutout. */
+const grassAngle1B = Math.atan2(63.64, 61.5);
+const grassAngle3B = Math.atan2(63.64, -61.5);
+
 export const infieldGrassShape: THREE.Shape = new THREE.Shape();
-infieldGrassShape.moveTo(0, shapeY(-1.5));
-infieldGrassShape.lineTo(-61.5, shapeY(-63.64));
-infieldGrassShape.lineTo(0, shapeY(-125.0));
+infieldGrassShape.moveTo(
+  HOME_PLATE_CIRCLE_RADIUS * Math.cos(grassAngle1B),
+  HOME_PLATE_CIRCLE_RADIUS * Math.sin(grassAngle1B),
+);
 infieldGrassShape.lineTo(61.5, shapeY(-63.64));
+infieldGrassShape.lineTo(0, shapeY(-125.0));
+infieldGrassShape.lineTo(-61.5, shapeY(-63.64));
+infieldGrassShape.lineTo(
+  HOME_PLATE_CIRCLE_RADIUS * Math.cos(grassAngle3B),
+  HOME_PLATE_CIRCLE_RADIUS * Math.sin(grassAngle3B),
+);
+infieldGrassShape.absarc(
+  0,
+  0,
+  HOME_PLATE_CIRCLE_RADIUS,
+  grassAngle3B,
+  grassAngle1B,
+  true,
+);
 infieldGrassShape.closePath();
 
 const moundHole: THREE.Path = new THREE.Path();
@@ -50,11 +78,6 @@ export const RUBBER_POS: [number, number, number] = [0, 0.84, -60.5];
 export const BASE_1B_POS: [number, number, number] = [63.64, 0.1, -63.64];
 export const BASE_2B_POS: [number, number, number] = [0, 0.1, -127.28];
 export const BASE_3B_POS: [number, number, number] = [-63.64, 0.1, -63.64];
-export const FOUL_LINE_LEFT_POS: [number, number, number] = [-113, 0.012, -113];
-export const FOUL_LINE_RIGHT_POS: [number, number, number] = [113, 0.012, -113];
-export const FOUL_LINE_LEFT_ROTATION: [number, number, number] = [0, Math.PI / 4, 0];
-export const FOUL_LINE_RIGHT_ROTATION: [number, number, number] = [0, -Math.PI / 4, 0];
-export const FOUL_LINE_LENGTH: number = 319.611;
 
 /** 4x6 ft Batter's Box Outline (Chalk Line) */
 export const battersBoxShape = new THREE.Shape();
@@ -88,3 +111,33 @@ battersBoxShape.holes.push(boxHole);
  */
 export const BATTERS_BOX_LEFT_POS: [number, number, number] = [-3.21, 0.012, -0.71];
 export const BATTERS_BOX_RIGHT_POS: [number, number, number] = [3.21, 0.012, -0.71];
+
+/**
+ * Baserunning / Foul Line Placement
+ * Both lines meet at the top-middle of the respective batter's boxes
+ * (X = ±3.21, Z = -3.71) rather than converging at the rear apex of home plate (0, 0, 0),
+ * and pass straight through 1B (63.64, -63.64) and 3B (-63.64, -63.64) into the outfield.
+ */
+const rightBoxTopMiddleX = BATTERS_BOX_RIGHT_POS[0];
+const rightBoxTopMiddleZ = BATTERS_BOX_RIGHT_POS[2] - boxLength / 2; // -3.71
+
+const foulLineDx = BASE_1B_POS[0] - rightBoxTopMiddleX; // 60.43
+const foulLineDz = BASE_1B_POS[2] - rightBoxTopMiddleZ; // -59.93
+const foulLineAngle = Math.atan2(foulLineDx, -foulLineDz);
+
+const outfieldZ = -226.0;
+const tOutfield = (outfieldZ - rightBoxTopMiddleZ) / foulLineDz;
+const outfieldEndX = rightBoxTopMiddleX + tOutfield * foulLineDx;
+
+export const FOUL_LINE_LENGTH: number = Math.hypot(
+  outfieldEndX - rightBoxTopMiddleX,
+  outfieldZ - rightBoxTopMiddleZ,
+);
+
+const foulLineCenterX = (rightBoxTopMiddleX + outfieldEndX) / 2;
+const foulLineCenterZ = (rightBoxTopMiddleZ + outfieldZ) / 2;
+
+export const FOUL_LINE_LEFT_POS: [number, number, number] = [-foulLineCenterX, 0.012, foulLineCenterZ];
+export const FOUL_LINE_RIGHT_POS: [number, number, number] = [foulLineCenterX, 0.012, foulLineCenterZ];
+export const FOUL_LINE_LEFT_ROTATION: [number, number, number] = [0, foulLineAngle, 0];
+export const FOUL_LINE_RIGHT_ROTATION: [number, number, number] = [0, -foulLineAngle, 0];

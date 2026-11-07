@@ -54,7 +54,7 @@ const UI_BOTTOM_BAND_PX = 170;
  * The bat is kinematic and only gains colliders during the swing; the ball is
  * a dynamic CCD body driven along the shared pitch path. The layer never
  * renders the batted-ball arc — `BattedBallVisualizer` owns that after the
- * backend/mock returns the trace.
+ * backend returns the trace.
  */
 export function BattingLayer(props: BattingLayerProps) {
   return (

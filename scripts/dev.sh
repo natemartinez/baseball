@@ -68,6 +68,13 @@ if [ ! -d "$FRONTEND_DIR/node_modules" ]; then
   echo -e "${YELLOW}⚠  No node_modules at $FRONTEND_DIR. Run: cd frontend/app && npm install${NC}"
 fi
 
+# If --force or -f is passed, kill any processes holding the ports
+if [[ "${1:-}" == "--force" || "${1:-}" == "-f" ]]; then
+  echo -e "${YELLOW}Freeing ports $BACKEND_PORT and 8081...${NC}"
+  fuser -k "${BACKEND_PORT}/tcp" 8081/tcp 2>/dev/null || true
+  sleep 0.5
+fi
+
 # Refuse to start if another dev server already owns a port (Expo would
 # otherwise silently skip its dev server and leave you with a stale bundle).
 port_in_use() {
@@ -77,7 +84,9 @@ port_in_use() {
 for port in "$BACKEND_PORT" 8081; do
   if port_in_use "$port"; then
     echo -e "${RED}Error: port $port is already in use.${NC}"
-    echo -e "${YELLOW}Stop the process using it (another dev.sh?) and try again.${NC}"
+    echo -e "${YELLOW}Stop the process using it (e.g. an existing 'expo start'), or run:${NC}"
+    echo -e "${GREEN}  npm run dev -- --force${NC}"
+    echo -e "${YELLOW}  (or manually: fuser -k $port/tcp)${NC}"
     exit 1
   fi
 done

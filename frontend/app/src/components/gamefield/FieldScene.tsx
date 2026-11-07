@@ -1,21 +1,20 @@
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import * as THREE from 'three';
 
-import type {
-  ActiveBattedBallData,
-  ActivePitchData,
-  GameCameraMode,
-  ProjectedPlatePosition,
-} from './types';
+import type { ActiveBattedBallData, ActivePitchData } from './types';
+import {
+  GameCameraDirector,
+  PlateProjector,
+  type GameCameraMode,
+  type ProjectedPlatePosition,
+} from '../camera';
 import type { SwingContactReport } from '../../types/api';
 import type { ControlMode, PitchPhase } from '../../store/gameStore';
 import { BattedBallVisualizer } from './BattedBallVisualizer';
 import { BattingLayer } from './BattingLayer';
 import { FielderLayer } from './FielderLayer';
-import { GameCameraDirector } from './GameCameraDirector';
 import { PitchVisualizer } from './PitchVisualizer';
-import { useThree } from './useThree';
 import {
   BATTERS_BOX_LEFT_POS,
   BATTERS_BOX_RIGHT_POS,
@@ -27,12 +26,13 @@ import {
   FOUL_LINE_LEFT_ROTATION,
   FOUL_LINE_RIGHT_POS,
   FOUL_LINE_RIGHT_ROTATION,
-  HOME_PLATE_DEPTH,
-  HOME_PLATE_HALF_WIDTH,
+  HOME_PLATE_CIRCLE_POS,
+  HOME_PLATE_CIRCLE_RADIUS,
   MOUND_POS,
   RUBBER_POS,
   battersBoxShape,
   dirtSkirtShape,
+  homePlateCircleShape,
   homePlateShape,
   infieldGrassShape,
 } from './fieldGeometry';
@@ -42,74 +42,7 @@ const GRASS_COLOR = '#2d6a3f';
 const DIRT_COLOR = '#8e5836';
 const BASE_COLOR = '#f8f9fa';
 
-const PLATE_Y = 0.015;
-const PLATE_WORLD_POSITION = new THREE.Vector3(0, PLATE_Y, 0);
 const NOOP = () => {};
-
-/** Strike-zone bounds used by the 2D HUD (Statcast feet). */
-const STRIKE_ZONE_HALF_WIDTH = 0.7083;
-const STRIKE_ZONE_BOTTOM = 1.5;
-const STRIKE_ZONE_TOP = 3.5;
-
-interface PlateProjectorProps {
-  onProject?: (position: ProjectedPlatePosition) => void;
-}
-
-function PlateProjector({ onProject }: PlateProjectorProps) {
-  const camera = useThree((state) => state.camera);
-  const size = useThree((state) => state.size);
-
-  useEffect(() => {
-    // Canvas reports 0x0 before its first layout pass, which would make the
-    // camera aspect NaN and poison the overlay position.
-    if (size.width <= 0 || size.height <= 0) return;
-
-    camera.updateMatrixWorld();
-
-    const projectX = (x: number, z: number) => {
-      const projected = new THREE.Vector3(x, PLATE_Y, z).project(camera);
-      return ((projected.x + 1) / 2) * size.width;
-    };
-
-    // The plate's widest silhouette is its near shoulder edge; the front edge
-    // is slightly narrower in perspective. Use the wider of the two so the
-    // overlay aligns with the visible left/right plate edges.
-    const nearWidth =
-      projectX(HOME_PLATE_HALF_WIDTH, -HOME_PLATE_HALF_WIDTH) -
-      projectX(-HOME_PLATE_HALF_WIDTH, -HOME_PLATE_HALF_WIDTH);
-    const farWidth =
-      projectX(HOME_PLATE_HALF_WIDTH, -HOME_PLATE_DEPTH) -
-      projectX(-HOME_PLATE_HALF_WIDTH, -HOME_PLATE_DEPTH);
-    const plateWidth = Math.max(nearWidth, farWidth);
-
-    const projectRatio = (x: number, y: number, z: number) => {
-      const projected = new THREE.Vector3(x, y, z).project(camera);
-      return {
-        xRatio: (projected.x + 1) / 2,
-        yRatio: (1 - projected.y) / 2,
-      };
-    };
-
-    const apex = PLATE_WORLD_POSITION.clone().project(camera);
-    const front = new THREE.Vector3(0, PLATE_Y, -HOME_PLATE_DEPTH).project(camera);
-    const zoneTop = projectRatio(0, STRIKE_ZONE_TOP, 0);
-    const zoneBottom = projectRatio(0, STRIKE_ZONE_BOTTOM, 0);
-    const zoneLeft = projectRatio(-STRIKE_ZONE_HALF_WIDTH, 2.5, 0);
-    const zoneRight = projectRatio(STRIKE_ZONE_HALF_WIDTH, 2.5, 0);
-
-    onProject?.({
-      xRatio: (apex.x + 1) / 2,
-      yRatio: (1 - apex.y) / 2,
-      frontRatio: (1 - front.y) / 2,
-      widthRatio: plateWidth / size.width,
-      zoneTopRatio: zoneTop.yRatio,
-      zoneBottomRatio: zoneBottom.yRatio,
-      zoneWidthRatio: zoneRight.xRatio - zoneLeft.xRatio,
-    });
-  }, [camera, size.width, size.height, onProject]);
-
-  return null;
-}
 
 export function FieldScene({
   onPlateProjected,
@@ -162,7 +95,13 @@ export function FieldScene({
         <meshStandardMaterial color={DIRT_COLOR} roughness={0.95} />
       </mesh>
 
-      {/* Infield grass diamond (mound cutout comes from the shape hole) */}
+      {/* Home plate sand circle (holds home plate & batter's boxes) */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={HOME_PLATE_CIRCLE_POS}>
+        <circleGeometry args={[HOME_PLATE_CIRCLE_RADIUS, 64]} />
+        <meshStandardMaterial color={DIRT_COLOR} roughness={0.95} />
+      </mesh>
+
+      {/* Infield grass diamond (mound cutout & home plate cutout come from the shape) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.010, 0]}>
         <shapeGeometry args={[infieldGrassShape]} />
         <meshStandardMaterial color={GRASS_COLOR} roughness={0.9} />

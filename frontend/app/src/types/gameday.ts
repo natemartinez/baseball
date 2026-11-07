@@ -5,6 +5,31 @@
 
 export type GamedayZoneCategory = 'HEART' | 'SHADOW' | 'CHASE' | 'WASTE';
 
+export type PitcherAbilityTier = 'ELITE' | 'GREAT' | 'GOOD' | 'OKAY' | 'MEDIOCRE' | 'POOR';
+
+export type TimingTier = 'PERFECT' | 'GOOD' | 'OKAY' | 'POOR';
+
+export interface ExecutionTelemetry {
+  ability_tier?: PitcherAbilityTier;
+  timing_tier?: TimingTier;
+  timing_label?: string;
+  base_radius_inches?: number;
+  executed_radius_inches?: number;
+  radial_miss_inches: number;
+  realized_x?: number;
+  realized_z?: number;
+  // camelCase variants for gameday_packet
+  abilityTier?: PitcherAbilityTier;
+  timingTier?: TimingTier;
+  timingLabel?: string;
+  baseRadiusInches?: number;
+  executedRadiusInches?: number;
+  radialMissInches?: number;
+  realizedX?: number;
+  realizedZ?: number;
+}
+
+
 export type SituationCategory =
   | 'NEUTRAL'
   | 'AHEAD_IN_COUNT'
@@ -32,10 +57,25 @@ export interface Gameday2DPitchPacket {
     batterId: number;
     situationCategory: SituationCategory;
     pitcherHand?: 'R' | 'L';
+    armSlot?: string;
+    armSlotAngleDeg?: number;
+    consistency?: number;
+    releaseConsistency?: number;
+    motionBio?: {
+      arm_slot: string;
+      arm_slot_angle_deg: number;
+      release_point_ft: { x: number; y: number; z: number };
+    };
   };
 
   /** Release slot in feet (plate-centered frame, +y toward the mound). */
   release?: { x: number; y: number; z: number };
+
+  tunneling?: {
+    isTunneled: boolean;
+    previousPitchId?: string | null;
+    tunnelPartners: string[];
+  };
 
   strategy: {
     repertoireProbabilities: Record<string, number>; // e.g. { "4-Seam Fastball": 0.35, "Spin Monster Sweeper": 0.45 }
@@ -70,6 +110,20 @@ export interface Gameday2DPitchPacket {
     isHeartZoneLeak: boolean;
     hitShadowZoneTarget: boolean;
     realizedZoneCategory: GamedayZoneCategory;
+    pitchId?: string;
+    spinRateRpm?: number;
+    spinAxisDeg?: number;
+    abilityTier?: PitcherAbilityTier;
+    timingTier?: TimingTier;
+    timingLabel?: string;
+    baseRadiusInches?: number;
+    executedRadiusInches?: number;
+    shape?: {
+      verticalApproachAngleDeg: number;
+      verticalOffsetInches: number;
+      rideFactor: number;
+      dropFactor: number;
+    };
   };
 
   result: {

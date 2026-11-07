@@ -9,6 +9,7 @@ import type {
   SwingContactReport,
   TeamsResponse,
   TeamRosterResponse,
+  TimingTier,
 } from '../types/api';
 
 /** Interface contract for the authoritative Flask Baseball Simulation API. */
@@ -17,8 +18,15 @@ export interface IGameService {
   getTeams(): Promise<TeamsResponse>;
   getTeamRoster(teamIdOrName: number | string, season?: number): Promise<TeamRosterResponse>;
   startGame(homeTeamId?: number, awayTeamId?: number, seed?: number): Promise<GameState>;
-  pitch(pitchIntent?: string, targetZone?: string, customTarget?: { x: number; z: number }): Promise<PitchResultResponse>;
-  throwPitch(pitchIntent?: string, targetZone?: string, customTarget?: { x: number; z: number }): Promise<PitchThrowResponse>;
+  pitch(pitchName?: string, targetZone?: string, customTarget?: { x: number; z: number }): Promise<PitchResultResponse>;
+  throwPitch(
+    pitchName?: string,
+    targetZone?: string,
+    customTarget?: { x: number; z: number },
+    timingTier?: TimingTier,
+    timingLabel?: string,
+    pitchEffectiveness?: number,
+  ): Promise<PitchThrowResponse>;
   resolvePitch(
     batterDecision?: BatterDecision,
     batterApproach?: string,

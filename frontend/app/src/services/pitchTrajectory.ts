@@ -55,6 +55,20 @@ export function movementFromArsenal(
 }
 
 /**
+ * Resolves RHP-normalized horizontal break into render-space X.
+ *
+ * Raw arsenal data uses the RHP convention: positive break is toward the
+ * glove side (catcher's right). A left-handed pitcher's glove side is the
+ * catcher's left, so the sign flips for LHP. IVB is never mirrored.
+ */
+export function resolveHorizontalBreakInches(
+  hbInches: number,
+  hand: PitcherHand,
+): number {
+  return hand === 'L' ? -hbInches : hbInches;
+}
+
+/**
  * Boundary-constrained constant-acceleration trajectory.
  *
  * x(t) = release.x + (target.x - release.x)·t + (signedHB/12)·(t² − t)
@@ -72,8 +86,7 @@ export function calculatePitchPoint(
   ivbInches: number,
   hand: PitcherHand,
 ): PitchPoint3D {
-  const sign = hand === 'L' ? -1 : 1;
-  const hbFt = (hbInches * sign) / 12;
+  const hbFt = resolveHorizontalBreakInches(hbInches, hand) / 12;
   const ivbFt = ivbInches / 12;
   const deviation = t * t - t;
 

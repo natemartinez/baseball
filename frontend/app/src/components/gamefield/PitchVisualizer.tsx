@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { Sphere, Trail } from '@react-three/drei';
+import { Trail } from '@react-three/drei/core/Trail';
 import { useFrame } from '@react-three/fiber';
 
 import { pitchPointAt, type PitchPath } from './pitchPath';
@@ -16,7 +16,8 @@ interface PitchVisualizerProps {
 
 /**
  * One-shot data-driven pitch: release ghost, white ball, and red trail.
- * `pfx` is the total break in feet from the virtual aim point; the path is a
+ * `pfx` is the scene-space total break in feet from the virtual aim point
+ * (horizontal already mirrored for the pitcher's hand). The path is a
  * quadratic break that ends exactly at `plate`. The path math is shared with
  * the Rapier batting ball via `pitchPath.ts`.
  */
@@ -59,14 +60,16 @@ export function PitchVisualizer({
 
   return (
     <>
-      <Sphere args={[0.2, 16, 16]} position={releaseVec}>
+      <mesh position={releaseVec}>
+        <sphereGeometry args={[0.2, 16, 16]} />
         <meshBasicMaterial color="#00f0ff" transparent opacity={0.8} />
-      </Sphere>
+      </mesh>
 
       <Trail width={0.2} length={20} color="#ff0044" attenuation={(t) => t * t}>
-        <Sphere ref={ballRef} args={[0.12, 16, 16]} position={releaseVec}>
+        <mesh ref={ballRef} position={releaseVec}>
+          <sphereGeometry args={[0.12, 16, 16]} />
           <meshStandardMaterial color="#ffffff" roughness={0.4} />
-        </Sphere>
+        </mesh>
       </Trail>
     </>
   );

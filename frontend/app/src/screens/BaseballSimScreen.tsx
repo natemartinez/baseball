@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -10,46 +10,58 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
 import { useGameStore } from '../store/gameStore';
-import { ErrorEnvelopeBanner } from '../components/ErrorEnvelopeBanner';
-import { ScoreboardControlsWidget } from '../components/ScoreboardControlsWidget';
+import { ErrorEnvelopeBanner } from '../components/debug/ErrorEnvelopeBanner';
+import { ScoreboardControlsWidget } from '../components/hud/ScoreboardControlsWidget';
 import {
   StrikeZoneGridWidget,
   STRIKE_ZONE_GRID_CONTENT_SIZE,
   STRIKE_ZONE_GRID_CONTENT_TOP,
   STRIKE_ZONE_WIDGET_SIZE,
   STRIKE_ZONE_WIDGET_WIDTH,
-} from '../components/StrikeZoneGridWidget';
-import { GameField } from '../components/GameField';
-import { BattedBallMetricsWidget } from '../components/BattedBallMetricsWidget';
+} from '../components/hud/StrikeZoneGridWidget';
+import { GameField } from '../components/gamefield/GameField';
+import { BattedBallMetricsWidget } from '../components/hud/BattedBallMetricsWidget';
 import type {
   ActiveBattedBallData,
   ActivePitchData,
-  GameCameraMode,
-  ProjectedPlatePosition,
 } from '../components/gamefield/types';
+import {
+  CAMERA_SEQUENCE_ENABLED,
+  type GameCameraMode,
+  type ProjectedPlatePosition,
+} from '../components/camera';
 import type {
   BattedBallTelemetry,
   PitchDetails,
   SwingContactReport,
+  TimingTier,
+  ExecutionTelemetry,
+  PitcherAbilityTier,
 } from '../types/api';
-import { CAMERA_SEQUENCE_ENABLED } from '../components/gamefield/cameraShots';
-import { LineupDialogWidget } from '../components/LineupDialogWidget';
-import { RotationBullpenDialogWidget } from '../components/RotationBullpenDialogWidget';
-import { PitchSelectorWidget } from '../components/PitchSelectorWidget';
-import { StrategyMenuModal } from '../components/StrategyMenuModal';
-import { PitchFeedModal } from '../components/PitchFeedModal';
-import { PitchTrajectoryModal } from '../components/PitchTrajectoryModal';
-import { SettingsMenuModal } from '../components/SettingsMenuModal';
-import { SwingMeterWidget } from '../components/SwingMeterWidget';
-import { BattingDrillHud } from '../components/BattingDrillHud';
-import { BattingDrillModal } from '../components/BattingDrillModal';
+import { LineupDialogWidget } from '../components/menus/LineupDialogWidget';
+import { RotationBullpenDialogWidget } from '../components/menus/RotationBullpenDialogWidget';
+import { PitchSelectorWidget } from '../components/hud/PitchSelectorWidget';
+import { StrategyMenuModal } from '../components/menus/StrategyMenuModal';
+import { PitchFeedModal } from '../components/menus/PitchFeedModal';
+import { PitchTrajectoryModal } from '../components/menus/PitchTrajectoryModal';
+import { SettingsMenuModal } from '../components/menus/SettingsMenuModal';
+import { SwingMeterWidget } from '../components/hud/SwingMeterWidget';
+import { BattingDrillHud } from '../components/hud/BattingDrillHud';
+import { BattingDrillModal } from '../components/menus/BattingDrillModal';
 import { GamedayDevMenuModal } from '../components/debug/GamedayDevMenuModal';
-import { getZoneNominalTarget } from '../services/gamedayMath';
-import { movementForPitch } from '../services/pitchTrajectory';
+import { getZoneNominalTarget, getAbilityTier } from '../services/gamedayMath';
+import { calculateConfidenceEffectiveCommand } from '../services/confidenceModel';
+import { computeBaselineEffectiveness, calculateCombinedEffectiveCommand } from '../services/effectivenessModel';
+import {
+  movementForPitch,
+  resolveHorizontalBreakInches,
+  type PitcherHand,
+} from '../services/pitchTrajectory';
 import { Colors } from '../theme/colors';
 
-const MOCK_RELEASE: [number, number, number] = [-1.5, 6.0, -59.5];
+const DEFAULT_RELEASE_EXTENSION: [number, number, number] = [-1.5, 6.0, -59.5];
 
 const RESULT_CAMERA_HOLD_MS = 1600;
 
@@ -79,6 +91,7 @@ function isValidBattedBallTrace(trace: unknown): trace is BattedBallTelemetry {
  */
 export function BaseballSimScreen() {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  // Granular store subscriptions: separate action methods from reactive UI state
   const {
     // Data
     gameState,
@@ -90,7 +103,7 @@ export function BaseballSimScreen() {
     pendingResolution,
     lineups,
     rotations,
-    selectedPitchIntent,
+    selectedPitchName,
     selectedTargetZone,
     customTargetCoords,
     isLineupDialogOpen,
@@ -108,6 +121,45 @@ export function BaseballSimScreen() {
     isPitching,
     errorMessage,
     errorEnvelope,
+    pitcherStamina,
+    pitcherConfidence,
+    pitcherEffectiveness,
+  } = useGameStore(
+    useShallow((s) => ({
+      gameState: s.gameState,
+      pitchFeed: s.pitchFeed,
+      currentAtBatPitches: s.currentAtBatPitches,
+      latestPitch: s.latestPitch,
+      pitchPhase: s.pitchPhase,
+      pendingThrow: s.pendingThrow,
+      pendingResolution: s.pendingResolution,
+      lineups: s.lineups,
+      rotations: s.rotations,
+      selectedPitchName: s.selectedPitchName,
+      selectedTargetZone: s.selectedTargetZone,
+      customTargetCoords: s.customTargetCoords,
+      isLineupDialogOpen: s.isLineupDialogOpen,
+      isRotationDialogOpen: s.isRotationDialogOpen,
+      activeSeed: s.activeSeed,
+      controlMode: s.controlMode,
+      battingDrill: s.battingDrill,
+      isBattingDrillOpen: s.isBattingDrillOpen,
+      isSettingsMenuOpen: s.isSettingsMenuOpen,
+      isDevMenuOpen: s.isDevMenuOpen,
+      isPitchFeedOpen: s.isPitchFeedOpen,
+      isStrategyMenuOpen: s.isStrategyMenuOpen,
+      isTrajectoryOpen: s.isTrajectoryOpen,
+      loadingState: s.loadingState,
+      isPitching: s.isPitching,
+      errorMessage: s.errorMessage,
+      errorEnvelope: s.errorEnvelope,
+      pitcherStamina: s.pitcherStamina,
+      pitcherConfidence: s.pitcherConfidence,
+      pitcherEffectiveness: s.pitcherEffectiveness,
+    })),
+  );
+
+  const {
     // Actions
     loadInitialState,
     startNewGame,
@@ -121,13 +173,34 @@ export function BaseballSimScreen() {
     toggleSettingsMenu,
     throwDrillPitch,
     setBattingDrillOpen,
-    setSelectedPitchIntent,
+    setSelectedPitchName,
     setSelectedTargetZone,
     setGloveTarget,
     setLineupDialogOpen,
     setRotationDialogOpen,
     clearError,
-  } = useGameStore();
+  } = useGameStore(
+    useShallow((s) => ({
+      loadInitialState: s.loadInitialState,
+      startNewGame: s.startNewGame,
+      throwPitch: s.throwPitch,
+      resolvePitch: s.resolvePitch,
+      revealPitch: s.revealPitch,
+      beginBattedBall: s.beginBattedBall,
+      completeBattedBall: s.completeBattedBall,
+      swapLineup: s.swapLineup,
+      swapRotation: s.swapRotation,
+      toggleSettingsMenu: s.toggleSettingsMenu,
+      throwDrillPitch: s.throwDrillPitch,
+      setBattingDrillOpen: s.setBattingDrillOpen,
+      setSelectedPitchName: s.setSelectedPitchName,
+      setSelectedTargetZone: s.setSelectedTargetZone,
+      setGloveTarget: s.setGloveTarget,
+      setLineupDialogOpen: s.setLineupDialogOpen,
+      setRotationDialogOpen: s.setRotationDialogOpen,
+      clearError: s.clearError,
+    })),
+  );
 
   useEffect(() => {
     loadInitialState();
@@ -148,18 +221,35 @@ export function BaseballSimScreen() {
   const animatedBattedBallTraceRef = useRef<BattedBallTelemetry | null>(null);
   const battingChargeRef = useRef(0);
   const [resultCameraHold, setResultCameraHold] = useState(false);
+  const [manualCameraMode, setManualCameraMode] = useState<GameCameraMode>('PITCH');
+
+  const [chargingProgress, setChargingProgress] = useState<number | null>(null);
+  const [isCharging, setIsCharging] = useState(false);
+
+  const handleChargingProgress = useCallback((progress: number | null) => {
+    setChargingProgress(progress);
+    setIsCharging(progress != null && progress > 0);
+  }, []);
 
   const pendingBattedBall = pendingResolution?.pitch_details?.batted_ball;
   const hasPendingBattedBall = isValidBattedBallTrace(pendingBattedBall);
 
-  // Pitch -> Contact -> Result. The bird's-eye cut starts at contact (the
-  // REACTING beat) and lasts through the flight, reveal, and result hold.
-  const birdseyeActive =
+  // Pitch -> Contact -> Result. The automatic bird's-eye cut starts at contact
+  // (the REACTING beat) and lasts through the flight, reveal, and result hold.
+  const isBattedBallCameraActive =
     CAMERA_SEQUENCE_ENABLED &&
     ((pitchPhase === 'REACTING' && hasPendingBattedBall) ||
       pitchPhase === 'BATTED_BALL' ||
       (pitchPhase === 'IDLE' && resultCameraHold));
-  const cameraMode: GameCameraMode = birdseyeActive ? 'BIRDSEYE' : 'PITCH';
+
+  const cameraMode: GameCameraMode = isBattedBallCameraActive
+    ? 'BIRDSEYE'
+    : manualCameraMode;
+
+  const handleToggleCamera = useCallback(() => {
+    setManualCameraMode((prev) => (prev === 'PITCH' ? 'BIRDSEYE' : 'PITCH'));
+  }, []);
+
   const battingMode = controlMode === 'BATTING';
   const battingModalOpen =
     isBattingDrillOpen ||
@@ -170,7 +260,8 @@ export function BaseballSimScreen() {
     isTrajectoryOpen ||
     isLineupDialogOpen ||
     isRotationDialogOpen;
-  const battingInputEnabled = battingMode && !birdseyeActive && !battingModalOpen;
+  const battingInputEnabled =
+    battingMode && cameraMode === 'PITCH' && !isBattedBallCameraActive && !battingModalOpen;
 
   // Batting Practice auto-feed: the playlist is thrown without the player
   // touching the pitch selector. Wait for the result/camera hold, and never
@@ -220,8 +311,14 @@ export function BaseballSimScreen() {
     if (!execution) return;
 
     const fallbackMovement = movementForPitch(pitch.pitch_name);
-    const horizontalBreakIn =
-      execution.horizontalBreakInches ?? fallbackMovement.hb;
+    const pitcherHand: PitcherHand =
+      packet?.meta?.pitcherHand ??
+      gameState?.current_pitcher?.throws ??
+      'R';
+    const horizontalBreakIn = resolveHorizontalBreakInches(
+      execution.horizontalBreakInches ?? fallbackMovement.hb,
+      pitcherHand,
+    );
     const inducedVerticalBreakIn =
       execution.inducedVerticalBreakInches ?? fallbackMovement.ivb;
     const speedMph = execution.releaseSpeedMph ?? pitch.velocity_mph;
@@ -229,15 +326,19 @@ export function BaseballSimScreen() {
 
     // Packet release uses [x, depth, height]; the 3D scene uses
     // [x, height, -depth].
+    const livePitcherRelease = gameState?.current_pitcher?.release_point_ft;
     const release: [number, number, number] = packet?.release
       ? [packet.release.x, packet.release.z, -packet.release.y]
-      : MOCK_RELEASE;
+      : livePitcherRelease
+        ? [livePitcherRelease.x, livePitcherRelease.z, -livePitcherRelease.y]
+        : DEFAULT_RELEASE_EXTENSION;
 
     pitchSequence.current += 1;
     setActivePitch({
       id: `pitch-${packet?.meta.pitchNumber ?? pitchSequence.current}-${pitchSequence.current}`,
       release,
       plate: [execution.realizedX, execution.realizedZ, 0],
+      // pfx[0] is already resolved into scene-space X for this pitcher's hand.
       pfx: [horizontalBreakIn / 12, inducedVerticalBreakIn / 12],
       flightTime,
     });
@@ -369,12 +470,76 @@ export function BaseballSimScreen() {
     void resolvePitch({ batterDecision: 'TAKE' });
   }, [resolvePitch]);
 
-  const handleSelectPitchIntent = useCallback(
+  const [pitchRadiusVisible, setPitchRadiusVisible] = useState(false);
+
+  const handleSelectPitchName = useCallback(
     (name: string) => {
-      setSelectedPitchIntent(name);
+      setSelectedPitchName(name);
+      setPitchRadiusVisible(true);
     },
-    [setSelectedPitchIntent],
+    [setSelectedPitchName],
   );
+
+  const currentBatter = gameState?.current_batter;
+  const currentPitcher = gameState?.current_pitcher;
+
+  const pitcherId = currentPitcher?.id;
+  const prevPitcherIdRef = useRef(pitcherId);
+  useEffect(() => {
+    if (prevPitcherIdRef.current !== pitcherId) {
+      prevPitcherIdRef.current = pitcherId;
+      setPitchRadiusVisible(false);
+    }
+  }, [pitcherId]);
+
+  const selectedPitchItem = useMemo(
+    () => currentPitcher?.arsenal?.find((p) => p.name === selectedPitchName) ?? null,
+    [currentPitcher?.arsenal, selectedPitchName],
+  );
+
+  const currentPitcherId = currentPitcher?.id;
+  const staminaPct = currentPitcherId ? (pitcherStamina[currentPitcherId] ?? 100) : 100;
+  const currentPitcherConfMap = currentPitcherId ? (pitcherConfidence[currentPitcherId] ?? {}) : {};
+  const holisticConfidence = currentPitcherConfMap['overall'] ?? 50;
+
+  const currentPitcherEffMap = currentPitcherId ? (pitcherEffectiveness[currentPitcherId] ?? {}) : {};
+  const activeEffectiveness =
+    selectedPitchName && currentPitcherEffMap[selectedPitchName] != null
+      ? currentPitcherEffMap[selectedPitchName]
+      : (selectedPitchItem
+        ? computeBaselineEffectiveness(
+          selectedPitchItem.velocity_mph ?? 93,
+          selectedPitchItem.break_rating ?? 75,
+          selectedPitchItem.spin_rpm ?? 2400,
+          selectedPitchItem.control_rating ?? 75,
+        )
+        : 80.0);
+
+  const handleThrowPitch = useCallback(
+    (timingTier: TimingTier, timingLabel: string) => {
+      void throwPitch(timingTier, timingLabel, activeEffectiveness);
+    },
+    [throwPitch, activeEffectiveness],
+  );
+
+  const resultVisible = pitchPhase === 'IDLE';
+
+  const executionTelemetry: ExecutionTelemetry | null = useMemo(() => {
+    if (pendingThrow?.execution) return pendingThrow.execution;
+    if (pendingThrow?.pitch_details?.execution) return pendingThrow.pitch_details.execution;
+    if (pendingThrow?.pitch_details?.gameday_packet?.execution) {
+      return pendingThrow.pitch_details.gameday_packet.execution as unknown as ExecutionTelemetry;
+    }
+    return null;
+  }, [pendingThrow]);
+
+  const realizedLocation = useMemo(() => {
+    if (!executionTelemetry) return null;
+    const rx = executionTelemetry.realized_x ?? executionTelemetry.realizedX;
+    const rz = executionTelemetry.realized_z ?? executionTelemetry.realizedZ;
+    if (rx != null && rz != null) return { x: rx, z: rz };
+    return null;
+  }, [executionTelemetry]);
 
   const isLoading = loadingState === 'loading' && !isPitching && !gameState;
 
@@ -405,28 +570,29 @@ export function BaseballSimScreen() {
     );
   }
 
-  const currentBatter = gameState?.current_batter;
-  const currentPitcher = gameState?.current_pitcher;
+  const commandRating = selectedPitchItem?.control_rating ?? currentPitcher?.control ?? 82;
   const defaultGlove = getZoneNominalTarget(selectedTargetZone || 'heart');
   const packetAim = pendingThrow?.pitch_details.gameday_packet?.intent ?? latestPitch?.gameday_packet?.intent;
   const resolvedAim =
-    activePitch &&
-    packetAim &&
-    Number.isFinite(packetAim.targetX) &&
-    Number.isFinite(packetAim.targetZ)
+    (pitchPhase !== 'IDLE' || Boolean(activePitch)) &&
+      packetAim &&
+      Number.isFinite(packetAim.targetX) &&
+      Number.isFinite(packetAim.targetZ)
       ? { x: packetAim.targetX, z: packetAim.targetZ }
       : null;
   const gloveTarget =
     customTargetCoords ?? resolvedAim ?? { x: defaultGlove.x, z: defaultGlove.z };
-  const commandRating = currentPitcher?.control ?? 82;
   const reactionDecision =
     pitchPhase === 'REACTING'
       ? pendingResolution?.pitch_details?.batter_decision ?? null
       : null;
-  const resultVisible = pitchPhase === 'IDLE';
+
+  const effectiveCommand = calculateCombinedEffectiveCommand(commandRating, holisticConfidence, activeEffectiveness);
+  const pitcherAbilityTier = getAbilityTier(effectiveCommand);
+
   const battedBallTelemetry: BattedBallTelemetry | null =
     (pitchPhase === 'REACTING' || pitchPhase === 'BATTED_BALL') &&
-    hasPendingBattedBall
+      hasPendingBattedBall
       ? pendingBattedBall ?? null
       : pitchPhase === 'IDLE'
         ? latestPitch?.batted_ball ?? null
@@ -461,7 +627,7 @@ export function BaseballSimScreen() {
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.bgDeep} />
+      <StatusBar barStyle="light-content" />
       <GameField
         batter={currentBatter}
         pitcher={currentPitcher}
@@ -533,29 +699,38 @@ export function BaseballSimScreen() {
             activeSeed={activeSeed}
             controlMode={controlMode}
             onOpenBattingDrill={() => setBattingDrillOpen(true)}
+            cameraMode={cameraMode}
+            onToggleCameraMode={handleToggleCamera}
           />
 
           <View style={styles.bottomPad} />
         </ScrollView>
 
-        {/* Pitch Selector — bottom fallback for narrow screens */}
-        {currentPitcher && !showSidePitchSelector && !birdseyeActive && !battingMode && (
+        {/* Pitch Selector — bottom fallback for narrow screens or when in bird's-eye view */}
+        {currentPitcher &&
+          (!showSidePitchSelector || cameraMode === 'BIRDSEYE') &&
+          !isBattedBallCameraActive &&
+          !battingMode && (
           <View style={styles.pitchFooter}>
             <PitchSelectorWidget
               pitcher={currentPitcher}
-              selectedPitchIntent={selectedPitchIntent}
+              selectedPitchName={selectedPitchName}
               recommendedPitch={gameState?.strategy_intent?.recommended_pitch}
               strategyIntent={gameState?.strategy_intent}
-              onSelectPitchIntent={handleSelectPitchIntent}
-              onThrowPitch={throwPitch}
+              onSelectPitchName={handleSelectPitchName}
+              onThrowPitch={handleThrowPitch}
+              onChargingProgress={handleChargingProgress}
               isActionPending={isPitching || loadingState === 'loading'}
+              staminaPct={staminaPct}
+              confidencePct={holisticConfidence}
+              pitchEffectiveness={currentPitcherEffMap}
             />
           </View>
         )}
       </SafeAreaView>
 
       {/* Strike Zone — pinned just above the plate in the GameField scene */}
-      {currentBatter && !birdseyeActive && (
+      {currentBatter && cameraMode === 'PITCH' && !isBattedBallCameraActive && (
         <View style={[styles.strikeZoneOverlay, { top: strikeZoneTop }]}>
           <View
             style={[
@@ -585,6 +760,13 @@ export function BaseballSimScreen() {
                 coordinateScaleX={strikeZoneScaleX}
                 coordinateScaleY={strikeZoneScaleY}
                 variant="field"
+                showPitchRadius={pitchRadiusVisible && !battingMode}
+                executionTelemetry={executionTelemetry}
+                chargingProgress={chargingProgress}
+                isCharging={isCharging}
+                pitcherAbilityTier={pitcherAbilityTier}
+                effectiveCommand={effectiveCommand}
+                realizedLocation={realizedLocation}
               />
             </View>
           </View>
@@ -592,7 +774,11 @@ export function BaseballSimScreen() {
       )}
 
       {/* Pitch Selector — stacked vertically beside the strike zone */}
-      {currentPitcher && showSidePitchSelector && !birdseyeActive && !battingMode && (
+      {currentPitcher &&
+        showSidePitchSelector &&
+        cameraMode === 'PITCH' &&
+        !isBattedBallCameraActive &&
+        !battingMode && (
         <View
           style={[
             styles.pitchSelectorSide,
@@ -606,12 +792,16 @@ export function BaseballSimScreen() {
           <PitchSelectorWidget
             layout="vertical"
             pitcher={currentPitcher}
-            selectedPitchIntent={selectedPitchIntent}
+            selectedPitchName={selectedPitchName}
             recommendedPitch={gameState?.strategy_intent?.recommended_pitch}
             strategyIntent={gameState?.strategy_intent}
-            onSelectPitchIntent={handleSelectPitchIntent}
-            onThrowPitch={throwPitch}
+            onSelectPitchName={handleSelectPitchName}
+            onThrowPitch={handleThrowPitch}
+            onChargingProgress={handleChargingProgress}
             isActionPending={isPitching || loadingState === 'loading'}
+            staminaPct={staminaPct}
+            confidencePct={holisticConfidence}
+            pitchEffectiveness={currentPitcherEffMap}
           />
         </View>
       )}
@@ -620,7 +810,12 @@ export function BaseballSimScreen() {
 
       <SwingMeterWidget
         chargeRef={battingChargeRef}
-        visible={battingMode && pitchPhase === 'IN_FLIGHT' && !birdseyeActive}
+        visible={
+          battingMode &&
+          pitchPhase === 'IN_FLIGHT' &&
+          cameraMode === 'PITCH' &&
+          !isBattedBallCameraActive
+        }
       />
 
       {/* Lineup Dialog */}

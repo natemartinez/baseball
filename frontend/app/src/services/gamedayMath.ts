@@ -4,7 +4,135 @@
  * delivery execution error from pitcher Command & Fatigue ratings.
  */
 
-import type { GamedayZoneCategory, CalibrationBaseline } from '../types/gameday';
+import type {
+  GamedayZoneCategory,
+  CalibrationBaseline,
+  PitcherAbilityTier,
+  TimingTier,
+} from '../types/gameday';
+
+// ─── Pitcher Ability & Timing Multipliers ─────────────────────────────────────
+
+export const TIMING_MULTIPLIERS: Record<TimingTier, number> = {
+  PERFECT: 0.52,
+  GOOD: 1.00,
+  OKAY: 1.97,
+  POOR: 3.75,
+};
+
+export function getAbilityTier(commandRating: number): PitcherAbilityTier {
+  if (commandRating >= 90) return 'ELITE';
+  if (commandRating >= 80) return 'GREAT';
+  if (commandRating >= 70) return 'GOOD';
+  if (commandRating >= 60) return 'OKAY';
+  if (commandRating >= 50) return 'MEDIOCRE';
+  return 'POOR';
+}
+
+export function feetToInches(feet: number): number {
+  return feet * 12;
+}
+
+export function inchesToFeet(inches: number): number {
+  return inches / 12;
+}
+
+export function statcastRadiusToSvgPixels(
+  radiusInches: number,
+  svgWidth: number,
+  viewportWidthFt: number = VIEWPORT_X_MAX - VIEWPORT_X_MIN,
+): number {
+  return (radiusInches / (viewportWidthFt * 12)) * svgWidth;
+}
+
+export function getExecutedRadiusInches(
+  baseRadiusInches: number,
+  timingTier: TimingTier = 'GOOD',
+): number {
+  const mult = TIMING_MULTIPLIERS[timingTier] ?? 1.0;
+  return +(baseRadiusInches * mult).toFixed(3);
+}
+
+export function getAbilityTierColor(tier: PitcherAbilityTier): string {
+  switch (tier) {
+    case 'ELITE':
+      return '#8B5CF6';
+    case 'GREAT':
+      return '#3B82F6';
+    case 'GOOD':
+      return '#10B981';
+    case 'OKAY':
+      return '#F59E0B';
+    case 'MEDIOCRE':
+      return '#F97316';
+    case 'POOR':
+    default:
+      return '#EF4444';
+  }
+}
+
+export function getTimingTierColor(tier: TimingTier): string {
+  switch (tier) {
+    case 'PERFECT':
+      return '#10B981';
+    case 'GOOD':
+      return '#3B82F6';
+    case 'OKAY':
+      return '#F59E0B';
+    case 'POOR':
+    default:
+      return '#EF4444';
+  }
+}
+
+export interface ChargingTimingResult {
+  timingTier: TimingTier;
+  timingLabel: string;
+}
+
+export function evaluateChargingTiming(
+  holdTimeMs: number,
+  targetSweetSpotMs: number = 1000.0,
+  effectiveness?: number,
+): ChargingTimingResult {
+  if (targetSweetSpotMs <= 0) {
+    return { timingTier: 'POOR', timingLabel: 'EARLY • POOR' };
+  }
+  const ratio = holdTimeMs / targetSweetSpotMs;
+
+  // Tolerance scale based on pitch effectiveness (neutral baseline 80.0):
+  // At 90% effectiveness: tolerance multiplier ~ 1.15x (easier to hit PERFECT/GOOD)
+  // At 75% effectiveness: tolerance multiplier ~ 0.96x (tighter window, slips into OKAY/POOR)
+  const eff = effectiveness !== undefined ? Math.max(0, Math.min(100, effectiveness)) : 80.0;
+  let tol = 1.0;
+  if (eff >= 80.0) {
+    tol = 1.0 + ((eff - 80.0) / 20.0) * 0.30;
+  } else {
+    tol = Math.max(0.60, 1.0 - ((80.0 - eff) / 80.0) * 0.60);
+  }
+
+  const perfectHalf = 0.05 * tol;
+  const goodEarlyDelta = 0.15 * tol;
+  const goodLateDelta = 0.15 * tol;
+  const okayEarlyDelta = 0.35 * tol;
+  const okayLateDelta = 0.35 * tol;
+
+  if (ratio >= 1.0 - perfectHalf && ratio <= 1.0 + perfectHalf) {
+    return { timingTier: 'PERFECT', timingLabel: 'PERFECT!' };
+  } else if (ratio >= 1.0 - goodEarlyDelta && ratio < 1.0 - perfectHalf) {
+    return { timingTier: 'GOOD', timingLabel: 'EARLY • GOOD' };
+  } else if (ratio > 1.0 + perfectHalf && ratio <= 1.0 + goodLateDelta) {
+    return { timingTier: 'GOOD', timingLabel: 'LATE • GOOD' };
+  } else if (ratio >= 1.0 - okayEarlyDelta && ratio < 1.0 - goodEarlyDelta) {
+    return { timingTier: 'OKAY', timingLabel: 'EARLY • OKAY' };
+  } else if (ratio > 1.0 + goodLateDelta && ratio <= 1.0 + okayLateDelta) {
+    return { timingTier: 'OKAY', timingLabel: 'LATE • OKAY' };
+  } else if (ratio < 1.0 - okayEarlyDelta) {
+    return { timingTier: 'POOR', timingLabel: 'EARLY • POOR' };
+  } else {
+    return { timingTier: 'POOR', timingLabel: 'LATE • POOR' };
+  }
+}
 
 // ─── Constants: Rulebook & Gameday Zone Dimensions (in Statcast Feet) ──────────
 
@@ -39,12 +167,12 @@ export const FATIGUE_ENABLED = false;
  * Interpolated linearly between tiers and clamped outside the range.
  */
 export const MAX_ERROR_RADIUS_TIERS: Array<[number, number]> = [
-  [99, 1.0],
-  [90, 1.25],
-  [82, 1.5],
-  [68, 3.0],
-  [55, 4.5],
-  [40, 7.0],
+  [99, 1.5],
+  [90, 1.875],
+  [82, 2.25],
+  [68, 4.5],
+  [55, 6.75],
+  [40, 10.5],
 ];
 
 /** sigma = radius / divisor for the truncated Gaussian cloud. */

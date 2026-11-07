@@ -16,6 +16,7 @@ import type {
   ApiErrorResponse,
   TeamsResponse,
   TeamRosterResponse,
+  TimingTier,
 } from '../types/api';
 import { BaseballApiError } from '../types/api';
 import type { Gameday2DPitchPacket } from '../types/gameday';
@@ -32,7 +33,45 @@ import {
   movementForPitch,
   type PitcherHand,
 } from './pitchTrajectory';
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type { IGameService } from './IGameService';
+
+export function resolveApiBaseUrl(baseUrlOverride?: string): string {
+  const envUrl = process.env['EXPO_PUBLIC_API_URL'] || process.env['API_BASE_URL'];
+  const candidate = (baseUrlOverride || envUrl || '').trim();
+
+  // If candidate is a remote/custom host (not localhost or loopback), respect it directly
+  if (candidate && !candidate.includes('localhost') && !candidate.includes('127.0.0.1')) {
+    return candidate.replace(/\/$/, '');
+  }
+
+  // On Web, localhost works natively in the browser
+  if (Platform.OS === 'web') {
+    return (candidate || 'http://localhost:5050').replace(/\/$/, '');
+  }
+
+  // In Expo Go or development builds on physical devices / simulators,
+  // hostUri holds the Metro server's IP (e.g. "192.168.1.215:8081")
+  const hostUri =
+    Constants.expoConfig?.hostUri ||
+    (Constants as { manifest2?: { extra?: { expoClient?: { hostUri?: string } } } })?.manifest2
+      ?.extra?.expoClient?.hostUri;
+
+  if (hostUri) {
+    const host = hostUri.split(':')[0];
+    if (host) {
+      return `http://${host}:5050`;
+    }
+  }
+
+  // Android emulator loopback fallback
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:5050';
+  }
+
+  return (candidate || 'http://localhost:5050').replace(/\/$/, '');
+}
 
 /**
  * HTTP Game Service — calls the authoritative Python Flask API.
@@ -42,9 +81,7 @@ export class HttpGameService implements IGameService {
   private baseUrl: string;
 
   constructor(baseUrl?: string) {
-    const envUrl = process.env['EXPO_PUBLIC_API_URL'] || process.env['API_BASE_URL'];
-    const defaultUrl = typeof window !== 'undefined' ? 'http://localhost:5050' : 'http://10.0.2.2:5050';
-    this.baseUrl = (baseUrl || envUrl || defaultUrl).replace(/\/$/, '');
+    this.baseUrl = resolveApiBaseUrl(baseUrl);
   }
 
   getBaseUrl(): string {
@@ -135,11 +172,11 @@ export class HttpGameService implements IGameService {
   }
 
   async pitch(
-    pitchIntent?: string,
+    pitchName?: string,
     targetZone?: string,
     customTarget?: { x: number; z: number },
   ): Promise<PitchResultResponse> {
-    const body = this.buildPitchBody(pitchIntent, targetZone, customTarget);
+    const body = this.buildPitchBody(pitchName, targetZone, customTarget);
     const res = await this.post<PitchResultResponse>('api/pitch', body);
     this.ensureStrategyIntent(res.game_state);
     this.ensureGamedayPacket(res, customTarget);
@@ -147,11 +184,14 @@ export class HttpGameService implements IGameService {
   }
 
   async throwPitch(
-    pitchIntent?: string,
+    pitchName?: string,
     targetZone?: string,
     customTarget?: { x: number; z: number },
+    timingTier?: TimingTier,
+    timingLabel?: string,
+    pitchEffectiveness?: number,
   ): Promise<PitchThrowResponse> {
-    const body = this.buildPitchBody(pitchIntent, targetZone, customTarget);
+    const body = this.buildPitchBody(pitchName, targetZone, customTarget, timingTier, timingLabel, pitchEffectiveness);
     const res = await this.post<PitchThrowResponse>('api/pitch/throw', body);
     this.ensureStrategyIntent(res.game_state);
     this.ensureGamedayPacket(res, customTarget);
@@ -166,7 +206,7 @@ export class HttpGameService implements IGameService {
 
   async practiceThrowPitch(entry: BattingDrillEntry): Promise<PitchThrowResponse> {
     const res = await this.post<PitchThrowResponse>('api/practice/pitch/throw', {
-      pitch_type: entry.pitchName,
+      pitch_name: entry.pitchName,
       target_zone: entry.targetZone,
       target_x: entry.targetX,
       target_z: entry.targetZ,
@@ -225,17 +265,28 @@ export class HttpGameService implements IGameService {
   }
 
   private buildPitchBody(
-    pitchIntent?: string,
+    pitchName?: string,
     targetZone?: string,
     customTarget?: { x: number; z: number },
+    timingTier?: TimingTier,
+    timingLabel?: string,
+    pitchEffectiveness?: number,
   ): PitchRequest {
     const body: PitchRequest = {};
-    if (pitchIntent) body.pitch_intent = pitchIntent;
+    if (pitchName) {
+      body.selection_mode = 'user';
+      body.pitch_name = pitchName;
+    } else {
+      body.selection_mode = 'ai';
+    }
     if (targetZone) body.target_zone = targetZone;
     if (customTarget) {
       body.target_x = customTarget.x;
       body.target_z = customTarget.z;
     }
+    if (timingTier) body.timing_tier = timingTier;
+    if (timingLabel) body.timing_label = timingLabel;
+    if (pitchEffectiveness != null) body.pitch_effectiveness = pitchEffectiveness;
     return body;
   }
 
@@ -339,6 +390,11 @@ export class HttpGameService implements IGameService {
           isHeartZoneLeak: intendedCategory !== 'HEART' && realizedCategory === 'HEART',
           hitShadowZoneTarget: intendedCategory === 'SHADOW' && realizedCategory === 'SHADOW',
           realizedZoneCategory: realizedCategory,
+          abilityTier: (res as any).execution?.ability_tier ?? (res as any).execution?.abilityTier,
+          timingTier: (res as any).execution?.timing_tier ?? (res as any).execution?.timingTier,
+          timingLabel: (res as any).execution?.timing_label ?? (res as any).execution?.timingLabel,
+          baseRadiusInches: (res as any).execution?.base_radius_inches ?? (res as any).execution?.baseRadiusInches,
+          executedRadiusInches: (res as any).execution?.executed_radius_inches ?? (res as any).execution?.executedRadiusInches,
         },
         result: {
           call: p.pitch_result === null
@@ -358,6 +414,15 @@ export class HttpGameService implements IGameService {
           description: p.description,
         },
       };
+    }
+    const exec = (res as any).execution || res.pitch_details.execution;
+    if (exec && res.pitch_details.gameday_packet?.execution) {
+      const gExec = res.pitch_details.gameday_packet.execution;
+      if (!gExec.abilityTier) gExec.abilityTier = exec.ability_tier ?? exec.abilityTier;
+      if (!gExec.timingTier) gExec.timingTier = exec.timing_tier ?? exec.timingTier;
+      if (!gExec.timingLabel) gExec.timingLabel = exec.timing_label ?? exec.timingLabel;
+      if (gExec.baseRadiusInches === undefined) gExec.baseRadiusInches = exec.base_radius_inches ?? exec.baseRadiusInches;
+      if (gExec.executedRadiusInches === undefined) gExec.executedRadiusInches = exec.executed_radius_inches ?? exec.executedRadiusInches;
     }
   }
 

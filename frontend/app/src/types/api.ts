@@ -1,4 +1,9 @@
-import type { Gameday2DPitchPacket } from './gameday';
+import type {
+  Gameday2DPitchPacket,
+  ExecutionTelemetry,
+  TimingTier,
+  PitcherAbilityTier,
+} from './gameday';
 export * from './gameday';
 
 // ─── Strike Zone Constants ────────────────────────────────────────────────────
@@ -96,7 +101,7 @@ export interface SwingContactReport {
   timing_offset_ms?: number;
 }
 
-export type PitchIntent = 'STRIKE' | 'CHASE' | 'WASTE' | 'CORNER' | 'BALL';
+export type PitchIntent = 'STRIKE' | 'CHASE' | 'WASTE';
 
 export type CommandQuality =
   | 'PINPOINT'
@@ -129,6 +134,8 @@ export interface BatterInfo {
   jersey_number: number;
   position: string;
   team: string;
+  /** Batting side: R, L, or S (switch). */
+  handedness?: 'R' | 'L' | 'S';
   power: number;
   contact: number;
   vision: number;
@@ -147,16 +154,23 @@ export interface StatcastMetrics {
 }
 
 export interface PitchArsenalItem {
+  id?: string;
   name: string;
+  category?: string;
   velocity_mph: number;
   velocity_min_mph?: number;
   velocity_max_mph?: number;
+  velocity_display?: string;
   spin_rpm: number;
+  spin_rate_rpm?: number;
+  spin_axis_deg?: number;
   break_rating: number;
   control_rating: number;
+  command?: number;
   /** Statcast movement (inches). Positive HB = glove side (RHP convention). */
   horizontal_break_in?: number;
   induced_vertical_break_in?: number;
+  tunnel_partners?: string[];
   statcast: StatcastMetrics;
 }
 
@@ -166,6 +180,12 @@ export interface PitcherGameStats {
   walks: number;
   hits_allowed: number;
   runs_allowed: number;
+}
+
+export interface MotionBio {
+  arm_slot: string;
+  arm_slot_angle_deg: number;
+  release_point_ft: { x: number; y: number; z: number };
 }
 
 export interface PitcherInfo {
@@ -178,6 +198,14 @@ export interface PitcherInfo {
   throws?: 'R' | 'L';
   /** Release slot in feet (optional per-pitcher override). */
   release?: { x: number; y: number; z: number };
+  motion_bio?: MotionBio;
+  consistency?: number;
+  release_point_ft?: { x: number; y: number; z: number };
+  release_consistency?: number;
+  arm_slot?: string;
+  arm_slot_angle_deg?: number;
+  stamina?: number;
+  composure?: number;
   break_rating: number;
   velocity_rating: number;
   arm_strength: number;
@@ -285,6 +313,7 @@ export interface PitchDetails {
   gameday_packet?: Gameday2DPitchPacket;
   /** Present only when SWING_DECISION_TELEMETRY is enabled on the backend. */
   swing_decision?: Record<string, unknown>;
+  execution?: ExecutionTelemetry;
 }
 
 /** A pitch whose reaction and outcome have been revealed. */
@@ -299,10 +328,15 @@ export interface PitchResultResponse {
 }
 
 export interface PitchThrowResponse {
+  status?: string;
   phase: 'THROWN';
+  execution?: ExecutionTelemetry;
   /** Delivery telemetry only: reaction and outcome are intentionally null. */
   pitch_details: PitchDetails;
   game_state: GameState;
+  gameday_packet?: Gameday2DPitchPacket;
+  pitch?: PitchDetails;
+  game?: GameState;
 }
 
 export interface PitchResolveResponse {
@@ -397,11 +431,19 @@ export interface StartGameRequest {
   seed?: number;
 }
 
+export type SelectionMode = 'ai' | 'user';
+
 export interface PitchRequest {
-  pitch_intent?: string;
+  selection_mode?: SelectionMode;
+  pitch_name?: string;
+  pitch_type?: string;
+  pitch_intent?: PitchIntent;
   target_zone?: string;
   target_x?: number;
   target_z?: number;
+  timing_tier?: TimingTier;
+  timing_label?: string;
+  pitch_effectiveness?: number;
 }
 
 export interface ResolvePitchRequest {
