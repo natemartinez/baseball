@@ -5,9 +5,9 @@ situational multipliers, and normalized pitch selection probabilities.
 """
 
 import random
-from typing import Dict, Any, Tuple, Optional, List
+from typing import Any, Dict, List, Optional
 
-from ..pitch_execution.pitch_objects import PITCH_CATEGORIES, PitchArsenal, Pitch
+from ..pitch_execution.pitch_objects import PITCH_CATEGORIES, PitchArsenal
 
 
 class PitchStrategy:
@@ -39,18 +39,19 @@ class PitchStrategy:
             return 'FIRST_PITCH'
         return 'NEUTRAL'
 
-    def choose_pitch(
+    def build_plan(
         self,
         balls: int,
         strikes: int,
         situation: str = 'NEUTRAL',
-        preferred_intent: Optional[str] = None,
         recent_pitches: Optional[List[str]] = None,
-        double_play_situation: bool = False
+        double_play_situation: bool = False,
     ) -> Dict[str, Any]:
         """
-        Returns the chosen pitch, expected velocity/spin, recommended target zone, 
-        and tactical rationale for the given game state.
+        Deterministically evaluates the tactical plan for the current state:
+        leverage, arsenal weights, normalized probabilities, strategy name,
+        rationale, and the recommended target zone. This performs no random
+        draws, so callers can inspect the plan without disturbing RNG order.
         """
         leverage = self.get_leverage_state(balls, strikes)
         recent = recent_pitches or []
@@ -136,7 +137,38 @@ class PitchStrategy:
         total_w = sum(raw_weights.values()) or 1.0
         probs = {k: round(v / total_w, 3) for k, v in raw_weights.items()}
 
-        # 6. Weighted selection
+        return {
+            'repertoire_probabilities': probs,
+            'dynamic_modifier': dynamic_modifier,
+            'strategy_name': strategy_name,
+            'rationale': rationale,
+            'recommended_zone': recommended_zone,
+        }
+
+    def choose_pitch(
+        self,
+        balls: int,
+        strikes: int,
+        situation: str = 'NEUTRAL',
+        recent_pitches: Optional[List[str]] = None,
+        double_play_situation: bool = False,
+    ) -> Dict[str, Any]:
+        """
+        Returns the chosen pitch, expected velocity/spin, recommended target zone,
+        and tactical rationale for the given game state.
+
+        The weighted draw is the first RNG call so seeded AI outcomes remain
+        identical to the previous implementation.
+        """
+        plan = self.build_plan(
+            balls=balls,
+            strikes=strikes,
+            situation=situation,
+            recent_pitches=recent_pitches,
+            double_play_situation=double_play_situation,
+        )
+
+        probs = plan['repertoire_probabilities']
         pitches = list(probs.keys())
         weights = list(probs.values())
         selected = self.rng.choices(pitches, weights=weights, k=1)[0]
@@ -155,9 +187,5 @@ class PitchStrategy:
             'selected_pitch': selected,
             'velocity_mph': vel,
             'spin_rpm': spin,
-            'repertoire_probabilities': probs,
-            'dynamic_modifier': dynamic_modifier,
-            'strategy_name': strategy_name,
-            'rationale': rationale,
-            'recommended_zone': recommended_zone
+            **plan,
         }

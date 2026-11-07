@@ -15,23 +15,23 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.database.db import DB_PATH, add_player, init_db
-from backend.engine.batting_engine.batters import LEAGUE_AVG_SLG
-from backend.engine.pitching_engine.pitch_execution.pitch_objects import movement_for
 
-MOCK_DB_PATH = ROOT_DIR / 'backend' / 'mock' / 'mock_baseball_db.json'
+LEAGUE_AVG_SLG = 0.400
+
+SEED_DATA_PATH = ROOT_DIR / 'backend' / 'database' / 'seed_data.json'
 
 
 def load_players_seed() -> list:
-    """Loads players from mock_baseball_db.json if available, or returns standard seed list."""
-    if MOCK_DB_PATH.exists():
+    """Loads authoritative players from seed_data.json."""
+    if SEED_DATA_PATH.exists():
         try:
-            with open(MOCK_DB_PATH, 'r') as f:
+            with open(SEED_DATA_PATH, 'r') as f:
                 data = json.load(f)
             players = data.get('players', [])
             if players:
                 return players
         except Exception as e:
-            print(f'Warning: Failed to load from {MOCK_DB_PATH}: {e}')
+            print(f'Warning: Failed to load from {SEED_DATA_PATH}: {e}')
 
     return []
 
@@ -56,8 +56,8 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
     raw_players = load_players_seed()
     if not raw_players:
         raise RuntimeError(
-            f'No player seed data found at {MOCK_DB_PATH}. '
-            'Ensure the seed data file (backend/mock/mock_baseball_db.json) is present.'
+            f'No player seed data found at {SEED_DATA_PATH}. '
+            'Ensure the seed data file (backend/database/seed_data.json) is present.'
         )
     print(f'Seeding {len(raw_players)} players for season {season}...')
 
@@ -81,9 +81,7 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         team_full = team_name_map.get(team_abbr, 'New York Yankees')
         pos = p.get('position', 'DH')
         is_pitcher = pos in ('P', 'SP', 'RP', 'CP') or len(p.get('arsenal', [])) > 0
-        role = p.get('role')
-        if role in ('pitcher', 'batter', None):
-            role = 'starter'
+        role = p.get('role') or ('pitcher' if is_pitcher else 'batter')
 
         if not is_pitcher:
             order = batting_order_counts.get(team_full, 0) + 1
@@ -92,49 +90,28 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
         else:
             batting_order = None
 
-        jersey_num = str(p.get('jersey_number', p.get('number', '99')))
+        jersey_num = p.get('jersey_number', p.get('number', 99))
+        jersey_num_int = int(jersey_num) if str(jersey_num).isdigit() else 99
 
-        vitals = {
-            'age': p.get('age', 28),
-            'experience': p.get('experience', 4),
-            'height': p.get('height', '6-2'),
-            'weight': p.get('weight', 215),
-            'bats': p.get('bats', 'R'),
-            'throws': p.get('throws', 'R'),
-        }
-
-        # Convert ratings to list format
+        motion_bio = p.get('motion_bio') or {}
         raw_ratings = p.get('ratings', {})
-        ratings_list = []
-        if isinstance(raw_ratings, dict):
-            for k, v in raw_ratings.items():
-                cat_name = k.replace('_rating', '').replace('_', ' ').title()
-                ratings_list.append({'category': cat_name, 'rating': int(v)})
-                # Also include exact key
-                ratings_list.append({'category': k, 'rating': int(v)})
-        elif isinstance(raw_ratings, list):
-            ratings_list = raw_ratings
+        arsenal = p.get('arsenal', [])
+        season_stats = p.get('season_stats', {})
+        live_game_stats = p.get('live_game_stats', {})
+        throws = p.get('throws', 'R')
+        bats = p.get('bats', 'R')
 
-        # Convert zones to list format
+        # Convert hot_zones / zones for batters
         zones_list = []
-        raw_zones = p.get('zones', []) or p.get('hot_zones', [])
-        if isinstance(raw_zones, dict):
-            for z, slg in raw_zones.items():
-                value = float(slg)
-                if value > 1.0:
-                    value = LEAGUE_AVG_SLG * value
-                zones_list.append({'zone': z, 'slugging': round(value, 3)})
-        elif isinstance(raw_zones, list):
+        raw_zones = p.get('hot_zones') or p.get('zones') or []
+        if isinstance(raw_zones, list):
             for item in raw_zones:
                 if not isinstance(item, dict):
                     continue
-                raw_name = item.get('zone')
-                if raw_name is None:
-                    raw_name = item.get('name', 'heart')
-
+                raw_name = item.get('name') or item.get('zone')
                 if isinstance(raw_name, int) and raw_name in NUMERIC_ZONE_MAP:
                     zone_name = NUMERIC_ZONE_MAP[raw_name]
-                elif isinstance(raw_name, str) and raw_name.isdigit() and int(raw_name) in NUMERIC_ZONE_MAP:
+                elif str(raw_name).isdigit() and int(raw_name) in NUMERIC_ZONE_MAP:
                     zone_name = NUMERIC_ZONE_MAP[int(raw_name)]
                 else:
                     zone_name = str(raw_name or 'heart')
@@ -150,64 +127,46 @@ def run_seed(fresh: bool = False, season: int = 2026) -> None:
                 if slugging is None:
                     slugging = LEAGUE_AVG_SLG
 
-                zones_list.append({
-                    'zone': zone_name,
-                    'slugging': float(slugging),
-                })
+                zone_entry = dict(item)
+                zone_entry['zone'] = zone_name
+                zone_entry['slugging'] = round(float(slugging), 3)
+                zones_list.append(zone_entry)
+        elif isinstance(raw_zones, dict):
+            for z, slg in raw_zones.items():
+                value = float(slg)
+                if value > 1.0:
+                    value = LEAGUE_AVG_SLG * value
+                zones_list.append({'zone': z, 'slugging': round(value, 3)})
 
-        # Pitch arsenal
-        raw_arsenal = p.get('arsenal', [])
-        pitch_arsenal = []
-        for a in raw_arsenal:
-            movement = movement_for(a.get('name', ''))
-            pitch_arsenal.append({
-                'pitch': a.get('name', '4-Seam Fastball'),
-                'name': a.get('name', '4-Seam Fastball'),
-                'avg_velo_mph': a.get('velocity_mph', 95.0),
-                'velocity_mph': a.get('velocity_mph', 95.0),
-                'velocity_min_mph': a.get('velocity_min_mph', a.get('velocity_mph', 95.0) - 2.0),
-                'velocity_max_mph': a.get('velocity_max_mph', a.get('velocity_mph', 95.0) + 2.0),
-                'max_velo_mph': a.get('velocity_mph', 95.0) + 2.0,
-                'avg_spin_rpm': a.get('spin_rpm', 2400),
-                'spin_rpm': a.get('spin_rpm', 2400),
-                'usage_pct': 0.35,
-                'usage_pct_vs_rhb': 0.35,
-                'usage_pct_vs_lhb': 0.35,
-                'break_rating': a.get('break_rating', 85),
-                'control_rating': a.get('control_rating', 80),
-                'horizontal_break_in': a.get('horizontal_break_in', movement['hb']),
-                'induced_vertical_break_in': a.get('induced_vertical_break_in', movement['ivb']),
-            })
-
-        traits_list = []
-        for t in p.get('traits', []):
-            if isinstance(t, str):
-                traits_list.append({'name': t, 'tier': 'Gold', 'description': t})
-            elif isinstance(t, dict):
-                traits_list.append(t)
-
-        stats_list = p.get('stats', [{'season': season, 'avg': 0.280, 'hr': 25, 'rbi': 75, 'ops': 0.850}])
+        traits_list = p.get('traits', [])
 
         pid, is_created = add_player(
+            id=p.get('id'),
             name=p.get('name', 'Player'),
-            vitals=vitals,
-            position=pos,
-            number=jersey_num,
-            stats=stats_list if isinstance(stats_list, list) else [stats_list],
-            zones=zones_list,
-            ratings=ratings_list,
-            traits=traits_list,
-            pitch_arsenal=pitch_arsenal,
+            team=team_abbr,
             team_name=team_full,
-            jersey_number=jersey_num,
+            position=pos,
+            jersey_number=jersey_num_int,
+            number=str(jersey_num_int),
             role=role,
+            throws=throws,
+            bats=bats,
+            motion_bio=motion_bio,
+            ratings=raw_ratings,
+            arsenal=arsenal,
+            pitch_arsenal=arsenal,
+            season_stats=season_stats,
+            live_game_stats=live_game_stats,
+            hot_zones=zones_list,
+            zones=zones_list,
+            traits=traits_list,
             batting_order=batting_order,
             roster_status='active',
             season=season,
         )
         action = 'Added' if is_created else 'Updated'
         order_str = f' [#{batting_order}]' if batting_order else ''
-        print(f'  + {action} [{pid}] #{jersey_num} {p.get("name")} ({pos}){order_str} -> {team_full} ({role})')
+        print(f'  + {action} [{pid}] #{jersey_num_int} {p.get("name")} ({pos}){order_str} -> {team_full} ({role})')
 
     print('Database seeding completed successfully.')
 

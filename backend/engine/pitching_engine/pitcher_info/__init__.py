@@ -1,5 +1,15 @@
 """In-game pitcher ratings and fatigue adjustments."""
 
-from .pitchers import InGamePitcherRatings, PitcherInstanceManager
+from .adjusted_ratings import (
+    InGamePitcherRatings,
+    PitcherInstanceManager,
+    PitchArsenalMetrics,
+    evaluate_pitch_arsenal,
+)
 
-__all__ = ['InGamePitcherRatings', 'PitcherInstanceManager']
+__all__ = [
+    'InGamePitcherRatings',
+    'PitcherInstanceManager',
+    'PitchArsenalMetrics',
+    'evaluate_pitch_arsenal',
+]

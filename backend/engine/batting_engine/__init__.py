@@ -5,8 +5,6 @@ Authoritative batting coordination, batter ratings, swing decisions, and
 batted-ball contact resolution.
 """
 
-from .engine import BattingEngine, BatterActivity
-from .batter_strategy import BatterStrategy, SwingEvaluation
 from .batters import (
     BatterInstanceManager,
     InGameBatterRatings,
@@ -16,6 +14,8 @@ from .batters import (
     normalize_hot_zones,
     normalize_traits,
 )
+from .engine import BattingEngine, BatterActivity
+from .batter_strategy import BatterStrategy, SwingEvaluation
 from .contact import ContactResolver
 
 __all__ = [

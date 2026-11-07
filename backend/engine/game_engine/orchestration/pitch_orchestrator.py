@@ -9,11 +9,11 @@ state commit. It never mutates count, bases, outs, or score and never imports
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
+if TYPE_CHECKING:
+    from ...batting_engine.engine import BatterActivity
 from ...batting_engine.batters import BatterInstanceManager, InGameBatterRatings
-from ...batting_engine.engine import BatterActivity, BattingEngine
-from ...pitching_engine import PitchingEngine
 from ..gameday_math import nearest_zone_name
 
 from .controllers import (
@@ -115,9 +115,14 @@ class PitchFlowOrchestrator:
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
         practice: bool = False,
+        selection_mode: Optional[str] = None,
+        pitch_name: Optional[str] = None,
         pitch_sequence: Optional[list] = None,
         score_diff: int = 0,
         inning: int = 1,
+        timing_tier: Optional[str] = None,
+        timing_label: Optional[str] = None,
+        pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
         if self.has_pending:
             raise PitchFlowError(
@@ -131,6 +136,11 @@ class PitchFlowOrchestrator:
             if str(getattr(pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
             else 'R'
         )
+
+        # Imported lazily: the pitching package loads gameday math from the
+        # engine package, which would otherwise re-enter this module while its
+        # initializer is still running.
+        from ...pitching_engine import PitchingEngine
 
         pitching_engine = PitchingEngine(pitcher, batter, rng=self.rng)
         delivery = pitching_engine.execute_pitch(
@@ -146,6 +156,11 @@ class PitchFlowOrchestrator:
             custom_target=custom_target,
             situation=situation,
             practice=practice,
+            selection_mode=selection_mode,
+            pitch_name=pitch_name,
+            timing_tier=timing_tier,
+            timing_label=timing_label,
+            pitch_effectiveness=pitch_effectiveness,
         )
 
         is_strike = bool(delivery['is_strike'])
@@ -302,6 +317,7 @@ class PitchFlowOrchestrator:
         contact: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         try:
+            from ...batting_engine.engine import BattingEngine
             batting_engine = BattingEngine(
                 pending.batter, pending.delivery, rng=self.rng
             )

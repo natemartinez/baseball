@@ -7,7 +7,7 @@ zone boundaries.
 
 import math
 import random
-from typing import Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 # ─── Constants: Rulebook & Gameday Zone Dimensions (in Statcast Feet) ──────────
 
@@ -35,12 +35,12 @@ FATIGUE_ENABLED = False
 # Command -> hard maximum error radius (inches). Diameter = 2 * radius.
 # Interpolate linearly between tiers and clamp outside the range.
 MAX_ERROR_RADIUS_TIERS: list = [
-    (99.0, 1.00),
-    (90.0, 1.25),
-    (82.0, 1.50),
-    (68.0, 3.00),
-    (55.0, 4.50),
-    (40.0, 7.00),
+    (99.0, 1.50),
+    (90.0, 1.875),
+    (82.0, 2.25),
+    (68.0, 4.50),
+    (55.0, 6.75),
+    (40.0, 10.50),
 ]
 
 # The cloud is a truncated Gaussian; sigma = radius / SIGMA_RADIUS_DIVISOR.
@@ -339,7 +339,7 @@ def sample_truncated_gaussian(
     Returns full-precision coordinates; callers should round only for display or
     telemetry so boundary pitches are classified from their true location.
     """
-    rand = rng or random.random
+    rand = _extract_rand_source(rng)
     if max_radius_ft <= 0 or sigma <= 0:
         return target_x, target_z
 
@@ -379,3 +379,118 @@ def determine_situation_category(balls: int, strikes: int, outs: int, r1: bool, 
     if balls > strikes:
         return 'BEHIND_IN_COUNT'
     return 'NEUTRAL'
+
+
+def get_executed_radius_inches(base_radius_inches: float, timing_tier: Any) -> float:
+    """Scales base error radius by release timing tier:
+    PERFECT ~0.52x, GOOD 1.00x, OKAY ~1.97x, POOR ~3.75x.
+    """
+    tier_val = timing_tier.value if hasattr(timing_tier, "value") else str(timing_tier)
+    tier_name = tier_val.upper()
+    multipliers = {
+        "PERFECT": 0.52,
+        "GOOD": 1.00,
+        "OKAY": 1.97,
+        "POOR": 3.75,
+    }
+    mult = multipliers.get(tier_name, 1.00)
+    return round(float(base_radius_inches) * mult, 3)
+
+
+def _extract_rand_source(rng: Optional[Any] = None):
+    """Safely extracts a random 0..1 generator callable from rng (supports None, Random instance, callable)."""
+    if rng is None:
+        return random.random
+    if hasattr(rng, "random") and callable(rng.random):
+        return rng.random
+    if callable(rng):
+        return rng
+    return random.random
+
+
+def _sample_box_muller_gauss(rand_func, mu: float = 0.0, sigma: float = 1.0) -> float:
+    """Deterministic Gaussian generator using Box-Muller transform from rand_func."""
+    u1 = max(1e-12, rand_func())
+    u2 = rand_func()
+    z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
+    return mu + z0 * sigma
+
+
+def sample_directional_dispersion(
+    executed_radius_inches: float,
+    timing_tier: Any,
+    pitcher_hand: str = "R",
+    timing_label: Optional[str] = None,
+    rng: Optional[Any] = None,
+) -> Tuple[float, float, float]:
+    """
+    Samples directional landing offsets (delta_x_inches, delta_z_inches, radial_miss_inches)
+    from the target center based on timing quality and handedness:
+    - PERFECT: tightly clustered near center (mean miss < 45% of executed radius).
+    - GOOD: uniform isotropic dispersion over the full circle.
+    - OKAY / POOR: boundary push with directional tendency:
+      - Early release: sails high (+Z) and arm-side (-X for RHP, +X for LHP).
+      - Late release: spikes low (-Z) into dirt for both RHP and LHP.
+    Guarantees radial_miss_inches <= executed_radius_inches.
+    """
+    if executed_radius_inches <= 0.0:
+        return 0.0, 0.0, 0.0
+
+    rand = _extract_rand_source(rng)
+    tier_str = (timing_tier.value if hasattr(timing_tier, "value") else str(timing_tier)).upper()
+    label_str = (timing_label or "").upper()
+    hand = (pitcher_hand or "R").strip().upper()
+
+    if tier_str == "PERFECT":
+        # Tightly concentrated near center (truncated Gaussian, sigma ~ 0.35)
+        # Guarantees r <= executed_radius_inches and mean miss < 0.45 * executed_radius
+        norm_r = min(1.0, abs(_sample_box_muller_gauss(rand, mu=0.0, sigma=0.35)))
+        theta = 2.0 * math.pi * rand()
+    elif tier_str == "GOOD":
+        # Uniform isotropic 2D area dispersion
+        norm_r = math.sqrt(max(1e-12, rand()))
+        theta = 2.0 * math.pi * rand()
+    else:
+        # OKAY or POOR: boundary push
+        # Determine release timing directionality:
+        if "EARLY" in label_str:
+            is_early = True
+        elif "LATE" in label_str:
+            is_early = False
+        else:
+            is_early = (rand() < 0.5)
+
+        if is_early:
+            if tier_str == "POOR":
+                norm_r = 0.70 + 0.30 * rand()
+            else:
+                norm_r = 0.55 + 0.45 * rand()
+            norm_r = min(1.0, max(0.0, norm_r))
+
+            # High (+Z) and arm-side (-X for RHP, +X for LHP)
+            is_left = hand.startswith("L") or hand in ("L", "LHP", "LEFT", "LH")
+            is_right = hand.startswith("R") or hand in ("R", "RHP", "RIGHT", "RH")
+            if is_left and not is_right:
+                center_deg = 45.0  # Q1 (+X, +Z): LHP arm side
+            else:
+                center_deg = 135.0  # Q2 (-X, +Z): RHP arm side
+            # Sector within +/- 35 degrees guarantees quadrant adherence
+            angle_deg = center_deg + 35.0 * (2.0 * rand() - 1.0)
+        else:
+            # Late release spikes low into dirt (-Z) for both RHP and LHP
+            if tier_str == "POOR":
+                norm_r = 0.88 + 0.12 * rand()
+                angle_deg = 270.0 + 20.0 * (2.0 * rand() - 1.0)
+            else:
+                norm_r = 0.55 + 0.45 * rand()
+                angle_deg = 270.0 + 35.0 * (2.0 * rand() - 1.0)
+            norm_r = min(1.0, max(0.0, norm_r))
+
+        theta = angle_deg * (math.pi / 180.0)
+
+    r = norm_r * float(executed_radius_inches)
+    dx = r * math.cos(theta)
+    dz = r * math.sin(theta)
+    radial_miss = r
+
+    return dx, dz, radial_miss

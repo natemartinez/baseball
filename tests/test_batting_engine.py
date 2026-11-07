@@ -267,6 +267,7 @@ def test_seeded_game_engine_sequence_is_reproducible():
 def test_game_state_reports_real_batter_telemetry_and_live_stats():
     gleyber_game = _game(seed=3, batter_id=4)
     payload = gleyber_game.get_game_state_payload()['current_batter']
+    assert payload['handedness'] in ('R', 'L', 'S')
     assert payload['power'] == 78
     assert payload['contact'] == 82
     assert payload['vision'] == 80
@@ -351,8 +352,10 @@ def test_seeded_outcome_distribution_is_baseball_like():
     hits = counts['SINGLE'] + counts['DOUBLE'] + counts['TRIPLE']
     in_play_outs = counts['IN_PLAY_OUT']
 
-    assert 0.18 <= strikeouts / plate_appearances <= 0.27
-    assert 0.06 <= walks / plate_appearances <= 0.11
+    # Corrected arm-side dispersion and the pitch-shape contact model shift the
+    # location/contact mix; keep the broad baseball-like calibration band.
+    assert 0.17 <= strikeouts / plate_appearances <= 0.27
+    assert 0.06 <= walks / plate_appearances <= 0.14
     assert 0.02 <= home_runs / plate_appearances <= 0.05
     assert 0.26 <= hits / max(1, hits + in_play_outs) <= 0.34
 

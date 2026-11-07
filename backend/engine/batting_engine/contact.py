@@ -12,6 +12,20 @@ from typing import Any, Dict, Optional
 
 from .batters import InGameBatterRatings
 from .contact_outcome import resolve_contact_outcome
+from ..pitch_shape import (
+    PitchShape,
+    air_launch_parameters,
+    build_pitch_shape,
+    exit_velocity_adjustment,
+    ground_ball_ev_adjustment,
+    ground_ball_probability,
+    ground_launch_parameters,
+    whiff_shape_adjustment,
+)
+from ..pitching_engine.pitch_effectiveness import (
+    apply_effectiveness_to_whiff_rate,
+    apply_effectiveness_to_exit_velocity,
+)
 
 
 class ContactResolver:
@@ -36,9 +50,10 @@ class ContactResolver:
         velocity = float(delivery.get('velocity_mph', 93.0) or 93.0)
         horizontal_break = abs(float(delivery.get('horizontal_break_in', 0.0) or 0.0))
         vertical_break = abs(float(delivery.get('induced_vertical_break_in', 0.0) or 0.0))
-        pitch_effectiveness = float(delivery.get('pitch_effectiveness', 50.0) or 50.0)
+        pitch_effectiveness = float(delivery.get('pitch_effectiveness', 80.0) or 80.0)
         realized_x = float(delivery.get('realized_x', 0.0) or 0.0)
         realized_z = float(delivery.get('realized_z', 2.5) or 2.5)
+        shape = build_pitch_shape(delivery)
 
         whiff_prob = self._whiff_probability(
             zone_category=zone_category,
@@ -50,6 +65,7 @@ class ContactResolver:
             balls=balls,
             strikes=strikes,
             approach_mode=approach_mode,
+            shape=shape,
         )
 
         roll = self.rng.random()
@@ -83,6 +99,8 @@ class ContactResolver:
             velocity=velocity,
             realized_x=realized_x,
             realized_z=realized_z,
+            pitch_effectiveness=pitch_effectiveness,
+            shape=shape,
         )
 
     def _whiff_probability(
@@ -92,13 +110,14 @@ class ContactResolver:
         is_strike: bool,
         pitch_category: str,
         velocity: float,
-        movement: float,
-        pitch_effectiveness: float,
-        balls: int,
-        strikes: int,
-        approach_mode: str,
+        movement: float = 0.0,
+        pitch_effectiveness: float = 80.0,
+        balls: int = 0,
+        strikes: int = 0,
+        approach_mode: str = 'AUTO',
+        shape: Optional[PitchShape] = None,
     ) -> float:
-        base = {'Fastball': 0.21, 'Breaking': 0.31, 'OffSpeed': 0.27}.get(
+        base = {'Fastball': 0.23, 'Breaking': 0.34, 'OffSpeed': 0.28}.get(
             pitch_category, 0.20
         )
         contact_adj = (50.0 - self.ratings.effective_contact) * 0.0030
@@ -110,9 +129,15 @@ class ContactResolver:
         elif not is_strike:
             zone_adj = 0.05
 
-        effectiveness_adj = max(0.0, pitch_effectiveness - 50.0) * 0.0015
+        # Effectiveness governs whiff probability independently of command.
+        # Neutral baseline is 80 (not 50). High effectiveness = sharper stuff = more whiffs.
+        # Low effectiveness = flat pitch = easier contact.
+        effectiveness_adj = apply_effectiveness_to_whiff_rate(base, pitch_effectiveness) - base
         velocity_adj = (velocity - 93.0) * 0.004
-        movement_adj = max(0.0, movement) * 0.0012
+        if shape is not None:
+            movement_adj = whiff_shape_adjustment(shape)
+        else:
+            movement_adj = max(0.0, movement) * 0.0012
 
         mode = (approach_mode or 'AUTO').upper()
         approach_adj = 0.0
@@ -153,6 +178,8 @@ class ContactResolver:
         velocity: float,
         realized_x: float,
         realized_z: float,
+        pitch_effectiveness: float = 80.0,
+        shape: Optional[PitchShape] = None,
     ) -> Dict[str, Any]:
         slugging = self.ratings.hot_zones.get(actual_zone_name, 0.400)
 
@@ -162,19 +189,34 @@ class ContactResolver:
             + (slugging - 0.400) * 13.0
             + (velocity - 93.0) * 0.13
         )
+        is_ground = False
+        if shape is not None:
+            base_ev += exit_velocity_adjustment(shape)
+            is_ground = self.rng.random() < ground_ball_probability(shape)
+            base_ev += ground_ball_ev_adjustment(is_ground)
         exit_velocity = round(self.rng.gauss(base_ev, 6.8), 1)
         exit_velocity = max(45.0, min(122.0, exit_velocity))
+        # Apply effectiveness-based exit velocity adjustment
+        exit_velocity = apply_effectiveness_to_exit_velocity(exit_velocity, pitch_effectiveness)
+        exit_velocity = max(45.0, min(122.0, exit_velocity))
 
-        mean_launch = 21.0 + (realized_z - 2.5) * 9.0
-        if pitch_category == 'Breaking':
-            mean_launch -= 4.0
-        elif pitch_category == 'OffSpeed':
-            mean_launch -= 2.0
-        if 'Sinker' in pitch_name or 'Splitter' in pitch_name:
-            mean_launch -= 4.0
-        if pitch_category == 'Fastball' and realized_z >= 3.0:
-            mean_launch += 4.0
-        launch_angle = round(self.rng.gauss(mean_launch, 13.0), 1)
+        if shape is not None:
+            if is_ground:
+                mean_launch, launch_sigma = ground_launch_parameters()
+            else:
+                mean_launch, launch_sigma = air_launch_parameters(shape)
+        else:
+            mean_launch = 21.0 + (realized_z - 2.5) * 9.0
+            if pitch_category == 'Breaking':
+                mean_launch -= 4.0
+            elif pitch_category == 'OffSpeed':
+                mean_launch -= 2.0
+            if 'Sinker' in pitch_name or 'Splitter' in pitch_name:
+                mean_launch -= 4.0
+            if pitch_category == 'Fastball' and realized_z >= 3.0:
+                mean_launch += 4.0
+            launch_sigma = 13.0
+        launch_angle = round(self.rng.gauss(mean_launch, launch_sigma), 1)
         launch_angle = max(-10.0, min(78.0, launch_angle))
 
         inside = (

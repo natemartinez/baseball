@@ -1,6 +1,6 @@
 """
 Pitch Objects and Arsenal Models for the Pitching Engine.
-Defines pitch domain structures, categories, and arsenal normalization.
+Defines specific traits of each pitch that will be used for tracking and animation
 """
 
 from dataclasses import dataclass, field
@@ -25,10 +25,94 @@ PITCH_CATEGORIES: Dict[str, str] = {
 
 
 DEFAULT_ARSENAL: List[Dict[str, Any]] = [
-    {'name': '4-Seam Fastball', 'pitch': '4-Seam Fastball', 'velocity_mph': 97.2, 'spin_rpm': 2450, 'usage_pct': 0.40, 'break_rating': 90, 'control_rating': 84},
-    {'name': 'Spin Monster Sweeper', 'pitch': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'spin_rpm': 2980, 'usage_pct': 0.30, 'break_rating': 99, 'control_rating': 80},
-    {'name': 'Power Sinker', 'pitch': 'Power Sinker', 'velocity_mph': 95.8, 'spin_rpm': 2310, 'usage_pct': 0.20, 'break_rating': 88, 'control_rating': 85},
-    {'name': 'Spike Curveball', 'pitch': 'Spike Curveball', 'velocity_mph': 81.2, 'spin_rpm': 2840, 'usage_pct': 0.10, 'break_rating': 94, 'control_rating': 78},
+    {
+        'id': '4SFB',
+        'name': '4-Seam Fastball',
+        'pitch': '4-Seam Fastball',
+        'category': 'FASTBALL',
+        'velocity_mph': 97.2,
+        'velocity_min_mph': 95.2,
+        'velocity_max_mph': 99.2,
+        'velocity_display': '95–99 mph',
+        'spin_rpm': 2450,
+        'spin_rate_rpm': 2450,
+        'spin_axis_deg': 210.0,
+        'usage_pct': 0.40,
+        'break_rating': 90,
+        'control_rating': 84,
+        'command': 84.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'horizontal_break_in': -7.5,
+        'induced_vertical_break_in': 16.0,
+        'tunnel_partners': ['SWP', 'KC'],
+    },
+    {
+        'id': 'SWP',
+        'name': 'Spin Monster Sweeper',
+        'pitch': 'Spin Monster Sweeper',
+        'category': 'BREAKING',
+        'velocity_mph': 83.5,
+        'velocity_min_mph': 81.5,
+        'velocity_max_mph': 85.5,
+        'velocity_display': '82–86 mph',
+        'spin_rpm': 2980,
+        'spin_rate_rpm': 2980,
+        'spin_axis_deg': 85.0,
+        'usage_pct': 0.30,
+        'break_rating': 99,
+        'control_rating': 80,
+        'command': 80.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'horizontal_break_in': 18.2,
+        'induced_vertical_break_in': 4.5,
+        'tunnel_partners': ['4SFB', 'SI'],
+    },
+    {
+        'id': 'SI',
+        'name': 'Power Sinker',
+        'pitch': 'Power Sinker',
+        'category': 'FASTBALL',
+        'velocity_mph': 95.8,
+        'velocity_min_mph': 93.8,
+        'velocity_max_mph': 97.8,
+        'velocity_display': '94–98 mph',
+        'spin_rpm': 2310,
+        'spin_rate_rpm': 2310,
+        'spin_axis_deg': 235.0,
+        'usage_pct': 0.20,
+        'break_rating': 88,
+        'control_rating': 85,
+        'command': 85.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'horizontal_break_in': -14.0,
+        'induced_vertical_break_in': 6.0,
+        'tunnel_partners': ['SWP', 'KC'],
+    },
+    {
+        'id': 'KC',
+        'name': 'Spike Curveball',
+        'pitch': 'Spike Curveball',
+        'category': 'BREAKING',
+        'velocity_mph': 81.2,
+        'velocity_min_mph': 79.2,
+        'velocity_max_mph': 83.2,
+        'velocity_display': '79–83 mph',
+        'spin_rpm': 2840,
+        'spin_rate_rpm': 2840,
+        'spin_axis_deg': 30.0,
+        'usage_pct': 0.10,
+        'break_rating': 94,
+        'control_rating': 78,
+        'command': 78.0,
+        'max_radius_inches': 2.0,
+        'sigma': 0.067,
+        'horizontal_break_in': -8.0,
+        'induced_vertical_break_in': -12.0,
+        'tunnel_partners': ['4SFB', 'SI'],
+    },
 ]
 
 
@@ -57,6 +141,16 @@ def movement_for(pitch_name: str) -> Dict[str, float]:
         if entry['match'] in name:
             return {'hb': float(entry['hb']), 'ivb': float(entry['ivb'])}
     return dict(DEFAULT_MOVEMENT)
+
+
+def _pitch_lookup_key(name: str) -> str:
+    """
+    Normalizes a pitch name for case-insensitive lookup.
+
+    ``4-Seam`` and ``Four-Seam`` are treated as the same pitch because the
+    seeded/default arsenal and the hydrated database arsenal use both spellings.
+    """
+    return str(name or '').strip().lower().replace('four-seam', '4-seam')
 
 
 @dataclass
@@ -138,7 +232,48 @@ class PitchArsenal:
 
 
     def get(self, name: str) -> Optional[Pitch]:
-        return self.pitch_map.get(name)
+        if not name:
+            return None
+        exact = self.pitch_map.get(name)
+        if exact is not None:
+            return exact
+        normalized = _pitch_lookup_key(name)
+        for pitch_name, pitch in self.pitch_map.items():
+            if _pitch_lookup_key(pitch_name) == normalized:
+                return pitch
+
+        # Fallback alias resolution via tiers.PITCH_TYPE_ALIASES
+        try:
+            from tiers import PITCH_TYPE_ALIASES
+        except ImportError:
+            return None
+
+        cleaned_req = str(name).strip().upper()
+        req_code = PITCH_TYPE_ALIASES.get(cleaned_req)
+        if not req_code:
+            return None
+
+        # 1. Match exact pitch codes in arsenal
+        for pitch_name, pitch in self.pitch_map.items():
+            pitch_code = PITCH_TYPE_ALIASES.get(str(pitch_name).strip().upper())
+            if pitch_code == req_code:
+                return pitch
+
+        # 2. Breaking pitch families fallback (SL <-> SWP, CB <-> KC)
+        family_map = {
+            'SL': {'SL', 'SWP'},
+            'SWP': {'SL', 'SWP'},
+            'CB': {'CB', 'KC'},
+            'KC': {'CB', 'KC'},
+        }
+        family = family_map.get(req_code)
+        if family:
+            for pitch_name, pitch in self.pitch_map.items():
+                pitch_code = PITCH_TYPE_ALIASES.get(str(pitch_name).strip().upper())
+                if pitch_code in family:
+                    return pitch
+
+        return None
 
     def to_raw_list(self) -> List[Dict[str, Any]]:
         return [

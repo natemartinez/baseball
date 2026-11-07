@@ -11,6 +11,7 @@ from typing import Dict, Any, Optional, List, Tuple
 
 from backend.database.db import (
     get_all_teams,
+    get_player,
     get_team_by_id_or_name,
     get_team_roster_players,
 )
@@ -207,28 +208,101 @@ def _parse_seed(data: dict):
         raise ValueError('seed must be an integer') from error
 
 
+VALID_PITCH_INTENTS = ('STRIKE', 'CHASE', 'WASTE')
+VALID_SELECTION_MODES = ('ai', 'user')
+
+
+def _normalize_pitch_intent(value):
+    """Normalizes the tactical target goal or rejects it with a 400."""
+    if value is None or value == '':
+        return None
+    if not isinstance(value, str):
+        raise ValueError('pitch_intent must be one of STRIKE, CHASE, or WASTE')
+    normalized = value.strip().upper()
+    if not normalized:
+        return None
+    if normalized not in VALID_PITCH_INTENTS:
+        raise ValueError('pitch_intent must be one of STRIKE, CHASE, or WASTE')
+    return normalized
+
+
 def _parse_pitch_request(data: dict) -> dict:
-    pitch_intent = data.get('pitch_intent')
-    pitch_type = data.get('pitch_type') or data.get('pitch_name')
+    pitch_intent = _normalize_pitch_intent(data.get('pitch_intent'))
+    pitch_name = data.get('pitch_name') or data.get('pitch_type')
     target_zone = data.get('target_zone')
     batter_approach = data.get('batter_approach', 'AUTO')
 
+    selection_mode = data.get('selection_mode')
+    if selection_mode is None or selection_mode == '':
+        # Legacy callers omit the mode. A pitch field implies a user choice.
+        selection_mode = 'user' if pitch_name else 'ai'
+    else:
+        if not isinstance(selection_mode, str):
+            raise ValueError("selection_mode must be 'ai' or 'user'")
+        selection_mode = selection_mode.strip().lower()
+        if selection_mode not in VALID_SELECTION_MODES:
+            raise ValueError("selection_mode must be 'ai' or 'user'")
+        if selection_mode == 'ai' and pitch_name:
+            raise ValueError("selection_mode 'ai' does not accept a pitch name")
+        if selection_mode == 'user' and not pitch_name:
+            raise ValueError("selection_mode 'user' requires a pitch_name")
+
+    if pitch_name is not None and not isinstance(pitch_name, str):
+        raise ValueError('pitch_name must be a string')
+
+    raw_timing_tier = data.get('timing_tier')
+    timing_tier = None
+    if raw_timing_tier is not None:
+        if not isinstance(raw_timing_tier, str):
+            raise ValueError("timing_tier must be a string")
+        norm_tier = raw_timing_tier.strip().upper()
+        if not norm_tier:
+            timing_tier = None
+        elif norm_tier not in ('PERFECT', 'GOOD', 'OKAY', 'POOR'):
+            raise ValueError(f"Invalid timing_tier: '{raw_timing_tier}'. Must be one of PERFECT, GOOD, OKAY, POOR")
+        else:
+            timing_tier = norm_tier
+
+    raw_timing_label = data.get('timing_label')
+    timing_label = None
+    if raw_timing_label is not None:
+        if not isinstance(raw_timing_label, str):
+            raise ValueError("timing_label must be a string")
+        norm_label = raw_timing_label.strip()
+        timing_label = norm_label if norm_label else None
+
     custom_target = None
-    if 'target_x' in data and 'target_z' in data:
+    if 'target_x' in data or 'target_z' in data:
+        if 'target_x' not in data or 'target_z' not in data:
+            raise ValueError('Both target_x and target_z must be provided together')
         try:
-            custom_target = {
-                'x': float(data['target_x']),
-                'z': float(data['target_z'])
-            }
+            tx = float(data['target_x'])
+            tz = float(data['target_z'])
         except (TypeError, ValueError) as error:
             raise ValueError('target_x and target_z must be numbers') from error
+        if not math.isfinite(tx) or not math.isfinite(tz):
+            raise ValueError('target_x and target_z must be finite numbers')
+        if abs(tx) > 50.0 or abs(tz) > 50.0:
+            raise ValueError('target_x and target_z are out of realistic bounds')
+        custom_target = {'x': tx, 'z': tz}
+
+    pitch_effectiveness = None
+    if 'pitch_effectiveness' in data and data['pitch_effectiveness'] is not None:
+        try:
+            pitch_effectiveness = float(data['pitch_effectiveness'])
+        except (TypeError, ValueError):
+            pitch_effectiveness = None
 
     return {
+        'selection_mode': selection_mode,
+        'pitch_name': pitch_name,
         'pitch_intent': pitch_intent,
-        'pitch_type': pitch_type,
         'target_zone': target_zone,
         'custom_target': custom_target,
         'batter_approach': batter_approach,
+        'timing_tier': timing_tier,
+        'timing_label': timing_label,
+        'pitch_effectiveness': pitch_effectiveness,
     }
 
 
@@ -244,9 +318,9 @@ def _pitch_error_status(outcome: dict) -> int:
 
 
 def _parse_practice_pitch_request(data: dict) -> dict:
-    pitch_type = data.get('pitch_type') or data.get('pitch_name')
-    if not pitch_type:
-        raise ValueError('pitch_type is required for practice pitches')
+    pitch_name = data.get('pitch_name') or data.get('pitch_type')
+    if not pitch_name:
+        raise ValueError('pitch_name is required for practice pitches')
     if 'target_x' not in data or 'target_z' not in data:
         raise ValueError('target_x and target_z are required for practice pitches')
     try:
@@ -258,7 +332,7 @@ def _parse_practice_pitch_request(data: dict) -> dict:
         raise ValueError('target_x and target_z must be finite')
 
     return {
-        'pitch_type': str(pitch_type),
+        'pitch_name': str(pitch_name),
         'target_zone': data.get('target_zone'),
         'custom_target': {'x': target_x, 'z': target_z},
     }
@@ -348,6 +422,12 @@ def start_game():
 
 @api_bp.route('/api/pitch', methods=['POST'])
 def pitch():
+    """
+    [DEPRECATED] Legacy atomic pitch execution.
+    Executes pitch and resolves outcome in a single step, bypassing 3D animation.
+    Clients should use POST /api/pitch/throw (Stage 1) followed by
+    POST /api/pitch/resolve (Stage 2) instead.
+    """
     engine = get_or_create_engine()
     data = request.get_json(silent=True) or {}
     try:
@@ -356,13 +436,19 @@ def pitch():
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
     outcome = engine.pitch(
+        selection_mode=options['selection_mode'],
+        pitch_name=options['pitch_name'],
         pitch_intent=options['pitch_intent'],
-        pitch_type=options['pitch_type'],
         target_zone=options['target_zone'],
         custom_target=options['custom_target'],
-        batter_approach=options['batter_approach']
+        batter_approach=options['batter_approach'],
+        timing_tier=options.get('timing_tier'),
+        timing_label=options.get('timing_label'),
     )
-    return jsonify(outcome)
+    return _pitch_response(
+        outcome,
+        200 if outcome.get('status') == 'success' else _pitch_error_status(outcome),
+    )
 
 
 @api_bp.route('/api/pitch/throw', methods=['POST'])
@@ -375,10 +461,14 @@ def throw_pitch():
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
     outcome = engine.throw_pitch(
+        selection_mode=options['selection_mode'],
+        pitch_name=options['pitch_name'],
         pitch_intent=options['pitch_intent'],
-        pitch_type=options['pitch_type'],
         target_zone=options['target_zone'],
         custom_target=options['custom_target'],
+        timing_tier=options['timing_tier'],
+        timing_label=options['timing_label'],
+        pitch_effectiveness=options.get('pitch_effectiveness'),
     )
     return _pitch_response(outcome, 200 if outcome.get('status') == 'success' else _pitch_error_status(outcome))
 
@@ -420,7 +510,7 @@ def practice_throw_pitch():
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
     outcome = engine.practice_throw_pitch(
-        pitch_type=options['pitch_type'],
+        pitch_name=options['pitch_name'],
         target_zone=options['target_zone'],
         custom_target=options['custom_target'],
     )
@@ -501,6 +591,10 @@ def _resolve_target_roster(team_param: Any) -> Optional[dict]:
 
 @api_bp.route('/api/reset', methods=['POST'])
 def reset():
+    """
+    [DEPRECATED] Resets the game state.
+    Redundant with POST /api/start_game. Clients should use POST /api/start_game instead.
+    """
     global game_engine, current_home_roster, current_away_roster
     data = request.get_json(silent=True) or {}
     try:
@@ -597,7 +691,10 @@ def get_teams():
 
 @api_bp.route('/api/rosters', methods=['GET'])
 def rosters():
-    """Returns active rosters from SQLite, optionally filtered by team_id or team_name."""
+    """
+    [DEPRECATED / OPTIONAL] Returns active rosters from SQLite.
+    Full lineups and pitching rotations are already included directly in GET /api/state.
+    """
     team_id = request.args.get('team_id')
     team_name = request.args.get('team') or request.args.get('team_name')
     season = int(request.args.get('season', 2026))
@@ -629,3 +726,44 @@ def rosters():
             }
         }
     return jsonify(data)
+
+
+@api_bp.route('/api/pitcher_info', methods=['GET'])
+def pitcher_info():
+    """
+    [DEPRECATED] Returns pitcher's profile and evaluated arsenal.
+    Orphaned endpoint. The active pitcher's arsenal metrics and max_radius_inches
+    are already embedded in gameState.current_pitcher (via GET /api/state).
+    """
+    pitcher_id = request.args.get('pitcher_id')
+    pitcher = None
+    if pitcher_id:
+        try:
+            pitcher = get_player(int(pitcher_id))
+        except (ValueError, TypeError):
+            return jsonify({'status': 'error', 'message': 'Invalid pitcher_id'}), 400
+    else:
+        engine = get_or_create_engine()
+        pitcher = engine.current_pitcher_obj() if engine else None
+
+    if not pitcher:
+        return jsonify({'status': 'error', 'message': 'Pitcher not found'}), 404
+
+    from backend.engine.pitching_engine.pitcher_info import evaluate_pitch_arsenal
+
+    metrics = evaluate_pitch_arsenal(pitcher)
+    arsenal_list = [m.to_dict() for m in metrics.values()]
+
+    control = (
+        pitcher.get_rating('Control', 75.0)
+        if hasattr(pitcher, 'get_rating')
+        else 75.0
+    )
+
+    return jsonify({
+        'status': 'success',
+        'pitcher_id': getattr(pitcher, 'id', None),
+        'pitcher_name': getattr(pitcher, 'name', 'Pitcher'),
+        'control': control,
+        'arsenal': arsenal_list,
+    })

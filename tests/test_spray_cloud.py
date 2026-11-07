@@ -23,16 +23,16 @@ from backend.engine.pitching_engine.pitch_execution import calculations
 
 
 def test_command_radius_tiers():
-    assert get_max_error_radius_inches(99) == 1.0
-    assert get_max_error_radius_inches(90) == 1.25
-    assert get_max_error_radius_inches(82) == 1.5
-    assert get_max_error_radius_inches(68) == 3.0
-    assert get_max_error_radius_inches(55) == 4.5
-    assert get_max_error_radius_inches(40) == 7.0
+    assert get_max_error_radius_inches(99) == 1.50
+    assert get_max_error_radius_inches(90) == 1.875
+    assert get_max_error_radius_inches(82) == 2.25
+    assert get_max_error_radius_inches(68) == 4.50
+    assert get_max_error_radius_inches(55) == 6.75
+    assert get_max_error_radius_inches(40) == 10.50
     # Interpolation and clamping
-    assert round(get_max_error_radius_inches(85), 3) == 1.406
-    assert get_max_error_radius_inches(20) == 7.0
-    assert get_max_error_radius_inches(120) == 1.0
+    assert round(get_max_error_radius_inches(85), 3) == 2.109
+    assert get_max_error_radius_inches(20) == 10.50
+    assert get_max_error_radius_inches(120) == 1.50
 
 
 def test_sigma_matches_radius():

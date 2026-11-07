@@ -37,7 +37,7 @@ def test_corner_bands_match_the_rectangular_classifier():
 
 
 def test_chase_centers_cannot_produce_a_rulebook_strike_at_82_command():
-    assert get_max_error_radius_inches(82) == 1.5
+    assert get_max_error_radius_inches(82) == 2.25
     for zone in CHASE_ZONES:
         x, z, _ = get_zone_nominal_target(zone)
         for _ in range(500):

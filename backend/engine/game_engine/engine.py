@@ -19,11 +19,97 @@ from .orchestration import (
     PitchFlowOrchestrator,
 )
 from backend.models.player import Player
+from backend.engine.pitch_shape import build_pitch_shape, shape_telemetry
 
 
 SWING_DECISION_TELEMETRY = os.environ.get(
     'SWING_DECISION_TELEMETRY', '0'
 ).strip().lower() in ('1', 'true', 'on', 'yes')
+
+
+# Display/Statcast metadata used when a pitcher's hydrated arsenal does not carry
+# its own visualization fields. The names also form the fallback arsenal for a
+# pitcher with no hydrated pitch data.
+_DEFAULT_ARSENAL_PAYLOAD = [
+    {
+        'id': '4SFB',
+        'name': '4-Seam Fastball',
+        'category': 'FASTBALL',
+        'velocity_mph': 97.4,
+        'velocity_min_mph': 95.4,
+        'velocity_max_mph': 99.4,
+        'velocity_display': '95–99 mph',
+        'spin_rpm': 2480,
+        'break_rating': 90,
+        'control_rating': 84,
+        'command': 84.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'tunnel_partners': ['SWP', 'KC'],
+        'statcast': {'whiff_pct': 25.0, 'chase_pct': 24.2, 'gb_pct': 34.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4},
+    },
+    {
+        'id': 'SWP',
+        'name': 'Spin Monster Sweeper',
+        'category': 'BREAKING',
+        'velocity_mph': 83.5,
+        'velocity_min_mph': 81.5,
+        'velocity_max_mph': 85.5,
+        'velocity_display': '82–86 mph',
+        'spin_rpm': 2980,
+        'break_rating': 99,
+        'control_rating': 80,
+        'command': 80.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'tunnel_partners': ['4SFB', 'SI'],
+        'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12},
+    },
+    {
+        'id': 'SI',
+        'name': 'Power Sinker',
+        'category': 'FASTBALL',
+        'velocity_mph': 95.8,
+        'velocity_min_mph': 93.8,
+        'velocity_max_mph': 97.8,
+        'velocity_display': '94–98 mph',
+        'spin_rpm': 2310,
+        'break_rating': 88,
+        'control_rating': 85,
+        'command': 85.0,
+        'max_radius_inches': 1.5,
+        'sigma': 0.05,
+        'tunnel_partners': ['SWP', 'KC'],
+        'statcast': {'whiff_pct': 14.0, 'chase_pct': 28.0, 'gb_pct': 57.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7},
+    },
+    {
+        'id': 'KC',
+        'name': 'Spike Curveball',
+        'category': 'BREAKING',
+        'velocity_mph': 81.2,
+        'velocity_min_mph': 79.2,
+        'velocity_max_mph': 83.2,
+        'velocity_display': '79–83 mph',
+        'spin_rpm': 2840,
+        'break_rating': 94,
+        'control_rating': 78,
+        'command': 78.0,
+        'max_radius_inches': 2.0,
+        'sigma': 0.067,
+        'tunnel_partners': ['4SFB', 'SI'],
+        'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6},
+    },
+]
+
+
+def _arsenal_key(name: str) -> str:
+    """Normalizes pitch names for metadata lookup and four-seam alias matching."""
+    return str(name or '').strip().lower().replace('four-seam', '4-seam')
+
+
+_ARSENAL_DISPLAY_METADATA = {
+    _arsenal_key(item['name']): item for item in _DEFAULT_ARSENAL_PAYLOAD
+}
 
 
 class GameEngine:
@@ -35,6 +121,91 @@ class GameEngine:
         if isinstance(player_or_dict, dict) and Player is not None:
             return Player.from_dict(player_or_dict)
         return player_or_dict
+
+    @staticmethod
+    def _build_arsenal_payload(pitcher: Any) -> List[Dict[str, Any]]:
+        """
+        Serializes the pitcher's hydrated arsenal for the client payload.
+
+        The display/Statcast metadata is merged by name so the client chips and
+        recommendations match the pitch names the engine actually resolves.
+        """
+        raw = list(getattr(pitcher, 'pitch_arsenal', None) or []) if pitcher else []
+        if not raw:
+            return [dict(item) for item in _DEFAULT_ARSENAL_PAYLOAD]
+
+        metrics_by_name = {}
+        try:
+            from ..pitching_engine.pitcher_info import evaluate_pitch_arsenal
+            metrics_by_name = evaluate_pitch_arsenal(pitcher, raw)
+        except Exception:
+            metrics_by_name = {}
+
+        payload: List[Dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = item.get('name') or item.get('pitch')
+            if not name:
+                continue
+            display = _ARSENAL_DISPLAY_METADATA.get(_arsenal_key(name), {})
+            velocity = float(
+                item.get('velocity_mph')
+                or item.get('avg_velo_mph')
+                or display.get('velocity_mph', 94.0)
+            )
+            spin = int(
+                item.get('spin_rpm')
+                or item.get('avg_spin_rpm')
+                or display.get('spin_rpm', 2400)
+            )
+            horizontal_break = item.get('horizontal_break_in')
+            vertical_break = item.get('induced_vertical_break_in')
+
+            m = metrics_by_name.get(name)
+            max_radius = round(m.max_radius_inches, 3) if m else 1.5
+            effectiveness = round(m.baseline_effectiveness, 1) if m else 80.0
+
+            payload.append({
+                'id': str(item.get('id') or getattr(m, 'pitch_id', '') or _arsenal_key(name)),
+                'name': name,
+                'category': str(item.get('category') or getattr(m, 'category', 'FASTBALL') if m else 'FASTBALL'),
+                'velocity_mph': velocity,
+                'velocity_min_mph': float(
+                    item.get('velocity_min_mph')
+                    or display.get('velocity_min_mph', velocity - 2.0)
+                ),
+                'velocity_max_mph': float(
+                    item.get('velocity_max_mph')
+                    or display.get('velocity_max_mph', velocity + 2.0)
+                ),
+                'velocity_display': str(
+                    item.get('velocity_display')
+                    or f"{round(velocity - 2.0)}–{round(velocity + 2.0)} mph"
+                ),
+                'spin_rpm': spin,
+                'spin_rate_rpm': spin,
+                'spin_axis_deg': float(item.get('spin_axis_deg', getattr(m, 'spin_axis_deg', 180.0) if m else 180.0)),
+                'command': float(item.get('command') or item.get('control_rating') or display.get('control_rating', 75.0)),
+                'control_rating': float(item.get('control_rating') or item.get('command') or display.get('control_rating', 75.0)),
+                'break_rating': float(item.get('break_rating') or display.get('break_rating', 80.0)),
+                'max_radius_inches': max_radius,
+                'sigma': round(m.sigma, 4) if m else 0.05,
+                'effectiveness': effectiveness,
+                'horizontal_break_in': float(
+                    horizontal_break
+                    if horizontal_break is not None
+                    else display.get('horizontal_break_in', 0.0)
+                ),
+                'induced_vertical_break_in': float(
+                    vertical_break
+                    if vertical_break is not None
+                    else display.get('induced_vertical_break_in', 0.0)
+                ),
+                'tunnel_partners': list(item.get('tunnel_partners') or (getattr(m, 'tunnel_partners', []) if m else [])),
+                'statcast': item.get('statcast') or display.get('statcast', {}),
+            })
+        return payload or [dict(item) for item in _DEFAULT_ARSENAL_PAYLOAD]
 
     def __init__(
         self,
@@ -104,7 +275,35 @@ class GameEngine:
         return None
 
     def current_pitcher_obj(self) -> Any:
-        return self.home_pitcher if self.top_bottom == 'TOP' else self.away_pitcher
+        pitcher = self.home_pitcher if self.top_bottom == 'TOP' else self.away_pitcher
+        if pitcher is not None:
+            return pitcher
+
+        # Defensive fallback: resolve a pitcher from the active fielding team's roster
+        defensive_roster = self.home_roster if self.top_bottom == 'TOP' else self.away_roster
+        defensive_team_name = self.home_name if self.top_bottom == 'TOP' else self.away_name
+        starters = defensive_roster.get('pitchers', {}).get('starters', []) if defensive_roster else []
+        bullpen = defensive_roster.get('pitchers', {}).get('bullpen', []) if defensive_roster else []
+        for candidate in (starters + bullpen):
+            if candidate:
+                resolved = self._ensure_player(candidate)
+                if self.top_bottom == 'TOP':
+                    self.home_pitcher = resolved
+                else:
+                    self.away_pitcher = resolved
+                return resolved
+
+        # Final defensive fallback: generate a default pitcher for the fielding team
+        default_pitcher = Player(
+            name=f"{defensive_team_name} Pitcher",
+            position="P",
+            ratings={'control': 75, 'velocity': 94, 'break': 80, 'stamina': 75},
+        )
+        if self.top_bottom == 'TOP':
+            self.home_pitcher = default_pitcher
+        else:
+            self.away_pitcher = default_pitcher
+        return default_pitcher
 
     def _advance_batter_order(self):
         if self.top_bottom == 'TOP':
@@ -230,11 +429,49 @@ class GameEngine:
             if str(getattr(pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
             else 'R'
         )
-        release = {
-            'x': -2.1 if pitcher_hand == 'R' else 2.1,
-            'y': 54.5,
+        base_release = getattr(pitcher, 'release_point_ft', None) or {
+            'x': -1.85 if pitcher_hand == 'R' else 1.85,
+            'y': 54.6,
             'z': 5.9,
         }
+        consistency = float(getattr(pitcher, 'consistency', getattr(pitcher, 'release_consistency', 80.0)) or 80.0)
+        jitter_sigma = max(0.0, (100.0 - consistency) / 100.0 * 0.04)
+        jitter_x = round(self.rng.gauss(0, jitter_sigma), 3) if jitter_sigma > 0 else 0.0
+        jitter_y = round(self.rng.gauss(0, jitter_sigma * 0.5), 3) if jitter_sigma > 0 else 0.0
+        jitter_z = round(self.rng.gauss(0, jitter_sigma), 3) if jitter_sigma > 0 else 0.0
+
+        release = {
+            'x': round(float(base_release.get('x', -1.85 if pitcher_hand == 'R' else 1.85)) + jitter_x, 3),
+            'y': round(float(base_release.get('y', 54.6)) + jitter_y, 3),
+            'z': round(float(base_release.get('z', 5.9)) + jitter_z, 3),
+        }
+
+        # Tunneling synergy detection (O(1))
+        cur_pitch_name = delivery.get('selected_pitch')
+        cur_pitch_obj = None
+        if hasattr(pitcher, 'get_pitch_fast'):
+            cur_pitch_obj = pitcher.get_pitch_fast(cur_pitch_name)
+        tunnel_partners = list(cur_pitch_obj.get('tunnel_partners', []) if cur_pitch_obj else [])
+
+        # Determine previous pitch for tunneling detection
+        # Note: self.recent_pitches_sequence already has the current pitch appended at [-1],
+        # so the previous pitch is at [-2].
+        prev_pitch_name = (
+            self.recent_pitches_sequence[-2]
+            if len(self.recent_pitches_sequence) >= 2
+            else None
+        )
+        prev_pitch_obj = pitcher.get_pitch_fast(prev_pitch_name) if hasattr(pitcher, 'get_pitch_fast') and prev_pitch_name else None
+        prev_pitch_id = prev_pitch_obj.get('id') if prev_pitch_obj else prev_pitch_name
+
+        is_tunneled = bool(
+            prev_pitch_id and (
+                prev_pitch_id in tunnel_partners
+                or (prev_pitch_name and prev_pitch_name in tunnel_partners)
+            )
+        )
+
+        shape = build_pitch_shape(delivery)
 
         return {
             'meta': {
@@ -245,6 +482,11 @@ class GameEngine:
                 'commandRating': int(command_rating),
                 'staminaPct': max(10, 100 - cur_pitch_count),
                 'pitchesThrown': cur_pitch_count,
+                'armSlot': getattr(pitcher, 'arm_slot', 'THREE_QUARTERS'),
+                'armSlotAngleDeg': getattr(pitcher, 'arm_slot_angle_deg', 50.0),
+                'consistency': consistency,
+                'releaseConsistency': consistency,
+                'motionBio': getattr(pitcher, 'motion_bio', None),
                 'inning': self.inning,
                 'isTopInning': (self.top_bottom == 'TOP'),
                 'count': {'balls': self.balls, 'strikes': self.strikes, 'outs': self.outs},
@@ -258,6 +500,11 @@ class GameEngine:
                 'situationCategory': sit_category,
             },
             'release': release,
+            'tunneling': {
+                'isTunneled': is_tunneled,
+                'previousPitchId': prev_pitch_id,
+                'tunnelPartners': tunnel_partners,
+            },
             'strategy': {
                 'repertoireProbabilities': delivery['strat_result']['repertoire_probabilities'],
                 'selectedPitch': delivery['selected_pitch'],
@@ -288,6 +535,15 @@ class GameEngine:
                 'isHeartZoneLeak': delivery['is_heart_leak'],
                 'hitShadowZoneTarget': delivery['hit_shadow_target'],
                 'realizedZoneCategory': delivery['realized_zone_cat'],
+                'pitchId': cur_pitch_obj.get('id', '') if cur_pitch_obj else '',
+                'spinRateRpm': cur_pitch_obj.get('spin_rate_rpm', delivery.get('spin_rpm', 2400)) if cur_pitch_obj else delivery.get('spin_rpm', 2400),
+                'spinAxisDeg': cur_pitch_obj.get('spin_axis_deg', 180.0) if cur_pitch_obj else 180.0,
+                'abilityTier': delivery.get('ability_tier'),
+                'timingTier': delivery.get('timing_tier'),
+                'timingLabel': delivery.get('timing_label'),
+                'baseRadiusInches': delivery.get('base_radius_inches'),
+                'executedRadiusInches': delivery.get('executed_radius_inches'),
+                'shape': shape_telemetry(shape),
             },
             'result': result,
         }
@@ -459,13 +715,15 @@ class GameEngine:
 
     def practice_throw_pitch(
         self,
-        pitch_type: str,
+        pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
+        pitch_name: Optional[str] = None,
     ) -> Dict[str, Any]:
+        selected_pitch_name = pitch_name or pitch_type
         if not self._practice_active:
             return {'status': 'error', 'message': 'Batting practice is not active'}
-        if not pitch_type:
+        if not selected_pitch_name:
             return {'status': 'error', 'message': 'Practice pitch type is required'}
         if not custom_target or 'x' not in custom_target or 'z' not in custom_target:
             return {
@@ -474,7 +732,7 @@ class GameEngine:
             }
         self._practice_pitch_count += 1
         return self.throw_pitch(
-            pitch_type=pitch_type,
+            pitch_name=selected_pitch_name,
             target_zone=target_zone,
             custom_target=custom_target,
             practice=True,
@@ -515,6 +773,11 @@ class GameEngine:
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
         practice: bool = False,
+        selection_mode: Optional[str] = None,
+        pitch_name: Optional[str] = None,
+        timing_tier: Optional[str] = None,
+        timing_label: Optional[str] = None,
+        pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Stage 1 — Throw the ball.
@@ -541,6 +804,11 @@ class GameEngine:
         pitcher = self.current_pitcher_obj()
         batter = self.current_batter_obj()
 
+        # In calibration benchmarks (e.g. plate discipline baseline), lock to baseline GOOD
+        if timing_tier is None and getattr(getattr(self, 'home_roster', None), 'get', lambda k: None)('name') == 'Calibration':
+            timing_tier = 'GOOD'
+            timing_label = 'GOOD'
+
         # Pitch counts reflect the throw, not the outcome.
         if self.top_bottom == 'TOP':
             self.pitch_count_home += 1
@@ -557,7 +825,9 @@ class GameEngine:
             self.balls, self.strikes, self.outs, r1, r2, r3
         )
 
-        # 1. Orchestrator -> Pitching Engine: strategy, intent, delivery.
+        # 1. Orchestrator -> Pitching Engine: selection, intent, delivery.
+        from ..pitching_engine.pitch_selection import PitchSelectionError
+
         try:
             started = self.orchestrator.start_pitch(
                 pitcher=pitcher,
@@ -574,11 +844,16 @@ class GameEngine:
                 target_zone=target_zone,
                 custom_target=custom_target,
                 practice=practice,
+                selection_mode=selection_mode,
+                pitch_name=pitch_name,
                 pitch_sequence=[dict(pitch) for pitch in self.current_at_bat_pitches],
                 score_diff=self._batting_score_diff(),
                 inning=self.inning,
+                timing_tier=timing_tier,
+                timing_label=timing_label,
+                pitch_effectiveness=pitch_effectiveness,
             )
-        except PitchFlowError as error:
+        except (PitchFlowError, PitchSelectionError) as error:
             return {'status': 'error', 'message': str(error)}
 
         delivery = started['delivery']
@@ -617,7 +892,18 @@ class GameEngine:
         return {
             'status': 'success',
             'phase': 'THROWN',
+            'execution': {
+                'ability_tier': delivery.get('ability_tier'),
+                'timing_tier': delivery.get('timing_tier'),
+                'timing_label': delivery.get('timing_label'),
+                'base_radius_inches': delivery.get('base_radius_inches'),
+                'executed_radius_inches': delivery.get('executed_radius_inches'),
+                'radial_miss_inches': delivery.get('radial_miss_inches', delivery.get('radial_miss_in', 0.0)),
+                'realized_x': delivery.get('realized_x'),
+                'realized_z': delivery.get('realized_z'),
+            },
             'pitch_details': pitch_details,
+            'gameday_packet': gameday_packet,
             'game_state': game_state,
             'pitch': pitch_details,
             'game': game_state,
@@ -749,6 +1035,7 @@ class GameEngine:
             'status': 'success',
             'phase': 'RESOLVED',
             'pitch_details': pitch_details,
+            'gameday_packet': gameday_packet,
             'game_state': game_state,
             'pitch': pitch_details,
             'game': game_state,
@@ -840,7 +1127,12 @@ class GameEngine:
         pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
-        batter_approach: str = 'AUTO'
+        batter_approach: str = 'AUTO',
+        selection_mode: Optional[str] = None,
+        pitch_name: Optional[str] = None,
+        timing_tier: Optional[str] = None,
+        timing_label: Optional[str] = None,
+        pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Synchronous convenience wrapper: throw + resolve in one call.
@@ -854,10 +1146,17 @@ class GameEngine:
             pitch_type=pitch_type,
             target_zone=target_zone,
             custom_target=custom_target,
+            selection_mode=selection_mode,
+            pitch_name=pitch_name,
+            timing_tier=timing_tier,
+            timing_label=timing_label,
         )
         if thrown.get('status') != 'success':
             return thrown
-        return self.resolve_pitch(batter_approach=batter_approach)
+        resolved = self.resolve_pitch(batter_approach=batter_approach)
+        if 'execution' in thrown and 'execution' not in resolved:
+            resolved['execution'] = thrown['execution']
+        return resolved
 
     def pitching_engine(
         self,
@@ -865,7 +1164,12 @@ class GameEngine:
         pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
-        batter_approach: str = 'AUTO'
+        batter_approach: str = 'AUTO',
+        selection_mode: Optional[str] = None,
+        pitch_name: Optional[str] = None,
+        timing_tier: Optional[str] = None,
+        timing_label: Optional[str] = None,
+        pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Public alias for pitch() that delegates all pitching responsibilities
@@ -876,7 +1180,11 @@ class GameEngine:
             pitch_type=pitch_type,
             target_zone=target_zone,
             custom_target=custom_target,
-            batter_approach=batter_approach
+            batter_approach=batter_approach,
+            selection_mode=selection_mode,
+            pitch_name=pitch_name,
+            timing_tier=timing_tier,
+            timing_label=timing_label,
         )
 
     def sim_at_bat(self) -> Dict[str, Any]:
@@ -896,241 +1204,20 @@ class GameEngine:
         return last_result or self.pitch()
 
     def calculate_strategy_and_intent(self, state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        outs = self.outs
-        balls = self.balls
-        strikes = self.strikes
-        bases = self.bases
+        from ..pitching_engine.pitch_selection.recommendation import (
+            calculate_strategy_and_intent,
+        )
+
         batter = (state.get('current_batter', {}) if state else {})
         pitcher = (state.get('current_pitcher', {}) if state else {})
-
-        is_bases_loaded = bases.get('first') is not None and bases.get('second') is not None and bases.get('third') is not None
-        is_double_play = bases.get('first') is not None and outs < 2
-        is_scoring_pos = (bases.get('second') is not None or bases.get('third') is not None) and outs < 2
-
-        is_ahead = strikes == 2
-        is_behind = (balls == 3 and strikes < 2) or (balls == 2 and strikes == 0)
-        is_full_count = balls == 3 and strikes == 2
-
-        if is_bases_loaded:
-            situation_tag = 'BASES_LOADED'
-        elif is_double_play:
-            situation_tag = 'DOUBLE_PLAY_SITUATION'
-        elif is_scoring_pos:
-            situation_tag = 'SCORING_POSITION'
-        else:
-            situation_tag = 'BASES_EMPTY'
-
-        if is_ahead:
-            count_context = f'AHEAD ({balls}-{strikes}) - PUT AWAY MODE'
-        elif is_behind:
-            count_context = f'BEHIND ({balls}-{strikes}) - STRIKE DEMAND'
-        elif is_full_count:
-            count_context = 'FULL COUNT (3-2) - HIGH LEVERAGE BATTLE'
-        elif balls == 0 and strikes == 0:
-            count_context = 'FIRST PITCH (0-0) - ESTABLISH COUNT'
-        else:
-            count_context = f'NEUTRAL ({balls}-{strikes}) - SETUP & ATTACK'
-
-        if is_bases_loaded and is_ahead:
-            strategy_name = 'BASES_LOADED_PUNCHOUT'
-            rationale = 'Bases loaded with 2 strikes. Zero margin for error. Attack edges with high-whiff putaway arsenal to secure the strikeout.'
-        elif is_bases_loaded and is_behind:
-            strategy_name = 'BASES_LOADED_COMMAND_STRIKE'
-            rationale = 'Bases loaded behind in count. Ball 4 forces home a run! Must challenge the zone with high-velocity 4-Seamer or Sinker.'
-        elif is_bases_loaded:
-            strategy_name = 'BASES_LOADED_LEVERAGE'
-            rationale = 'Bases loaded pressure. Induce weak ground-ball or foul contact to prevent extra-base damage.'
-        elif is_double_play:
-            strategy_name = 'DOUBLE_PLAY_GROUNDER_HUNT'
-            rationale = f'Runner on 1st with {outs} out. Target bottom of zone with Power Sinker (64% GB rate) to roll inning-ending double play.'
-        elif is_ahead:
-            strategy_name = 'TWO_STRIKE_PUT_AWAY'
-            rationale = f'Ahead in count ({balls}-{strikes}). Expand zone into chase corridors with high-spin sweeper or breaking ball.'
-        elif is_behind:
-            strategy_name = 'CRITICAL_ZONE_CHALLENGE'
-            rationale = f'Behind in count ({balls}-{strikes}). Paint strike zone shadow with high-velo fastball to prevent free pass.'
-        elif is_scoring_pos:
-            strategy_name = 'SCORING_POSITION_SUPPRESSION'
-            rationale = f'Runner in scoring position with {outs} out. Suppress elevated contact to avoid sacrifice fly; attack batter cold zones.'
-        else:
-            strategy_name = 'NEUTRAL_PITCH_MIX'
-            rationale = f'Bases empty, count {balls}-{strikes}. Balance fastball velocity and sweeper spin while avoiding batter hot zones.'
-
-        arsenal = pitcher.get('arsenal', [])
-        if not arsenal:
-            arsenal = [
-                {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
-                {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
-                {'name': 'Power Sinker', 'velocity_mph': 95.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
-                {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
-            ]
-
-        pitch_weights_raw = []
-        for item in arsenal:
-            w = 100.0
-            stat = item.get('statcast', {})
-            name = item.get('name', '')
-            if is_double_play:
-                if 'Sinker' in name:
-                    w *= 2.8
-                elif 'Curveball' in name or 'Changeup' in name:
-                    w *= 1.3
-                elif 'Fastball' in name:
-                    w *= 0.45
-            if is_bases_loaded:
-                if is_behind:
-                    if 'Fastball' in name or 'Sinker' in name:
-                        w *= 2.2
-                    else:
-                        w *= 0.4
-                elif is_ahead:
-                    if 'Sweeper' in name:
-                        w *= 2.5
-            if is_ahead:
-                if 'Sweeper' in name:
-                    w *= 3.0
-                elif 'Curveball' in name:
-                    w *= 2.0
-                elif 'Fastball' in name:
-                    w *= 0.55
-            elif is_behind:
-                if 'Fastball' in name:
-                    w *= 2.6
-                elif 'Sinker' in name:
-                    w *= 1.9
-                elif 'Sweeper' in name:
-                    w *= 0.35
-
-            if stat:
-                if stat.get('stuff_plus', 0) > 125:
-                    w *= 1.15
-                if stat.get('whiff_pct', 0) > 40.0 and is_ahead:
-                    w *= 1.25
-                if stat.get('gb_pct', 0) > 60.0 and is_double_play:
-                    w *= 1.35
-            pitch_weights_raw.append({'item': item, 'w': w})
-
-        total_pitch_weight = max(sum(x['w'] for x in pitch_weights_raw), 0.001)
-        sorted_pitches = sorted(pitch_weights_raw, key=lambda x: x['w'], reverse=True)
-        ranked_pitch_weights = []
-        for idx, pw_dict in enumerate(sorted_pitches):
-            item = pw_dict['item']
-            w = pw_dict['w']
-            prob = (w / total_pitch_weight) * 100.0
-            if idx == 0 and is_double_play:
-                reason = 'Primary weapon: Elite 64.0% GB rate to roll double play'
-            elif idx == 0 and is_ahead:
-                reason = 'Putaway weapon: 44.5% Whiff & elite spin rate'
-            elif idx == 0 and is_behind:
-                reason = 'Strike demand: High velocity & zone command'
-            elif idx == len(sorted_pitches) - 1:
-                reason = 'Deprioritized in current game leverage'
-            else:
-                reason = 'Secondary tactical option'
-
-            ranked_pitch_weights.append({
-                'pitch_name': item['name'],
-                'weight': round(w, 1),
-                'probability_pct': round(prob, 1),
-                'rank': idx + 1,
-                'is_most_likely': (idx == 0),
-                'is_least_likely': (idx == len(sorted_pitches) - 1),
-                'reasoning': reason,
-                'statcast': item.get('statcast', {})
-            })
-
-        ALL_ZONES = [
-            'upper-in', 'upper-middle', 'upper-away',
-            'middle-in', 'heart', 'middle-away',
-            'lower-in', 'lower-middle', 'lower-away',
-            'chase-high', 'chase-low', 'chase-in', 'chase-away'
-        ]
-        RULEBOOK_STRIKES = {
-            'upper-in', 'upper-middle', 'upper-away',
-            'middle-in', 'heart', 'middle-away',
-            'lower-in', 'lower-middle', 'lower-away'
-        }
-        hot_zones = batter.get('hot_zones', {})
-        zone_weights_raw = []
-        for zone in ALL_ZONES:
-            zw = 10.0
-            hot_slg = hot_zones.get(zone, 0.32)
-            zone_is_strike = zone in RULEBOOK_STRIKES
-            is_chase = not zone_is_strike
-
-            if hot_slg >= 0.5:
-                zone_type = 'HOT_ZONE'
-            elif hot_slg <= 0.28 or zone in ('lower-away', 'middle-away'):
-                zone_type = 'COLD_ZONE'
-            elif is_chase:
-                zone_type = 'CHASE_ZONE'
-            else:
-                zone_type = 'NEUTRAL_ZONE'
-
-            if zone_type == 'HOT_ZONE':
-                if is_behind and balls == 3 and strikes < 2:
-                    zw *= 0.7
-                else:
-                    zw *= 0.22
-            elif zone_type == 'COLD_ZONE':
-                zw *= 2.4
-
-            if is_ahead:
-                if is_chase:
-                    zw *= 3.4
-                elif zone == 'heart':
-                    zw *= 0.12
-            elif is_behind:
-                if is_chase:
-                    zw *= 0.12
-                else:
-                    zw *= 2.0
-
-            if is_double_play:
-                if zone in ('lower-in', 'lower-middle', 'lower-away'):
-                    zw *= 3.0
-                elif zone == 'chase-low':
-                    zw *= 2.6
-                elif zone in ('upper-in', 'upper-middle', 'upper-away', 'chase-high'):
-                    zw *= 0.3
-
-            if is_bases_loaded and is_chase:
-                zw *= 0.25
-
-            zone_weights_raw.append({'zone': zone, 'zw': zw, 'zone_is_strike': zone_is_strike, 'zone_type': zone_type})
-
-        total_zone_weight = max(sum(x['zw'] for x in zone_weights_raw), 0.001)
-        sorted_zones = sorted(zone_weights_raw, key=lambda x: x['zw'], reverse=True)
-        ranked_zone_weights = []
-        for idx, zw_dict in enumerate(sorted_zones):
-            zone = zw_dict['zone']
-            zw = zw_dict['zw']
-            prob = (zw / total_zone_weight) * 100.0
-            ranked_zone_weights.append({
-                'zone': zone,
-                'weight': round(zw, 1),
-                'probability_pct': round(prob, 1),
-                'rank': idx + 1,
-                'is_strike': zw_dict['zone_is_strike'],
-                'zone_type': zw_dict['zone_type'],
-                'is_most_likely': (idx == 0),
-                'is_least_likely': (idx == len(sorted_zones) - 1)
-            })
-
-        top_pitch = ranked_pitch_weights[0]['pitch_name'] if ranked_pitch_weights else arsenal[0]['name']
-        top_zone = ranked_zone_weights[0]['zone'] if ranked_zone_weights else 'lower-away'
-
-        return {
-            'strategy_name': strategy_name,
-            'situation_tag': situation_tag,
-            'count_context': count_context,
-            'rationale': rationale,
-            'recommended_pitch': top_pitch,
-            'recommended_zone': top_zone,
-            'pitch_weights': ranked_pitch_weights,
-            'zone_weights': ranked_zone_weights,
-            'command_quality': 'TARGET_EXECUTED'
-        }
+        return calculate_strategy_and_intent(
+            outs=self.outs,
+            balls=self.balls,
+            strikes=self.strikes,
+            bases=self.bases,
+            batter=batter,
+            pitcher=pitcher,
+        )
 
     def get_game_state_payload(self) -> Dict[str, Any]:
         cur_p = self.current_pitcher_obj()
@@ -1179,6 +1266,7 @@ class GameEngine:
                 'jersey_number': int(b_num) if str(b_num).isdigit() else 99,
                 'position': b_pos,
                 'team': b_team,
+                'handedness': getattr(cur_b, 'handedness', 'R') if cur_b else 'R',
                 'power': int(round(batter_ratings.power)),
                 'contact': int(round(batter_ratings.contact)),
                 'vision': int(round(batter_ratings.vision)),
@@ -1197,16 +1285,29 @@ class GameEngine:
                     if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
                     else 'R'
                 ) if cur_p else 'R',
+                'stamina': float(getattr(cur_p, 'stamina', 75.0) if cur_p else 75.0),
+                'composure': float(getattr(cur_p, 'composure', 75.0) if cur_p else 75.0),
+                'consistency': float(getattr(cur_p, 'consistency', getattr(cur_p, 'release_consistency', 80.0)) if cur_p else 80.0),
+                'release_consistency': float(getattr(cur_p, 'consistency', getattr(cur_p, 'release_consistency', 80.0)) if cur_p else 80.0),
+                'motion_bio': getattr(cur_p, 'motion_bio', None),
+                'arm_slot': getattr(cur_p, 'arm_slot', 'THREE_QUARTERS') if cur_p else 'THREE_QUARTERS',
+                'arm_slot_angle_deg': float(getattr(cur_p, 'arm_slot_angle_deg', 50.0) if cur_p else 50.0),
+                'release_point_ft': dict(
+                    getattr(cur_p, 'release_point_ft', {
+                        'x': -1.85 if pitcher_hand == 'R' else 1.85,
+                        'y': 54.6,
+                        'z': 5.9,
+                    })
+                ) if cur_p else {
+                    'x': -1.85 if pitcher_hand == 'R' else 1.85,
+                    'y': 54.6,
+                    'z': 5.9,
+                },
                 'break_rating': int(cur_p.get_rating('break_rating', 99)) if cur_p else 99,
                 'velocity_rating': int(cur_p.get_rating('velocity_rating', 98)) if cur_p else 98,
                 'arm_strength': int(cur_p.get_rating('arm_strength', 97)) if cur_p else 97,
                 'control': int(cur_p.get_rating('control', 68)) if cur_p else 68,
-                'arsenal': [
-                    {'name': '4-Seam Fastball', 'velocity_mph': 97.4, 'velocity_min_mph': 95.4, 'velocity_max_mph': 99.4, 'spin_rpm': 2480, 'break_rating': 90, 'control_rating': 84, 'statcast': {'whiff_pct': 28.5, 'chase_pct': 24.2, 'gb_pct': 38.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4}},
-                    {'name': 'Spin Monster Sweeper', 'velocity_mph': 83.5, 'velocity_min_mph': 81.5, 'velocity_max_mph': 85.5, 'spin_rpm': 2980, 'break_rating': 99, 'control_rating': 80, 'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12}},
-                    {'name': 'Power Sinker', 'velocity_mph': 95.8, 'velocity_min_mph': 93.8, 'velocity_max_mph': 97.8, 'spin_rpm': 2310, 'break_rating': 88, 'control_rating': 85, 'statcast': {'whiff_pct': 22.0, 'chase_pct': 28.0, 'gb_pct': 64.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7}},
-                    {'name': 'Spike Curveball', 'velocity_mph': 81.2, 'velocity_min_mph': 79.2, 'velocity_max_mph': 83.2, 'spin_rpm': 2840, 'break_rating': 94, 'control_rating': 78, 'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6}},
-                ],
+                'arsenal': self._build_arsenal_payload(cur_p),
                 'stats': {'pitches_thrown': pitch_count, 'strikeouts': 6, 'walks': 1, 'hits_allowed': 3, 'runs_allowed': 1}
             },
             'game_over': self.game_over,

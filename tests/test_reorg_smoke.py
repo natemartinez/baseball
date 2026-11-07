@@ -3,7 +3,7 @@
 Post-reorganization smoke tests.
 
 Guards the canonical module paths introduced when the engine packages were
-split into ``game_engine``, ``pitch_execution``, ``pitch_strategy``, and
+split into ``game_engine``, ``pitch_execution``, ``pitch_selection``, and
 ``pitcher_info``. Also verifies that the Flask routes used by the Expo client
 still respond with the expected payloads.
 """
@@ -28,6 +28,12 @@ from backend.engine.pitching_engine import (
     PitchStrategy,
     calculate_pitch_delivery,
 )
+from backend.engine.pitching_engine.pitch_selection import (
+    PitchSelection,
+    PitchSelectionError,
+    PitchSelectionMode,
+    select_pitch,
+)
 
 
 def test_canonical_imports_resolve():
@@ -42,9 +48,16 @@ def test_canonical_imports_resolve():
     assert callable(compute_batted_ball_trace)
     assert callable(classify_gameday_zone)
     assert StrikeZone is not None
+    assert select_pitch is not None
+    assert PitchSelection is not None
+    assert PitchSelectionMode.AI.value == 'AI'
+    assert issubclass(PitchSelectionError, ValueError)
 
     # Importing the seeder must not raise (do not execute it: it mutates SQLite).
     import backend.database.seed  # noqa: F401
+
+    # New pitching subpackages are regular packages, not implicit namespaces.
+    import backend.engine.pitching_engine.pitch_selection  # noqa: F401
 
 
 def test_flask_endpoints_smoke():

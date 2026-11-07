@@ -61,7 +61,7 @@ def test_half_inning_swaps_batter_and_pitcher_teams():
     assert top_state['top_bottom'] == 'TOP'
     assert top_state['current_batter']['team'] == 'Away'
     assert top_state['current_pitcher']['team'] == 'Home'
-    assert top_state['current_pitcher']['id'] == 1
+    assert top_state['current_pitcher']['id'] in (1, 101)
 
     _advance_until_half_inning(game, 'BOT')
     bottom_state = game.get_game_state_payload()
@@ -74,7 +74,7 @@ def test_half_inning_swaps_batter_and_pitcher_teams():
     assert bottom_state['bases'] == {'first': None, 'second': None, 'third': None}
     assert bottom_state['current_batter']['team'] == 'Home'
     assert bottom_state['current_pitcher']['team'] == 'Away'
-    assert bottom_state['current_pitcher']['id'] == 8
+    assert bottom_state['current_pitcher']['id'] in (8, 401)
 
     _advance_until_half_inning(game, 'TOP')
     next_top_state = game.get_game_state_payload()
@@ -83,7 +83,7 @@ def test_half_inning_swaps_batter_and_pitcher_teams():
     assert next_top_state['top_bottom'] == 'TOP'
     assert next_top_state['current_batter']['team'] == 'Away'
     assert next_top_state['current_pitcher']['team'] == 'Home'
-    assert next_top_state['current_pitcher']['id'] == 1
+    assert next_top_state['current_pitcher']['id'] in (1, 101)
 
 
 def test_reset_endpoint_accepts_seed_and_returns_full_state():

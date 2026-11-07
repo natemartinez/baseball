@@ -63,7 +63,7 @@ def test_pitcher_in_game_fatigue_ratings():
 def test_pitch_arsenal_and_strategy_leverage():
     """
     Consolidated Test 2: Pitch Arsenal & Tactical Count Leverage.
-    (Merged from test_pitch_strategy.py)
+    (Merged from the former pitch strategy tests)
     Validates arsenal extraction and count-dependent pitch weight adaptation
     across First Pitch, Ahead 2 Strikes, Behind, Full Count, and Double Play.
     """
@@ -194,7 +194,7 @@ def test_execute_pitch_uses_sampled_zone_target():
     engine = PitchingEngine(mclean, judge)
 
     with patch(
-        "backend.engine.pitching_engine.engine.sample_zone_target",
+        "backend.engine.pitching_engine.pitch_selection.intent.sample_zone_target",
         return_value=(0.123, 2.345, "SHADOW"),
     ) as sampler:
         delivery = engine.execute_pitch(
@@ -216,7 +216,7 @@ def test_execute_pitch_custom_target_still_wins():
     engine = PitchingEngine(mclean, judge)
 
     with patch(
-        "backend.engine.pitching_engine.engine.sample_zone_target",
+        "backend.engine.pitching_engine.pitch_selection.intent.sample_zone_target",
         return_value=(0.123, 2.345, "SHADOW"),
     ) as sampler:
         delivery = engine.execute_pitch(

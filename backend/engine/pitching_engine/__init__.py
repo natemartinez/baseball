@@ -10,8 +10,13 @@ from .pitch_execution import (
     PitchArsenal,
     calculate_pitch_delivery,
 )
-from .pitch_strategy import PitchStrategy
-from .pitcher_info import InGamePitcherRatings, PitcherInstanceManager
+from .pitch_selection import PitchStrategy
+from .pitcher_info import (
+    InGamePitcherRatings,
+    PitcherInstanceManager,
+    PitchArsenalMetrics,
+    evaluate_pitch_arsenal,
+)
 
 __all__ = [
     'PitchingEngine',
@@ -21,5 +26,7 @@ __all__ = [
     'PITCH_CATEGORIES',
     'PitcherInstanceManager',
     'InGamePitcherRatings',
+    'PitchArsenalMetrics',
+    'evaluate_pitch_arsenal',
     'calculate_pitch_delivery',
 ]
