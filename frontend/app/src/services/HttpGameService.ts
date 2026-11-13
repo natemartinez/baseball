@@ -150,8 +150,13 @@ export class HttpGameService implements IGameService {
     return res;
   }
 
-  async getTeams(): Promise<TeamsResponse> {
-    return this.get<TeamsResponse>('api/teams');
+  async getTeams(includePlayers: boolean = false): Promise<TeamsResponse> {
+    const query = includePlayers ? '?include_players=true' : '';
+    return this.get<TeamsResponse>(`api/teams${query}`);
+  }
+
+  async getTeamSelection(): Promise<TeamsResponse> {
+    return this.get<TeamsResponse>('api/teams/selection');
   }
 
   async getTeamRoster(teamIdOrName: number | string, season: number = 2026): Promise<TeamRosterResponse> {

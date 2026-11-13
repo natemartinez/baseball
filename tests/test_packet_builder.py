@@ -83,3 +83,4 @@ def test_build_pitch_details_from_context():
     assert details["velocity_mph"] == 88.0
     assert details["command_quality"] == "PINPOINT"  # <= 2.0 inches
     assert details["description"] == "Pitch in flight"
+

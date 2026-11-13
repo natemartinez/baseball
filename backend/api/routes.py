@@ -74,7 +74,6 @@ def load_team_roster(team_identifier: Any, season: int = 2026) -> dict:
         },
     }
 
-
 def get_or_create_engine() -> GameEngine:
     global game_engine, current_home_roster, current_away_roster
     if game_engine is None:
@@ -120,28 +119,12 @@ def state():
     return jsonify(_build_state_payload())
 
 
-def _build_state_payload(engine=None):
-    engine = engine or get_or_create_engine()
-    game_payload = engine.get_game_state_payload()
-
-    teams = get_all_teams()
-    lineups_data = []
-    rotations_data = []
-
-    for t in teams:
-        team_id = t['id']
-        team_name = t['name']
-
-        # Use current in-memory roster if active game matches, else load fresh
-        if current_home_roster and current_home_roster.get('team_id') == team_id:
-            roster = current_home_roster
-        elif current_away_roster and current_away_roster.get('team_id') == team_id:
-            roster = current_away_roster
-        else:
-            roster = load_team_roster(team_id)
-
-        lineup_players = []
-        for order_idx, p in enumerate(roster['position_players']):
+def _serialize_roster_lineup(team_id: Any, team_name: str, roster: Optional[dict]) -> dict:
+    lineup_players = []
+    if isinstance(roster, dict):
+        for order_idx, p in enumerate(roster.get('position_players', [])):
+            if not p:
+                continue
             order_num = getattr(p, 'batting_order', None) or (order_idx + 1)
             power_val = int(p.get_rating('Power', 80)) if hasattr(p, 'get_rating') else 80
             contact_val = int(p.get_rating('Contact', 80)) if hasattr(p, 'get_rating') else 80
@@ -149,48 +132,101 @@ def _build_state_payload(engine=None):
                 'batting_order': order_num,
                 'player': {
                     'id': getattr(p, 'id', order_idx + 1) or (order_idx + 1),
-                    'name': p.name,
-                    'jersey_number': int(p.number) if str(p.number).isdigit() else 99,
-                    'position': p.position,
+                    'name': getattr(p, 'name', str(p)),
+                    'jersey_number': int(p.number) if hasattr(p, 'number') and str(p.number).isdigit() else 99,
+                    'position': getattr(p, 'position', 'DH'),
                     'team': team_name,
                 },
                 'ratings': f"Power {power_val} / Contact {contact_val}"
             })
 
-        starters_list = []
-        for s_idx, sp in enumerate(roster['pitchers']['starters']):
+    return {
+        'team_id': team_id,
+        'team_name': team_name,
+        'lineup': lineup_players,
+    }
+
+
+def _serialize_roster_rotation(team_id: Any, team_name: str, roster: Optional[dict]) -> dict:
+    starters_list = []
+    bullpen_list = []
+    if isinstance(roster, dict):
+        pitchers = roster.get('pitchers', {}) if isinstance(roster.get('pitchers'), dict) else {}
+        for s_idx, sp in enumerate(pitchers.get('starters', [])):
+            if not sp:
+                continue
             starters_list.append({
                 'id': getattr(sp, 'id', 100 + s_idx) or (100 + s_idx),
-                'name': sp.name,
-                'jersey_number': int(sp.number) if str(sp.number).isdigit() else 26,
-                'position': sp.position,
+                'name': getattr(sp, 'name', str(sp)),
+                'jersey_number': int(sp.number) if hasattr(sp, 'number') and str(sp.number).isdigit() else 26,
+                'position': getattr(sp, 'position', 'SP'),
                 'team': team_name,
             })
 
-        bullpen_list = []
-        for b_idx, rp in enumerate(roster['pitchers'].get('bullpen', [])):
+        for b_idx, rp in enumerate(pitchers.get('bullpen', [])):
+            if not rp:
+                continue
             bullpen_list.append({
                 'id': getattr(rp, 'id', 200 + b_idx) or (200 + b_idx),
-                'name': rp.name,
-                'jersey_number': int(rp.number) if str(rp.number).isdigit() else 99,
-                'position': rp.position,
+                'name': getattr(rp, 'name', str(rp)),
+                'jersey_number': int(rp.number) if hasattr(rp, 'number') and str(rp.number).isdigit() else 99,
+                'position': getattr(rp, 'position', 'RP'),
                 'team': team_name,
             })
 
-        lineups_data.append({
-            'team_id': team_id,
-            'team_name': team_name,
-            'lineup': lineup_players,
-        })
-        rotations_data.append({
-            'team_id': team_id,
-            'team_name': team_name,
-            'starters': starters_list,
-            'bullpen': bullpen_list,
-        })
+    return {
+        'team_id': team_id,
+        'team_name': team_name,
+        'starters': starters_list,
+        'bullpen': bullpen_list,
+    }
+
+
+def _build_state_payload(engine=None):
+    engine = engine or get_or_create_engine()
+    game_payload = engine.get_game_state_payload()
+
+    home_roster = getattr(engine, 'home_roster', None) or current_home_roster or {}
+    away_roster = getattr(engine, 'away_roster', None) or current_away_roster or {}
+
+    home_name = (
+        getattr(engine, 'home_name', None)
+        or (home_roster.get('team_name') if isinstance(home_roster, dict) else None)
+        or 'Home'
+    )
+    away_name = (
+        getattr(engine, 'away_name', None)
+        or (away_roster.get('team_name') if isinstance(away_roster, dict) else None)
+        or 'Away'
+    )
+
+    home_id = (
+        home_roster.get('team_id')
+        if isinstance(home_roster, dict) and home_roster.get('team_id') is not None
+        else 1
+    )
+    away_id = (
+        away_roster.get('team_id')
+        if isinstance(away_roster, dict) and away_roster.get('team_id') is not None
+        else 2
+    )
+
+    active_teams = [
+        (home_id, home_name, home_roster),
+        (away_id, away_name, away_roster),
+    ]
+
+    lineups_data = [
+        _serialize_roster_lineup(team_id, team_name, roster)
+        for team_id, team_name, roster in active_teams
+    ]
+    rotations_data = [
+        _serialize_roster_rotation(team_id, team_name, roster)
+        for team_id, team_name, roster in active_teams
+    ]
 
     return {
-        'teams': [t['name'] for t in teams],
+        'teams': [home_name, away_name],
         'game': game_payload,
         'game_state': game_payload,
         'lineups': lineups_data,
@@ -403,8 +439,8 @@ def start_game():
 
     teams = get_all_teams()
     # Default to 1 (Home: Mets) and 2 (Away: Yankees) if not specified
-    home_id = data.get('home_team_id') or (teams[0]['id'] if teams else 1)
-    away_id = data.get('away_team_id') or (teams[1]['id'] if len(teams) > 1 else 2)
+    home_id = data.get('home_team_id') or data.get('home_team') or (teams[0]['id'] if teams else 1)
+    away_id = data.get('away_team_id') or data.get('away_team') or (teams[1]['id'] if len(teams) > 1 else 2)
 
     current_home_roster = load_team_roster(home_id)
     current_away_roster = load_team_roster(away_id)
@@ -680,12 +716,66 @@ def swap_rotation():
 
 @api_bp.route('/api/teams', methods=['GET'])
 def get_teams():
-    """Returns all registered teams from SQLite (Approach B: Franchise / Scheduling)."""
+    """
+    Returns all registered teams from SQLite.
+    When `include_players=true` or `include_rosters=true`, includes hydrated position players and pitching staff.
+    """
+    include_players = (
+        request.args.get('include_players', '').lower() in ('1', 'true', 'yes')
+        or request.args.get('include_rosters', '').lower() in ('1', 'true', 'yes')
+    )
+    season = int(request.args.get('season', 2026))
+
     teams = get_all_teams()
+    teams_payload = []
+    for t in teams:
+        item = {
+            'id': t['id'],
+            'name': t['name'],
+            'abbreviation': t.get('abbreviation'),
+        }
+        if include_players:
+            r = load_team_roster(t['id'], season=season)
+            item['position_players'] = [
+                p.to_dict() if hasattr(p, 'to_dict') else p for p in r['position_players']
+            ]
+            item['pitchers'] = {
+                'starters': [p.to_dict() if hasattr(p, 'to_dict') else p for p in r['pitchers']['starters']],
+                'bullpen': [p.to_dict() if hasattr(p, 'to_dict') else p for p in r['pitchers']['bullpen']],
+            }
+        teams_payload.append(item)
+
     return jsonify({
         'status': 'ok',
-        'teams': teams,
-        'count': len(teams)
+        'teams': teams_payload,
+        'count': len(teams_payload),
+    })
+
+
+@api_bp.route('/api/teams/selection', methods=['GET'])
+def get_team_selection():
+    """Direct bridge returning all teams with their complete rosters for team selection."""
+    season = int(request.args.get('season', 2026))
+    teams = get_all_teams()
+    teams_payload = []
+    for t in teams:
+        r = load_team_roster(t['id'], season=season)
+        teams_payload.append({
+            'id': t['id'],
+            'name': t['name'],
+            'abbreviation': t.get('abbreviation'),
+            'position_players': [
+                p.to_dict() if hasattr(p, 'to_dict') else p for p in r['position_players']
+            ],
+            'pitchers': {
+                'starters': [p.to_dict() if hasattr(p, 'to_dict') else p for p in r['pitchers']['starters']],
+                'bullpen': [p.to_dict() if hasattr(p, 'to_dict') else p for p in r['pitchers']['bullpen']],
+            },
+        })
+    return jsonify({
+        'status': 'ok',
+        'teams': teams_payload,
+        'count': len(teams_payload),
     })
 
 

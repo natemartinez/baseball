@@ -91,3 +91,4 @@ class ActivePitcherState:
         Increments pitch count and advances running pitcher state.
         """
         self.pitch_count += 1
+

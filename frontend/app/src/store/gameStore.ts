@@ -12,6 +12,7 @@ import type {
   TeamRotation,
   ApiErrorResponse,
   TimingTier,
+  TeamDto,
 } from '../types/api';
 import { STRIKE_ZONES, INNER_ZONES, CHASE_ZONES, BaseballApiError } from '../types/api';
 import type {
@@ -156,6 +157,12 @@ export interface GameUiState {
   // Strategy Menu
   isStrategyMenuOpen: boolean;
 
+  // Team Selection
+  isTeamSelectionOpen: boolean;
+  availableTeams: TeamDto[];
+  selectedHomeTeamId: number | null;
+  selectedAwayTeamId: number | null;
+
   // Settings Menu
   isSettingsMenuOpen: boolean;
   isRotationDialogOpen: boolean;
@@ -181,8 +188,12 @@ export interface GameUiState {
 export interface GameActions {
   // Lifecycle
   loadInitialState(): Promise<void>;
-  startNewGame(): Promise<void>;
+  startNewGame(homeTeamId?: number, awayTeamId?: number): Promise<void>;
   resetGame(): Promise<void>;
+  toggleTeamSelection(open?: boolean): void;
+  loadAvailableTeams(): Promise<void>;
+  setSelectedHomeTeamId(id: number): void;
+  setSelectedAwayTeamId(id: number): void;
 
   // Gameplay
   throwPitch(timingTier?: TimingTier, timingLabel?: string, pitchEffectiveness?: number): Promise<void>;
@@ -263,6 +274,10 @@ const initialState: GameUiState = {
   customTargetCoords: null,
   isDevMenuOpen: false,
   isStrategyMenuOpen: false,
+  isTeamSelectionOpen: false,
+  availableTeams: [],
+  selectedHomeTeamId: null,
+  selectedAwayTeamId: null,
   isSettingsMenuOpen: false,
   isRotationDialogOpen: false,
   isPitchFeedOpen: false,
@@ -336,13 +351,19 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     }
   },
 
-  async startNewGame() {
+  async startNewGame(homeTeamId?: number, awayTeamId?: number) {
     set({ loadingState: 'loading', errorMessage: null, errorEnvelope: null });
     try {
-      const state = await api.startGame(1, 2);
+      const homeId = homeTeamId ?? get().selectedHomeTeamId ?? 1;
+      const awayId = awayTeamId ?? get().selectedAwayTeamId ?? 2;
+      const state = await api.startGame(homeId, awayId);
+      const response = await api.getState();
       const firstPitch = state.current_pitcher?.arsenal?.[0]?.name;
       set((s) => ({
-        gameState: ensureStrategyIntent(state) as GameState,
+        initialResponse: response,
+        gameState: ensureStrategyIntent(response.game ?? state) as GameState,
+        lineups: response.lineups,
+        rotations: response.rotations,
         pitchFeed: [],
         currentAtBatPitches: [],
         lastPitchEndedAtBat: false,
@@ -356,6 +377,7 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
         controlMode: 'PITCHING',
         battingDrill: null,
         isBattingDrillOpen: false,
+        isTeamSelectionOpen: false,
         practiceSaved: null,
         loadingState: 'success',
         selectedPitchName: s.selectedPitchName || firstPitch || 'Four-Seam Fastball',
@@ -368,6 +390,45 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
     } catch (err: unknown) {
       const { message, envelope } = parseError(err);
       set({ loadingState: 'error', errorMessage: message, errorEnvelope: envelope });
+    }
+  },
+
+  toggleTeamSelection(open?: boolean) {
+    const nextState = open !== undefined ? open : !get().isTeamSelectionOpen;
+    set({ isTeamSelectionOpen: nextState });
+    if (nextState && get().availableTeams.length === 0) {
+      get().loadAvailableTeams();
+    }
+  },
+
+  setSelectedHomeTeamId(id: number) {
+    set({ selectedHomeTeamId: id });
+  },
+
+  setSelectedAwayTeamId(id: number) {
+    set({ selectedAwayTeamId: id });
+  },
+
+  async loadAvailableTeams() {
+    try {
+      const res = await api.getTeamSelection();
+      set({
+        availableTeams: res.teams,
+        selectedHomeTeamId: get().selectedHomeTeamId ?? (res.teams[0]?.id ?? 1),
+        selectedAwayTeamId: get().selectedAwayTeamId ?? (res.teams[1]?.id ?? 2),
+      });
+    } catch {
+      try {
+        const fallback = await api.getTeams(true);
+        set({
+          availableTeams: fallback.teams,
+          selectedHomeTeamId: get().selectedHomeTeamId ?? (fallback.teams[0]?.id ?? 1),
+          selectedAwayTeamId: get().selectedAwayTeamId ?? (fallback.teams[1]?.id ?? 2),
+        });
+      } catch (err: unknown) {
+        const { message, envelope } = parseError(err);
+        set({ errorMessage: message, errorEnvelope: envelope });
+      }
     }
   },
 

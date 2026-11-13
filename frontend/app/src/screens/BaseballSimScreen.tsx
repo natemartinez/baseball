@@ -47,6 +47,7 @@ import { StrategyMenuModal } from '../components/menus/StrategyMenuModal';
 import { PitchFeedModal } from '../components/menus/PitchFeedModal';
 import { PitchTrajectoryModal } from '../components/menus/PitchTrajectoryModal';
 import { SettingsMenuModal } from '../components/menus/SettingsMenuModal';
+import { TeamSelectionModal } from '../components/menus/TeamSelectionModal';
 import { SwingMeterWidget } from '../components/hud/SwingMeterWidget';
 import { BattingDrillHud } from '../components/hud/BattingDrillHud';
 import { BattingDrillModal } from '../components/menus/BattingDrillModal';
@@ -171,6 +172,7 @@ export function BaseballSimScreen() {
     swapLineup,
     swapRotation,
     toggleSettingsMenu,
+    toggleTeamSelection,
     throwDrillPitch,
     setBattingDrillOpen,
     setSelectedPitchName,
@@ -191,6 +193,7 @@ export function BaseballSimScreen() {
       swapLineup: s.swapLineup,
       swapRotation: s.swapRotation,
       toggleSettingsMenu: s.toggleSettingsMenu,
+      toggleTeamSelection: s.toggleTeamSelection,
       throwDrillPitch: s.throwDrillPitch,
       setBattingDrillOpen: s.setBattingDrillOpen,
       setSelectedPitchName: s.setSelectedPitchName,
@@ -696,6 +699,7 @@ export function BaseballSimScreen() {
             lineups={lineups}
             latestPitch={resultVisible ? latestPitch : null}
             onOpenSettings={() => toggleSettingsMenu(true)}
+            onOpenTeamSelection={() => toggleTeamSelection(true)}
             activeSeed={activeSeed}
             controlMode={controlMode}
             onOpenBattingDrill={() => setBattingDrillOpen(true)}
@@ -836,6 +840,9 @@ export function BaseballSimScreen() {
 
       {/* Settings Menu */}
       <SettingsMenuModal />
+
+      {/* Team & Matchup Selection Dialog */}
+      <TeamSelectionModal />
 
       {/* Batting Practice drill playlist setup */}
       <BattingDrillModal />

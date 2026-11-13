@@ -15,7 +15,8 @@ import type {
 /** Interface contract for the authoritative Flask Baseball Simulation API. */
 export interface IGameService {
   getState(): Promise<InitialStateResponse>;
-  getTeams(): Promise<TeamsResponse>;
+  getTeams(includePlayers?: boolean): Promise<TeamsResponse>;
+  getTeamSelection(): Promise<TeamsResponse>;
   getTeamRoster(teamIdOrName: number | string, season?: number): Promise<TeamRosterResponse>;
   startGame(homeTeamId?: number, awayTeamId?: number, seed?: number): Promise<GameState>;
   pitch(pitchName?: string, targetZone?: string, customTarget?: { x: number; z: number }): Promise<PitchResultResponse>;

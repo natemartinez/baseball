@@ -38,6 +38,7 @@ export function SettingsMenuModal() {
     toggleDevMenu,
     simAtBat,
     resetGame,
+    toggleTeamSelection,
     setLineupDialogOpen,
     setRotationDialogOpen,
     togglePitchFeed,
@@ -59,6 +60,14 @@ export function SettingsMenuModal() {
   }
 
   const items: SettingsMenuItem[] = [
+    {
+      key: 'team-selection',
+      icon: '⚾',
+      label: 'SELECT TEAMS & START GAME',
+      description: 'Choose Home & Away matchups and view team rosters',
+      accent: Colors.green,
+      onPress: () => run(() => toggleTeamSelection(true)),
+    },
     {
       key: 'strategy-decider',
       icon: '🎯',

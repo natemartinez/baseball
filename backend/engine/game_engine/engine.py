@@ -215,15 +215,23 @@ class GameEngine:
         self,
         home_roster: dict,
         away_roster: dict,
-        home_name: str = 'New York Yankees',
-        away_name: str = 'New York Mets',
+        home_name: Optional[str] = None,
+        away_name: Optional[str] = None,
         seed: Optional[int] = None,
         batter_controller: Any = None,
     ):
         self.home_roster = home_roster
         self.away_roster = away_roster
-        self.home_name = home_name
-        self.away_name = away_name
+        self.home_name = (
+            home_name
+            or (home_roster.get('team_name') if isinstance(home_roster, dict) else None)
+            or 'Home'
+        )
+        self.away_name = (
+            away_name
+            or (away_roster.get('team_name') if isinstance(away_roster, dict) else None)
+            or 'Away'
+        )
         self.seed = seed
         self.rng = random.Random(seed)
 

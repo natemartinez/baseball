@@ -19,3 +19,4 @@ def test_pitch_objects_imports_and_backward_compatibility():
     assert PitchArsenalPI is PitchArsenalPX is ArsenalPkg
     assert CATS_PI is CATS_PX
     assert mf_pi == mf_px
+

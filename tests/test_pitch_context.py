@@ -75,3 +75,4 @@ def test_pitch_context_serializes_to_black_box_dict():
     assert dump["pitcher"]["name"] == "Pitcher"
     assert dump["pitcher"]["pitch_count"] == 10
     assert "effective_command" in dump["pitcher"]["ratings"]
+

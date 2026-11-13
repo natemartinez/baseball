@@ -89,3 +89,4 @@ def test_orchestrator_accepts_precomputed_delivery_without_pitching_engine():
 
     assert orchestrator.context.delivery["selected_pitch"] == "Changeup"
     assert orchestrator.context.delivery["velocity_mph"] == 85.0
+

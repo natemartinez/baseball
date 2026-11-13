@@ -404,6 +404,11 @@ export interface TeamDto {
   id: number;
   name: string;
   abbreviation?: string | null;
+  position_players?: Record<string, unknown>[];
+  pitchers?: {
+    starters: Record<string, unknown>[];
+    bullpen: Record<string, unknown>[];
+  };
 }
 
 export interface TeamsResponse {

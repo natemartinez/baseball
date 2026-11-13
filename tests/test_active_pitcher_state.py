@@ -41,3 +41,4 @@ def test_active_pitcher_state_from_dict_and_empty_arsenal():
     assert state.pitch_count == 0
     state.record_pitch("4-Seam Fastball")
     assert state.pitch_count == 1
+

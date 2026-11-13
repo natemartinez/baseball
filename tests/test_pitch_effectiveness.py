@@ -407,6 +407,7 @@ class TestEffectivenessOnCommandAndTiming:
             selection_mode="user",
             pitch_name="4-Seam Fastball",
             target_zone="heart",
+            timing_tier="GOOD",
             pitch_effectiveness=90.0,
         )
         delivery_75 = pe.execute_pitch(
@@ -415,6 +416,7 @@ class TestEffectivenessOnCommandAndTiming:
             selection_mode="user",
             pitch_name="4-Seam Fastball",
             target_zone="heart",
+            timing_tier="GOOD",
             pitch_effectiveness=75.0,
         )
 

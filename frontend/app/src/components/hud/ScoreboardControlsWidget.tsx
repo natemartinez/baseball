@@ -21,6 +21,7 @@ interface ScoreboardControlsWidgetProps {
   onOpenBattingDrill?: () => void;
   cameraMode?: GameCameraMode;
   onToggleCameraMode?: () => void;
+  onOpenTeamSelection?: () => void;
 }
 
 /**
@@ -39,6 +40,7 @@ export function ScoreboardControlsWidget({
   onOpenBattingDrill,
   cameraMode = 'PITCH',
   onToggleCameraMode,
+  onOpenTeamSelection,
 }: ScoreboardControlsWidgetProps) {
   const gameOver = gameState?.game_over ?? false;
   const resultColor = latestPitch
@@ -75,6 +77,16 @@ export function ScoreboardControlsWidget({
         )}
 
         <View style={styles.headerActions}>
+          {onOpenTeamSelection && (
+            <TouchableOpacity
+              onPress={onOpenTeamSelection}
+              style={styles.teamSelectionBtn}
+              activeOpacity={0.75}
+              accessibilityLabel="Select teams and start game"
+            >
+              <Text style={styles.teamSelectionBtnText}>⚾ TEAMS</Text>
+            </TouchableOpacity>
+          )}
           {onOpenSettings && (
             <TouchableOpacity
               onPress={onOpenSettings}
@@ -208,6 +220,15 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   settingsBtnText: { fontSize: 9, fontWeight: '800', color: Colors.textPrimary, letterSpacing: 0.5 },
+  teamSelectionBtn: {
+    backgroundColor: 'rgba(0, 230, 118, 0.15)',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: Colors.greenDark,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  teamSelectionBtnText: { fontSize: 9, fontWeight: '900', color: Colors.greenLight, letterSpacing: 0.5 },
   seedChip: {
     maxWidth: 150,
     backgroundColor: 'rgba(6, 182, 212, 0.15)',
