@@ -19,7 +19,8 @@ from .orchestration import (
     PitchFlowOrchestrator,
 )
 from backend.models.player import Player
-from backend.engine.pitch_shape import build_pitch_shape, shape_telemetry
+from backend.engine.pitching_engine.pitch_execution.pitch_shape import build_pitch_shape, shape_telemetry
+from backend.engine.modes.practice_mode import PracticeModeController
 
 
 SWING_DECISION_TELEMETRY = os.environ.get(
@@ -261,11 +262,8 @@ class GameEngine:
         )
         # Live per-batter game line: at_bats, hits, rbis, home_runs.
         self._batter_game_stats: Dict[str, Dict[str, int]] = {}
-        # Batting Practice sandbox: the real game is snapshotted and restored.
-        self._practice_active = False
-        self._practice_saved: Optional[Dict[str, Any]] = None
-        self._practice_baseline: Optional[Dict[str, Any]] = None
-        self._practice_pitch_count = 0
+        # Batting Practice sandbox controller
+        self.practice_mode = PracticeModeController(self)
 
     def current_batter_obj(self) -> Any:
         lineup = self.away_lineup if self.top_bottom == 'TOP' else self.home_lineup
@@ -594,6 +592,11 @@ class GameEngine:
         return self.orchestrator.has_pending
 
     @property
+    def last_pitch_context(self) -> Any:
+        """Authoritative black-box PitchContext for the most recent pitch."""
+        return getattr(self.orchestrator, 'context', None)
+
+    @property
     def pitch_phase(self) -> str:
         """Current pitch-flow phase (owned by the orchestrator)."""
         return self.orchestrator.phase.value
@@ -603,115 +606,36 @@ class GameEngine:
     def _copy_batter_stats(self) -> Dict[str, Dict[str, int]]:
         return {key: dict(value) for key, value in self._batter_game_stats.items()}
 
+    @property
+    def _practice_active(self) -> bool:
+        return self.practice_mode.is_active
+
+    @property
+    def _practice_pitch_count(self) -> int:
+        return self.practice_mode.pitch_count
+
+    @property
+    def _practice_saved(self) -> Optional[Dict[str, Any]]:
+        return self.practice_mode.saved_state
+
+    @property
+    def _practice_baseline(self) -> Optional[Dict[str, Any]]:
+        return self.practice_mode.baseline_state
+
     def _reset_practice_state(self) -> None:
         """Restores the frozen 0-0 drill state, keeping the practice pitch count."""
-        baseline = self._practice_baseline
-        if baseline is None:
-            return
-        self.inning = baseline['inning']
-        self.top_bottom = baseline['top_bottom']
-        self.outs = baseline['outs']
-        self.balls = baseline['balls']
-        self.strikes = baseline['strikes']
-        self.score = dict(baseline['score'])
-        self.bases = dict(baseline['bases'])
-        self.game_over = baseline['game_over']
-        self.away_batter_idx = baseline['away_batter_idx']
-        self.home_batter_idx = baseline['home_batter_idx']
-        self._batter_game_stats = {
-            key: dict(value) for key, value in baseline['batter_stats'].items()
-        }
-        self.recent_pitches_sequence = []
-        self.current_at_bat_pitches = []
+        self.practice_mode.reset_drill_state()
 
     def start_practice(self) -> Dict[str, Any]:
         """
         Snapshots the real game and switches the engine to a repeatable drill:
         same batter/pitcher, 0-0, empty bases, no outs, frozen score/inning.
         """
-        if self._practice_active:
-            return self.get_game_state_payload()
-        if self.has_pending_pitch:
-            raise PitchFlowError(
-                'A pitch is already in flight; resolve it before starting practice.'
-            )
-
-        self._practice_saved = {
-            'inning': self.inning,
-            'top_bottom': self.top_bottom,
-            'outs': self.outs,
-            'balls': self.balls,
-            'strikes': self.strikes,
-            'score': dict(self.score),
-            'bases': dict(self.bases),
-            'game_over': self.game_over,
-            'away_batter_idx': self.away_batter_idx,
-            'home_batter_idx': self.home_batter_idx,
-            'pitch_count_home': self.pitch_count_home,
-            'pitch_count_away': self.pitch_count_away,
-            'session_pitch_count': self.session_pitch_count,
-            'recent_pitches_sequence': list(self.recent_pitches_sequence),
-            'current_at_bat_pitches': [dict(pitch) for pitch in self.current_at_bat_pitches],
-            'batter_stats': self._copy_batter_stats(),
-            'last_command_quality': self.last_command_quality,
-        }
-        self._practice_baseline = {
-            'inning': self.inning,
-            'top_bottom': self.top_bottom,
-            'outs': 0,
-            'balls': 0,
-            'strikes': 0,
-            'score': dict(self.score),
-            'bases': {'first': None, 'second': None, 'third': None},
-            'game_over': False,
-            'away_batter_idx': self.away_batter_idx,
-            'home_batter_idx': self.home_batter_idx,
-            'batter_stats': self._copy_batter_stats(),
-            'current_at_bat_pitches': [],
-        }
-        self._practice_active = True
-        self._practice_pitch_count = 0
-        self.pitch_count_home = 0
-        self.pitch_count_away = 0
-        self.session_pitch_count = 0
-        self.orchestrator.reset()
-        self._reset_practice_state()
-        return self.get_game_state_payload()
+        return self.practice_mode.start()
 
     def end_practice(self) -> Dict[str, Any]:
         """Restores the real game snapshot and returns to normal play."""
-        if not self._practice_active:
-            return self.get_game_state_payload()
-
-        saved = self._practice_saved or {}
-        self.inning = saved.get('inning', self.inning)
-        self.top_bottom = saved.get('top_bottom', self.top_bottom)
-        self.outs = saved.get('outs', 0)
-        self.balls = saved.get('balls', 0)
-        self.strikes = saved.get('strikes', 0)
-        self.score = dict(saved.get('score', self.score))
-        self.bases = dict(saved.get('bases', self.bases))
-        self.game_over = bool(saved.get('game_over', False))
-        self.away_batter_idx = saved.get('away_batter_idx', 0)
-        self.home_batter_idx = saved.get('home_batter_idx', 0)
-        self.pitch_count_home = saved.get('pitch_count_home', 0)
-        self.pitch_count_away = saved.get('pitch_count_away', 0)
-        self.session_pitch_count = saved.get('session_pitch_count', 0)
-        self.recent_pitches_sequence = list(saved.get('recent_pitches_sequence', []))
-        self.current_at_bat_pitches = [
-            dict(pitch) for pitch in saved.get('current_at_bat_pitches', [])
-        ]
-        self._batter_game_stats = {
-            key: dict(value) for key, value in saved.get('batter_stats', {}).items()
-        }
-        self.last_command_quality = saved.get('last_command_quality', 'TARGET_EXECUTED')
-
-        self._practice_active = False
-        self._practice_saved = None
-        self._practice_baseline = None
-        self._practice_pitch_count = 0
-        self.orchestrator.reset()
-        return self.get_game_state_payload()
+        return self.practice_mode.end()
 
     def practice_throw_pitch(
         self,
@@ -720,22 +644,11 @@ class GameEngine:
         custom_target: Optional[Dict[str, float]] = None,
         pitch_name: Optional[str] = None,
     ) -> Dict[str, Any]:
-        selected_pitch_name = pitch_name or pitch_type
-        if not self._practice_active:
-            return {'status': 'error', 'message': 'Batting practice is not active'}
-        if not selected_pitch_name:
-            return {'status': 'error', 'message': 'Practice pitch type is required'}
-        if not custom_target or 'x' not in custom_target or 'z' not in custom_target:
-            return {
-                'status': 'error',
-                'message': 'Practice pitches require an exact custom target',
-            }
-        self._practice_pitch_count += 1
-        return self.throw_pitch(
-            pitch_name=selected_pitch_name,
+        return self.practice_mode.throw_pitch(
+            pitch_type=pitch_type,
             target_zone=target_zone,
             custom_target=custom_target,
-            practice=True,
+            pitch_name=pitch_name,
         )
 
     def practice_resolve_pitch(
@@ -744,27 +657,11 @@ class GameEngine:
         batter_decision: Optional[str] = None,
         contact: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        if not self._practice_active:
-            return {'status': 'error', 'message': 'Batting practice is not active'}
-        if batter_decision is None and contact is None:
-            batter_decision = 'TAKE'
-
-        outcome = self.resolve_pitch(
+        return self.practice_mode.resolve_pitch(
             batter_approach=batter_approach,
             batter_decision=batter_decision,
             contact=contact,
-            practice=True,
         )
-        if outcome.get('status') != 'success':
-            return outcome
-
-        # The activity was applied to the practice fields for result building;
-        # reset them so the next drill pitch starts from the same 0-0 snapshot.
-        self._reset_practice_state()
-        game_state = self.get_game_state_payload()
-        outcome['game_state'] = game_state
-        outcome['game'] = game_state
-        return outcome
 
     def throw_pitch(
         self,
@@ -778,6 +675,7 @@ class GameEngine:
         timing_tier: Optional[str] = None,
         timing_label: Optional[str] = None,
         pitch_effectiveness: Optional[float] = None,
+        delivery: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Stage 1 — Throw the ball.
@@ -788,7 +686,7 @@ class GameEngine:
         so the client can animate the ball before any outcome lands. Call
         resolve_pitch() to apply the per-ball result.
         """
-        if self._practice_active and not practice:
+        if self._practice_active and delivery is None and not practice:
             return {
                 'status': 'error',
                 'message': 'Batting practice is active; use the practice endpoints.',
@@ -843,7 +741,6 @@ class GameEngine:
                 pitch_type=pitch_type,
                 target_zone=target_zone,
                 custom_target=custom_target,
-                practice=practice,
                 selection_mode=selection_mode,
                 pitch_name=pitch_name,
                 pitch_sequence=[dict(pitch) for pitch in self.current_at_bat_pitches],
@@ -852,6 +749,7 @@ class GameEngine:
                 timing_tier=timing_tier,
                 timing_label=timing_label,
                 pitch_effectiveness=pitch_effectiveness,
+                delivery=delivery,
             )
         except (PitchFlowError, PitchSelectionError) as error:
             return {'status': 'error', 'message': str(error)}
@@ -867,7 +765,7 @@ class GameEngine:
             'launchAngleDeg': None,
             'description': 'Pitch in flight - awaiting batter activity',
         }
-        gameday_packet = self._build_gameday_packet(
+        gameday_packet = started.get('gameday_packet') or self._build_gameday_packet(
             pitcher=pitcher,
             batter=batter,
             delivery=delivery,
@@ -876,7 +774,7 @@ class GameEngine:
             cur_pitch_count=cur_pitch_count,
             result=pending_result,
         )
-        pitch_details = self._build_pitch_details(
+        pitch_details = started.get('pitch_details') or self._build_pitch_details(
             delivery=delivery,
             actual_zone_name=actual_zone_name,
             target_zone=target_zone,
@@ -1005,7 +903,7 @@ class GameEngine:
             'launchAngleDeg': launch_angle,
             'description': description,
         }
-        gameday_packet = self._build_gameday_packet(
+        gameday_packet = getattr(self.orchestrator.context, 'gameday_packet', None) or self._build_gameday_packet(
             pitcher=pending.pitcher,
             batter=pending.batter,
             delivery=pending.delivery,
@@ -1014,7 +912,7 @@ class GameEngine:
             cur_pitch_count=pending.pitch_count,
             result=result_payload,
         )
-        pitch_details = self._build_pitch_details(
+        pitch_details = getattr(self.orchestrator.context, 'pitch_details', None) or self._build_pitch_details(
             delivery=pending.delivery,
             actual_zone_name=pending.actual_zone_name,
             target_zone=None,

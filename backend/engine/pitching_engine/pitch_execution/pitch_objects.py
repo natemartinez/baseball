@@ -244,9 +244,12 @@ class PitchArsenal:
 
         # Fallback alias resolution via tiers.PITCH_TYPE_ALIASES
         try:
-            from tiers import PITCH_TYPE_ALIASES
+            from .tiers import PITCH_TYPE_ALIASES
         except ImportError:
-            return None
+            try:
+                from tiers import PITCH_TYPE_ALIASES
+            except ImportError:
+                return None
 
         cleaned_req = str(name).strip().upper()
         req_code = PITCH_TYPE_ALIASES.get(cleaned_req)

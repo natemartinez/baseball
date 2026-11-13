@@ -222,18 +222,16 @@ def resolve_target_intent(
     pitch_intent: Optional[str] = None,
     target_zone: Optional[str] = None,
     custom_target: Optional[Dict[str, float]] = None,
-    practice: bool = False,
     rng=None,
 ) -> TargetIntent:
     """
     Resolves the target coordinates for one pitch.
 
     Precedence:
-    1. practice exact custom target
-    2. non-practice custom target
-    3. explicit ``target_zone``
-    4. explicit tactical ``pitch_intent``
-    5. recommended zone plus the probabilistic ball-intent mix
+    1. custom target
+    2. explicit ``target_zone``
+    3. explicit tactical ``pitch_intent``
+    4. recommended zone plus the probabilistic ball-intent mix
     """
     rand = _rand_callable(rng)
     normalized_intent = normalize_pitch_intent(pitch_intent)
@@ -241,21 +239,6 @@ def resolve_target_intent(
     has_exact_target = bool(
         custom_target and 'x' in custom_target and 'z' in custom_target
     )
-
-    if practice:
-        if not has_exact_target:
-            raise PitchSelectionError(
-                'Practice pitches require an exact custom target'
-            )
-        target_x = float(custom_target['x'])
-        target_z = float(custom_target['z'])
-        return TargetIntent(
-            nominal_zone=target_zone or recommended_zone,
-            target_x=target_x,
-            target_z=target_z,
-            intended_zone_cat=classify_gameday_zone(target_x, target_z),
-            is_manual_override=True,
-        )
 
     if has_exact_target:
         target_x = float(custom_target['x'])

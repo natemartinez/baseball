@@ -11,7 +11,7 @@ Verifies:
 """
 
 import pytest
-from backend.engine.pitching_engine.pitch_confidence import (
+from backend.engine.pitching_engine.pitcher_info.pitch_confidence import (
     calculate_consecutive_miss_penalty,
     calculate_pitch_confidence_delta,
     apply_holistic_confidence_update,

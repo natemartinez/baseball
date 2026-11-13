@@ -114,3 +114,24 @@ def test_statcast_sim_at_bat():
     assert 'pitch_details' in ab_res
     assert 'game_state' in ab_res
 
+
+def test_game_engine_exposes_last_pitch_context_black_box():
+    from backend.engine.game_engine.engine import GameEngine
+    from backend.api.routes import load_team_roster
+
+    home_roster = load_team_roster(1)
+    away_roster = load_team_roster(2)
+    game_engine = GameEngine(home_roster, away_roster)
+
+    thrown = game_engine.throw_pitch(pitch_name="4-Seam Fastball")
+    assert thrown["status"] == "success"
+    assert game_engine.last_pitch_context is not None
+    assert game_engine.last_pitch_context.delivery["selected_pitch"] == thrown["pitch_details"]["pitch_name"]
+    assert game_engine.last_pitch_context.gameday_packet == thrown["gameday_packet"]
+
+    resolved = game_engine.resolve_pitch()
+    assert resolved["status"] == "success"
+    assert game_engine.last_pitch_context.activity is not None
+    assert game_engine.last_pitch_context.gameday_packet == resolved["gameday_packet"]
+
+

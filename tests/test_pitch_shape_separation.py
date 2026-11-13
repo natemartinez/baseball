@@ -4,7 +4,7 @@ import random
 
 from backend.engine.batting_engine.batters import InGameBatterRatings
 from backend.engine.batting_engine.contact import ContactResolver
-from backend.engine.pitch_shape import build_pitch_shape
+from backend.engine.pitching_engine.pitch_execution.pitch_shape import build_pitch_shape
 
 
 def _ratings() -> InGameBatterRatings:

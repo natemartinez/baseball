@@ -15,25 +15,12 @@ from ...game_engine.gameday_math import (
 )
 from ..pitch_execution.pitch_objects import PITCH_CATEGORIES
 
-try:
-    from tiers import (
-        AbilityTier,
-        get_ability_tier,
-        PITCH_TYPE_MODIFIERS,
-        get_pitch_type_modifier,
-    )
-except ImportError:
-    import sys
-    from pathlib import Path
-    root_path = str(Path(__file__).resolve().parents[4])
-    if root_path not in sys.path:
-        sys.path.insert(0, root_path)
-    from tiers import (
-        AbilityTier,
-        get_ability_tier,
-        PITCH_TYPE_MODIFIERS,
-        get_pitch_type_modifier,
-    )
+from ..pitch_execution.tiers import (
+    AbilityTier,
+    get_ability_tier,
+    PITCH_TYPE_MODIFIERS,
+    get_pitch_type_modifier,
+)
 
 
 @dataclass
@@ -540,7 +527,7 @@ def compute_effective_command(
 
     # 5. Pitch effectiveness adjustment
     if effectiveness is not None:
-        from ..pitch_effectiveness import calculate_command_adjustment_from_effectiveness
+        from .pitch_effectiveness import calculate_command_adjustment_from_effectiveness
         eff_adj = calculate_command_adjustment_from_effectiveness(effectiveness)
     else:
         eff_adj = 0.0

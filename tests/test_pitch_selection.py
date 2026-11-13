@@ -302,12 +302,12 @@ def test_execute_pitch_uses_the_user_pitch_in_delivery_telemetry():
     assert delivery['induced_vertical_break_in'] == pitch.induced_vertical_break_in
 
 
-def test_practice_selection_forces_the_pitch_and_exact_target():
+def test_practice_delivery_builder_forces_the_pitch_and_exact_target():
+    from backend.engine.modes.practice_mode import PracticeDeliveryBuilder
     engine = _engine()
-    delivery = engine.execute_pitch(
-        balls=0,
-        strikes=0,
-        practice=True,
+    delivery = PracticeDeliveryBuilder.build(
+        pitcher=engine.pitcher,
+        arsenal=engine.arsenal,
         pitch_name='Spin Monster Sweeper',
         custom_target={'x': 0.0, 'z': 2.5},
     )

@@ -16,7 +16,7 @@ Tests:
 """
 
 import pytest
-from backend.engine.pitching_engine.pitch_effectiveness import (
+from backend.engine.pitching_engine.pitcher_info.pitch_effectiveness import (
     compute_baseline_effectiveness,
     calculate_effectiveness_delta,
     apply_stamina_fatigue_to_effectiveness,

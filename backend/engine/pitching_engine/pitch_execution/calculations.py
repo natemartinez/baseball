@@ -26,31 +26,15 @@ from ...game_engine.gameday_math import (
     ZONE_Z_TOP,
 )
 
-try:
-    from tiers import (
-        AbilityTier,
-        TimingTier,
-        TIMING_MULTIPLIERS,
-        BASELINE_TIMING_PROBABILITIES,
-        TimingDict,
-        AbilityDict,
-        get_ability_tier,
-    )
-except ImportError:
-    import sys
-    from pathlib import Path
-    root_path = str(Path(__file__).resolve().parents[4])
-    if root_path not in sys.path:
-        sys.path.insert(0, root_path)
-    from tiers import (
-        AbilityTier,
-        TimingTier,
-        TIMING_MULTIPLIERS,
-        BASELINE_TIMING_PROBABILITIES,
-        TimingDict,
-        AbilityDict,
-        get_ability_tier,
-    )
+from .tiers import (
+    AbilityTier,
+    TimingTier,
+    TIMING_MULTIPLIERS,
+    BASELINE_TIMING_PROBABILITIES,
+    TimingDict,
+    AbilityDict,
+    get_ability_tier,
+)
 
 
 def get_simulation_timing_distribution(
@@ -144,7 +128,7 @@ def get_simulation_timing_distribution(
 
     # 5. Pitch effectiveness modulation
     if effectiveness is not None:
-        from ..pitch_effectiveness import adjust_simulation_timing_distribution
+        from ..pitcher_info.pitch_effectiveness import adjust_simulation_timing_distribution
         dist_adjusted = adjust_simulation_timing_distribution(dist, effectiveness)
         return TimingDict(dist_adjusted)
 
@@ -258,7 +242,7 @@ def calculate_pitch_delivery(
         ability_tier = get_ability_tier(command_rating)
     ability_tier_str = ability_tier.value if hasattr(ability_tier, "value") else str(ability_tier)
 
-    # 2. Handle zero-radius convergence (e.g. test_f4_b4 and practice mode)
+    # 2. Handle zero-radius convergence (e.g. test_f4_b4 and deterministic deliveries)
     if precomputed_max_radius_in == 0.0 or precomputed_sigma == 0.0:
         timing_tier_str = (timing_tier.value if hasattr(timing_tier, "value") else str(timing_tier)) if timing_tier else "PERFECT"
         label_str = timing_label or "PERFECT!"

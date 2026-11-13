@@ -22,7 +22,6 @@ class PitchSelectionMode(str, Enum):
 
     AI = 'AI'
     USER = 'USER'
-    PRACTICE = 'PRACTICE'
 
 
 @dataclass(frozen=True)
@@ -94,7 +93,7 @@ def _normalize_mode(mode: Any) -> Optional[PitchSelectionMode]:
     valid = {selection.value for selection in PitchSelectionMode}
     if normalized not in valid:
         raise PitchSelectionError(
-            "selection_mode must be 'ai', 'user', or 'practice'"
+            "selection_mode must be 'ai' or 'user'"
         )
     return PitchSelectionMode(normalized)
 
@@ -111,7 +110,6 @@ def select_pitch(
     pitch_intent: Optional[str] = None,
     target_zone: Optional[str] = None,
     custom_target: Optional[Dict[str, float]] = None,
-    practice: bool = False,
     double_play_situation: bool = False,
     rng=None,
 ) -> PitchSelection:
@@ -119,15 +117,12 @@ def select_pitch(
     Resolves who selects the pitch, the concrete pitch, and the target intent.
 
     AI selection performs the same weighted draw at the same point in the RNG
-    sequence as the historical implementation. User and practice selection
-    resolve the requested pitch without drawing a random pitch.
+    sequence as the historical implementation. User selection
+    resolves the requested pitch without drawing a random pitch.
     """
-    if practice:
-        mode = PitchSelectionMode.PRACTICE
-    else:
-        mode = _normalize_mode(selection_mode)
-        if mode is None:
-            mode = PitchSelectionMode.USER if pitch_name else PitchSelectionMode.AI
+    mode = _normalize_mode(selection_mode)
+    if mode is None:
+        mode = PitchSelectionMode.USER if pitch_name else PitchSelectionMode.AI
 
     if mode is PitchSelectionMode.AI and pitch_name:
         raise PitchSelectionError(
@@ -185,7 +180,6 @@ def select_pitch(
         pitch_intent=normalized_intent,
         target_zone=target_zone,
         custom_target=custom_target,
-        practice=mode is PitchSelectionMode.PRACTICE,
         rng=rng,
     )
 

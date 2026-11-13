@@ -142,3 +142,20 @@ def test_practice_api_contract():
     assert ended_game['balls'] == real['balls']
     assert ended_game['strikes'] == real['strikes']
     assert ended_game['score'] == real['score']
+
+
+def test_practice_controller_throws_via_direct_delivery_injection():
+    game = _game(seed=42, batter_id=4)
+    game.start_practice()
+
+    thrown = game.practice_throw_pitch(
+        pitch_name='Spin Monster Sweeper',
+        target_zone='heart',
+        custom_target={'x': 0.0, 'z': 2.5},
+    )
+    assert thrown['status'] == 'success'
+    assert thrown['pitch_details']['pitch_name'] == 'Spin Monster Sweeper'
+    assert thrown['pitch_details']['gameday_packet']['execution']['realizedX'] == 0.0
+    assert thrown['pitch_details']['gameday_packet']['execution']['realizedZ'] == 2.5
+    assert thrown['pitch_details']['gameday_packet']['strategy']['strategyName'] == 'PRACTICE_DRILL'
+

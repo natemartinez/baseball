@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from ...batting_engine.engine import BatterActivity
 from ...batting_engine.batters import BatterInstanceManager, InGameBatterRatings
 from ..gameday_math import nearest_zone_name
+from .pitch_context import PitchContext, CountSnapshot, PitchInput
+from .packet_builder import build_gameday_packet, build_pitch_details
 
 from .controllers import (
     AIBatterController,
@@ -75,6 +77,8 @@ class PitchFlowOrchestrator:
         self._pending: Optional[PendingPitch] = None
         self._reaction: Optional[BatterReaction] = None
         self._activity: Optional[BatterActivity] = None
+        self._context: Optional[PitchContext] = None
+        self._last_context: Optional[PitchContext] = None
 
     @property
     def phase(self) -> PitchPhase:
@@ -83,6 +87,10 @@ class PitchFlowOrchestrator:
     @property
     def pending(self) -> Optional[PendingPitch]:
         return self._pending
+
+    @property
+    def context(self) -> Optional[PitchContext]:
+        return self._context or self._last_context
 
     @property
     def has_pending(self) -> bool:
@@ -114,7 +122,6 @@ class PitchFlowOrchestrator:
         pitch_type: Optional[str] = None,
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
-        practice: bool = False,
         selection_mode: Optional[str] = None,
         pitch_name: Optional[str] = None,
         pitch_sequence: Optional[list] = None,
@@ -123,6 +130,8 @@ class PitchFlowOrchestrator:
         timing_tier: Optional[str] = None,
         timing_label: Optional[str] = None,
         pitch_effectiveness: Optional[float] = None,
+        delivery: Optional[Dict[str, Any]] = None,
+        context: Optional[PitchContext] = None,
     ) -> Dict[str, Any]:
         if self.has_pending:
             raise PitchFlowError(
@@ -137,61 +146,110 @@ class PitchFlowOrchestrator:
             else 'R'
         )
 
-        # Imported lazily: the pitching package loads gameday math from the
-        # engine package, which would otherwise re-enter this module while its
-        # initializer is still running.
-        from ...pitching_engine import PitchingEngine
+        if context is not None:
+            self._context = context
+        else:
+            count_snap = CountSnapshot(
+                balls=balls,
+                strikes=strikes,
+                outs=outs,
+                runners=runners,
+                inning=inning,
+                score_diff=score_diff,
+                situation=situation,
+            )
+            pitch_in = PitchInput(
+                pitch_intent=pitch_intent,
+                pitch_type=pitch_type,
+                pitch_name=pitch_name,
+                target_zone=target_zone,
+                custom_target=custom_target,
+                timing_tier=timing_tier,
+                timing_label=timing_label,
+                selection_mode=selection_mode,
+                pitch_effectiveness=pitch_effectiveness,
+            )
+            pitch_id = f"pitch-{inning}-{pitch_count}"
+            self._context = PitchContext.create(
+                pitch_id=pitch_id,
+                pitcher=pitcher,
+                batter=batter,
+                count=count_snap,
+                pitch_input=pitch_in,
+                pitch_count=pitch_count,
+                recent_pitches=recent_pitches or [],
+            )
 
-        pitching_engine = PitchingEngine(pitcher, batter, rng=self.rng)
-        delivery = pitching_engine.execute_pitch(
-            balls=balls,
-            strikes=strikes,
-            outs=outs,
-            runners=runners,
-            pitch_count=pitch_count,
-            recent_pitches=recent_pitches or [],
-            pitch_intent=pitch_intent,
-            pitch_type=pitch_type,
-            target_zone=target_zone,
-            custom_target=custom_target,
-            situation=situation,
-            practice=practice,
-            selection_mode=selection_mode,
-            pitch_name=pitch_name,
-            timing_tier=timing_tier,
-            timing_label=timing_label,
-            pitch_effectiveness=pitch_effectiveness,
-        )
+        if delivery is not None:
+            exec_delivery = delivery
+        else:
+            # Imported lazily: the pitching package loads gameday math from the
+            # engine package, which would otherwise re-enter this module while its
+            # initializer is still running.
+            from ...pitching_engine import PitchingEngine
 
-        is_strike = bool(delivery['is_strike'])
+            pitching_engine = PitchingEngine(pitcher, batter, rng=self.rng)
+            exec_delivery = pitching_engine.execute_pitch(
+                balls=balls,
+                strikes=strikes,
+                outs=outs,
+                runners=runners,
+                pitch_count=pitch_count,
+                recent_pitches=recent_pitches or [],
+                pitch_intent=pitch_intent,
+                pitch_type=pitch_type,
+                target_zone=target_zone,
+                custom_target=custom_target,
+                situation=situation,
+                selection_mode=selection_mode,
+                pitch_name=pitch_name,
+                timing_tier=timing_tier,
+                timing_label=timing_label,
+                pitch_effectiveness=pitch_effectiveness,
+            )
+
+        self._context.delivery = exec_delivery
+        is_strike = bool(exec_delivery.get('is_strike', False))
         actual_zone_name = nearest_zone_name(
-            is_strike, delivery['realized_x'], delivery['realized_z']
+            is_strike, exec_delivery.get('realized_x', 0.0), exec_delivery.get('realized_z', 2.5)
         )
-        ratings = BatterInstanceManager.get_adjusted_ratings(
-            batter,
-            balls=balls,
-            strikes=strikes,
-            pitcher_hand=pitcher_hand,
+        self._context.is_strike = is_strike
+        self._context.actual_zone_name = actual_zone_name
+
+        pending_result = {
+            'call': None,
+            'isStrike': is_strike,
+            'exitVelocityMph': None,
+            'launchAngleDeg': None,
+            'description': 'Pitch in flight',
+        }
+        self._context.gameday_packet = build_gameday_packet(
+            self._context, result=pending_result, rng=self.rng
         )
+        self._context.pitch_details = build_pitch_details(
+            self._context, description='Pitch in flight', gameday_packet=self._context.gameday_packet
+        )
+
+        ratings = self._context.batter.ratings
 
         self._pending = PendingPitch(
-            delivery=delivery,
+            delivery=exec_delivery,
             pitcher=pitcher,
             batter=batter,
             situation=situation,
             actual_zone_name=actual_zone_name,
             pitch_count=pitch_count,
-            command_rating=delivery['adjusted_ratings'].get('base_command', 70.0),
+            command_rating=exec_delivery.get('adjusted_ratings', {}).get('base_command', 70.0),
             balls=balls,
             strikes=strikes,
             outs=outs,
             runners=runners,
             pitcher_hand=pitcher_hand,
-            zone_category=str(delivery.get('realized_zone_cat', 'SHADOW')).upper(),
+            zone_category=str(exec_delivery.get('realized_zone_cat', 'SHADOW')).upper(),
             is_strike=is_strike,
             ratings=ratings,
             pitch_sequence=tuple(dict(pitch) for pitch in (pitch_sequence or [])),
-            pitcher_ratings=dict(delivery.get('adjusted_ratings') or {}),
+            pitcher_ratings=dict(exec_delivery.get('adjusted_ratings') or {}),
             score_diff=int(score_diff or 0),
             inning=int(inning or 1),
         )
@@ -200,9 +258,12 @@ class PitchFlowOrchestrator:
         self._phase = PitchPhase.THROWN
 
         return {
-            'delivery': delivery,
+            'delivery': exec_delivery,
             'actual_zone_name': actual_zone_name,
             'pending': self._pending,
+            'context': self._context,
+            'gameday_packet': self._context.gameday_packet,
+            'pitch_details': self._context.pitch_details,
         }
 
     def _reaction_context(
@@ -340,12 +401,45 @@ class PitchFlowOrchestrator:
         self._reaction = reaction
         self._activity = activity
         self._phase = PitchPhase.OUTCOME_RESOLVED
+
+        if self._context is not None:
+            self._context.reaction = reaction
+            self._context.activity = activity
+            resolved_result = {
+                'call': activity.call,
+                'isStrike': activity.is_strike,
+                'exitVelocityMph': activity.exit_velocity_mph,
+                'launchAngleDeg': activity.launch_angle_deg,
+                'description': activity.description,
+            }
+            if self._context.gameday_packet is not None:
+                self._context.gameday_packet['result'] = resolved_result
+            else:
+                self._context.gameday_packet = build_gameday_packet(
+                    self._context, result=resolved_result, rng=self.rng
+                )
+            self._context.pitch_details = build_pitch_details(
+                self._context,
+                description=activity.description,
+                result_type=activity.pitch_result,
+                batter_decision='SWING' if reaction.decision == 'SWING' else 'TAKE',
+                exit_velo=activity.exit_velocity_mph,
+                launch_angle=activity.launch_angle_deg,
+                spray_angle=activity.spray_angle_deg,
+                batted_ball=activity.batted_ball,
+                swing_decision=getattr(activity, 'swing_decision', None),
+                gameday_packet=self._context.gameday_packet,
+            )
+
         return {
             'status': 'success',
             'phase': PitchPhase.OUTCOME_RESOLVED.value,
             'pending': pending,
             'reaction': reaction,
             'activity': activity,
+            'context': self._context,
+            'gameday_packet': self._context.gameday_packet if self._context else None,
+            'pitch_details': self._context.pitch_details if self._context else None,
         }
 
     def mark_applied(self) -> None:
@@ -357,7 +451,10 @@ class PitchFlowOrchestrator:
         self.reset()
 
     def reset(self) -> None:
+        if self._context is not None:
+            self._last_context = self._context
         self._phase = PitchPhase.IDLE
         self._pending = None
         self._reaction = None
         self._activity = None
+        self._context = None

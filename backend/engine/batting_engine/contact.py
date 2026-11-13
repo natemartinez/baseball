@@ -12,7 +12,7 @@ from typing import Any, Dict, Optional
 
 from .batters import InGameBatterRatings
 from .contact_outcome import resolve_contact_outcome
-from ..pitch_shape import (
+from ..pitching_engine.pitch_execution.pitch_shape import (
     PitchShape,
     air_launch_parameters,
     build_pitch_shape,
@@ -22,7 +22,7 @@ from ..pitch_shape import (
     ground_launch_parameters,
     whiff_shape_adjustment,
 )
-from ..pitching_engine.pitch_effectiveness import (
+from ..pitching_engine.pitcher_info.pitch_effectiveness import (
     apply_effectiveness_to_whiff_rate,
     apply_effectiveness_to_exit_velocity,
 )

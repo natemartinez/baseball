@@ -77,7 +77,7 @@ class PitchingEngine:
         self.pitch_arsenal_metrics = metrics
         return metrics
 
-    def execute_pitch( # Returns "Delivery", line 214 -> game_engine/engine.py
+    def execute_pitch(
         self,
         balls: int,
         strikes: int,
@@ -90,7 +90,6 @@ class PitchingEngine:
         target_zone: Optional[str] = None,
         custom_target: Optional[Dict[str, float]] = None,
         situation: Optional[str] = None,
-        practice: bool = False,
         selection_mode: Optional[str] = None,
         pitch_name: Optional[str] = None,
         timing_tier: Optional[Any] = None,
@@ -108,10 +107,6 @@ class PitchingEngine:
         ``pitch_intent`` is a tactical target goal (STRIKE/CHASE/WASTE), never a
         pitch name. ``pitch_name`` (or the legacy ``pitch_type`` alias) is the
         concrete pitch for user-selected pitches.
-
-        ``practice`` is the Batting Practice drill path: the requested pitch and
-        exact custom target are forced, command error is zero, and the pitcher
-        is treated as fresh.
         """
         r1, r2, r3 = runners
         sit_category = situation or determine_situation_category(balls, strikes, outs, r1, r2, r3)
@@ -137,7 +132,6 @@ class PitchingEngine:
             pitch_intent=pitch_intent,
             target_zone=target_zone,
             custom_target=custom_target,
-            practice=practice,
             rng=self.rng,
         )
 
@@ -157,15 +151,7 @@ class PitchingEngine:
         velocity_mph = selection.velocity_mph
         spin_rpm = selection.spin_rpm
 
-        if practice:
-            # A fresh pitcher throws the drill pitch at its base velocity/spin.
-            adjusted_ratings = PitcherInstanceManager.get_adjusted_ratings(
-                pitcher=self.pitcher,
-                pitch_count=1,
-                balls=0,
-                strikes=0,
-            )
-        elif (
+        if (
             selection.mode is PitchSelectionMode.AI
             and adjusted_ratings.fatigue_pct > 25.0
         ):
@@ -182,131 +168,98 @@ class PitchingEngine:
         is_manual_override = target.is_manual_override
 
         # 4. Delivery Execution & Gaussian Error
-        if practice:
-            # No command error, no zone sampling, no velocity RNG.
-            delivery_math = {
-                'sigma': 0.0,
-                'max_radius_inches': 0.0,
-                'base_radius_inches': 0.0,
-                'executed_radius_inches': 0.0,
-                'realized_x': target_x,
-                'realized_z': target_z,
-                'realized_zone_cat': intended_zone_cat,
-                'is_strike': is_rulebook_strike(target_x, target_z),
-                'delta_x_in': 0.0,
-                'delta_z_in': 0.0,
-                'radial_miss_in': 0.0,
-                'radial_miss_inches': 0.0,
-                'is_heart_leak': False,
-                'hit_shadow_target': intended_zone_cat == 'SHADOW',
-                'effectiveness_score': 100.0,
-                'ability_tier': 'GOOD',
-                'timing_tier': 'PERFECT',
-                'timing_label': 'PERFECT!',
-            }
-            strat_result = dict(strat_result)
-            strat_result.update({
-                'selected_pitch': selected_pitch_name,
-                'velocity_mph': round(velocity_mph, 1),
-                'spin_rpm': spin_rpm,
-                'dynamic_modifier': 1.0,
-                'recommended_zone': nominal_zone,
-                'strategy_name': 'PRACTICE_DRILL',
-                'rationale': 'Batting practice: forced pitch and exact target.',
-            })
-        else:
-            pitch_metrics = self.pitch_arsenal_metrics.get(selected_pitch_name)
-            if pitch_metrics is None:
-                for k, v in self.pitch_arsenal_metrics.items():
-                    if k.lower().replace('-', ' ') == selected_pitch_name.lower().replace('-', ' '):
-                        pitch_metrics = v
-                        break
+        pitch_metrics = self.pitch_arsenal_metrics.get(selected_pitch_name)
+        if pitch_metrics is None:
+            for k, v in self.pitch_arsenal_metrics.items():
+                if k.lower().replace('-', ' ') == selected_pitch_name.lower().replace('-', ' '):
+                    pitch_metrics = v
+                    break
 
-            from .pitch_effectiveness import (
-                calculate_command_adjustment_from_effectiveness,
-                apply_effectiveness_to_velocity,
-                apply_effectiveness_to_break,
-            )
+        from .pitcher_info.pitch_effectiveness import (
+            calculate_command_adjustment_from_effectiveness,
+            apply_effectiveness_to_velocity,
+            apply_effectiveness_to_break,
+        )
 
-            if pitch_metrics is not None:
-                effective_pitch_command = pitch_metrics.effective_command
-                if pitch_effectiveness is not None:
-                    cmd_adj = calculate_command_adjustment_from_effectiveness(pitch_effectiveness)
-                    effective_pitch_command = max(30.0, min(99.0, effective_pitch_command + cmd_adj))
-            else:
-                effective_pitch_command = adjusted_ratings.effective_command
-                if pitch_effectiveness is not None:
-                    cmd_adj = calculate_command_adjustment_from_effectiveness(pitch_effectiveness)
-                    effective_pitch_command = max(30.0, min(99.0, effective_pitch_command + cmd_adj))
-
+        if pitch_metrics is not None:
+            effective_pitch_command = pitch_metrics.effective_command
             if pitch_effectiveness is not None:
-                from ..game_engine.gameday_math import calculate_execution_sigma, get_max_error_radius_inches
-                precomputed_sigma = calculate_execution_sigma(effective_pitch_command)
-                precomputed_max_radius = get_max_error_radius_inches(effective_pitch_command)
+                cmd_adj = calculate_command_adjustment_from_effectiveness(pitch_effectiveness)
+                effective_pitch_command = max(30.0, min(99.0, effective_pitch_command + cmd_adj))
+        else:
+            effective_pitch_command = adjusted_ratings.effective_command
+            if pitch_effectiveness is not None:
+                cmd_adj = calculate_command_adjustment_from_effectiveness(pitch_effectiveness)
+                effective_pitch_command = max(30.0, min(99.0, effective_pitch_command + cmd_adj))
+
+        if pitch_effectiveness is not None:
+            from ..game_engine.gameday_math import calculate_execution_sigma, get_max_error_radius_inches
+            precomputed_sigma = calculate_execution_sigma(effective_pitch_command)
+            precomputed_max_radius = get_max_error_radius_inches(effective_pitch_command)
+        else:
+            precomputed_sigma = getattr(pitch_metrics, 'sigma', None) if pitch_metrics else None
+            precomputed_max_radius = getattr(pitch_metrics, 'max_radius_inches', None) if pitch_metrics else None
+
+        from .pitch_execution.tiers import AbilityTier, TimingTier, get_ability_tier
+        from .pitch_execution.calculations import roll_simulation_timing
+
+        ability_tier = get_ability_tier(effective_pitch_command)
+        composure = float(getattr(self.pitcher, 'composure', 75.0) or 75.0)
+        consistency = float(getattr(self.pitcher, 'consistency', 75.0) or 75.0)
+        pitcher_hand = (
+            'L'
+            if str(getattr(self.pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
+            else 'R'
+        )
+        is_leverage = (r2 or r3) or (sit_category in ("RISP", "HIGH_LEVERAGE", "BASES_LOADED"))
+
+        if timing_tier is not None:
+            if isinstance(timing_tier, str):
+                resolved_timing_tier = TimingTier(timing_tier.strip().upper())
             else:
-                precomputed_sigma = getattr(pitch_metrics, 'sigma', None) if pitch_metrics else None
-                precomputed_max_radius = getattr(pitch_metrics, 'max_radius_inches', None) if pitch_metrics else None
-
-            from tiers import AbilityTier, TimingTier, get_ability_tier
-            from .pitch_execution.calculations import roll_simulation_timing
-
-            ability_tier = get_ability_tier(effective_pitch_command)
-            composure = float(getattr(self.pitcher, 'composure', 75.0) or 75.0)
-            consistency = float(getattr(self.pitcher, 'consistency', 75.0) or 75.0)
-            pitcher_hand = (
-                'L'
-                if str(getattr(self.pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
-                else 'R'
-            )
-            is_leverage = (r2 or r3) or (sit_category in ("RISP", "HIGH_LEVERAGE", "BASES_LOADED"))
-
-            if timing_tier is not None:
-                if isinstance(timing_tier, str):
-                    resolved_timing_tier = TimingTier(timing_tier.strip().upper())
+                resolved_timing_tier = timing_tier
+            resolved_timing_label = timing_label
+            if resolved_timing_label is None:
+                if resolved_timing_tier == TimingTier.PERFECT:
+                    resolved_timing_label = "PERFECT!"
+                elif resolved_timing_tier == TimingTier.GOOD:
+                    resolved_timing_label = "GOOD"
+                elif resolved_timing_tier == TimingTier.OKAY:
+                    resolved_timing_label = "EARLY • OKAY"
                 else:
-                    resolved_timing_tier = timing_tier
-                resolved_timing_label = timing_label
-                if resolved_timing_label is None:
-                    if resolved_timing_tier == TimingTier.PERFECT:
-                        resolved_timing_label = "PERFECT!"
-                    elif resolved_timing_tier == TimingTier.GOOD:
-                        resolved_timing_label = "GOOD"
-                    elif resolved_timing_tier == TimingTier.OKAY:
-                        resolved_timing_label = "EARLY • OKAY"
-                    else:
-                        resolved_timing_label = "EARLY • POOR"
-            else:
-                resolved_timing_tier, resolved_timing_label = roll_simulation_timing(
-                    ability_tier=ability_tier,
-                    composure=composure,
-                    consistency=consistency,
-                    fatigue_pct=adjusted_ratings.fatigue_pct,
-                    is_leverage=is_leverage,
-                    rng=self.rng,
-                    pitch_count=pitch_count,
-                    stamina=adjusted_ratings.base_stamina,
-                    effectiveness=pitch_effectiveness,
-                )
-
-            delivery_math = calculate_pitch_delivery(
-                target_x=target_x,
-                target_z=target_z,
-                command_rating=effective_pitch_command,
-                pitch_count=pitch_count,
-                stamina=adjusted_ratings.base_stamina,
-                intended_zone_cat=intended_zone_cat,
-                rng=self.rng.random,
-                precomputed_sigma=precomputed_sigma,
-                precomputed_max_radius_in=precomputed_max_radius,
-                timing_tier=resolved_timing_tier,
-                timing_label=resolved_timing_label,
+                    resolved_timing_label = "EARLY • POOR"
+        else:
+            resolved_timing_tier, resolved_timing_label = roll_simulation_timing(
                 ability_tier=ability_tier,
-                pitcher_hand=pitcher_hand,
-                pitch_type=selected_pitch_name,
                 composure=composure,
                 consistency=consistency,
+                fatigue_pct=adjusted_ratings.fatigue_pct,
                 is_leverage=is_leverage,
+                rng=self.rng,
+                pitch_count=pitch_count,
+                stamina=adjusted_ratings.base_stamina,
+                effectiveness=pitch_effectiveness,
             )
+
+        delivery_math = calculate_pitch_delivery(
+            target_x=target_x,
+            target_z=target_z,
+            command_rating=effective_pitch_command,
+            pitch_count=pitch_count,
+            stamina=adjusted_ratings.base_stamina,
+            intended_zone_cat=intended_zone_cat,
+            rng=self.rng.random,
+            precomputed_sigma=precomputed_sigma,
+            precomputed_max_radius_in=precomputed_max_radius,
+            timing_tier=resolved_timing_tier,
+            timing_label=resolved_timing_label,
+            ability_tier=ability_tier,
+            pitcher_hand=pitcher_hand,
+            pitch_type=selected_pitch_name,
+            composure=composure,
+            consistency=consistency,
+            is_leverage=is_leverage,
+        )
 
         pitch_category = PITCH_CATEGORIES.get(selected_pitch_name, 'Fastball')
 
@@ -318,8 +271,8 @@ class PitchingEngine:
             horizontal_break_in = movement['hb']
             induced_vertical_break_in = movement['ivb']
 
-        if not practice and pitch_effectiveness is not None:
-            from .pitch_effectiveness import (
+        if pitch_effectiveness is not None:
+            from .pitcher_info.pitch_effectiveness import (
                 apply_effectiveness_to_velocity,
                 apply_effectiveness_to_break,
             )
@@ -393,11 +346,3 @@ class PitchingEngine:
             'adjusted_ratings': adjusted_ratings.to_dict(),
             'release_point_ft': dict(getattr(self.pitcher, 'release_point_ft', {}) or {}),
         }
-
-
-def init_pitch_arsenal(
-    pitcher: Any,
-    arsenal_items: Optional[List[Any]] = None,
-) -> Dict[str, PitchArsenalMetrics]:
-    """Top-level functional interface to evaluate pitch arsenal metrics."""
-    return evaluate_pitch_arsenal(pitcher, arsenal_items=arsenal_items)
