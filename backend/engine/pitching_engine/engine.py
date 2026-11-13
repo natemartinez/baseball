@@ -7,13 +7,14 @@ and in-game pitcher rating adjustments for a baseball game instance.
 import random
 from typing import Dict, Any, Optional, List, Tuple
 
-from .pitch_execution.pitch_objects import PitchArsenal, PITCH_CATEGORIES, movement_for
+from .pitcher_info.pitch_objects import PitchArsenal, PITCH_CATEGORIES, movement_for
 from .pitch_selection import PitchSelectionMode, PitchStrategy, select_pitch
 from .pitcher_info.adjusted_ratings import (
     PitcherInstanceManager,
     PitchArsenalMetrics,
     evaluate_pitch_arsenal,
 )
+from .pitcher_info.active_pitcher import ActivePitcherState
 from .pitch_execution.calculations import calculate_pitch_delivery
 
 from ..game_engine.gameday_math import (
@@ -28,39 +29,52 @@ class PitchingEngine:
     Communicates between GameEngine and pitching submodules (selection, physics, pitcher ratings).
     """
 
+    @classmethod
+    def create_pitcher_state(cls, pitcher: Any) -> ActivePitcherState:
+        """Authoritative entry point to initialize and cache a pitcher's active state on mound entry."""
+        return ActivePitcherState.from_player(pitcher)
+
+    @staticmethod
+    def _validate_player(player: Any, role: str) -> Any:
+        """Enforces domain model boundary and validates participant presence."""
+        if isinstance(player, ActivePitcherState):
+            return player
+        if isinstance(player, dict):
+            try:
+                from backend.models.player import Player
+                player = Player.from_dict(player)
+            except ImportError:
+                pass
+
+        if not player:
+            raise ValueError(f"PitchingEngine requires a {role} object.")
+        return player
+
     def __init__(
         self,
         pitcher: Any,
         batter: Any,
         rng: Optional[random.Random] = None,
+        pitcher_state: Optional[ActivePitcherState] = None,
     ):
-        # Enforce domain model boundary at engine entry point
-        if isinstance(pitcher, dict):
-            try:
-                from backend.models.player import Player
-                pitcher = Player.from_dict(pitcher)
-            except ImportError:
-                pass
-        if isinstance(batter, dict):
-            try:
-                from backend.models.player import Player
-                batter = Player.from_dict(batter)
-            except ImportError:
-                pass
-
-        # Check if either object is invalid
-        if not pitcher:
-            raise ValueError("PitchingEngine requires a pitcher object.")
-        if not batter:
-            raise ValueError("PitchingEngine requires a batter object.")
-
-        self.pitcher = pitcher
-        self.batter = batter
+        pitcher_obj = self._validate_player(pitcher, "pitcher")
+        self.batter = batter = self._validate_player(batter, "batter")
         self.rng = rng or random
-        self.strategy = PitchStrategy(pitcher, batter, rng=self.rng)
-        self.arsenal = PitchArsenal.extract_from_pitcher(pitcher)
-        self.pitch_arsenal = self.strategy.pitch_arsenal
-        self.pitch_arsenal_metrics: Dict[str, PitchArsenalMetrics] = self.init_pitch_arsenal()
+
+        if isinstance(pitcher_obj, ActivePitcherState):
+            self.pitcher_state = pitcher_obj
+            self.pitcher = pitcher_obj.pitcher
+        elif pitcher_state is not None:
+            self.pitcher_state = pitcher_state
+            self.pitcher = pitcher_obj
+        else:
+            self.pitcher_state = ActivePitcherState.from_player(pitcher_obj)
+            self.pitcher = pitcher_obj
+
+        self.arsenal = self.pitcher_state.arsenal
+        self.pitch_arsenal = self.arsenal.to_raw_list()
+        self.strategy = PitchStrategy(self.pitcher, self.batter, rng=self.rng, arsenal=self.arsenal)
+        self.pitch_arsenal_metrics: Dict[str, PitchArsenalMetrics] = self.pitcher_state.baseline_metrics
 
     def init_pitch_arsenal(
         self,
@@ -71,7 +85,14 @@ class PitchingEngine:
         Computes pitch-specific effective command, maximum error radius, and baseline effectiveness
         for all pitches in the pitcher's repertoire.
         """
-        pitcher = pitcher_info or self.pitcher
+        if pitcher_info is not None:
+            raw_pitches = self.arsenal.pitches if hasattr(self, 'arsenal') and self.arsenal else None
+            metrics = evaluate_pitch_arsenal(pitcher_info, arsenal_items=raw_pitches)
+            self.pitch_arsenal_metrics = metrics
+            return metrics
+        if hasattr(self, 'pitch_arsenal_metrics') and self.pitch_arsenal_metrics:
+            return self.pitch_arsenal_metrics
+        pitcher = self.pitcher
         raw_pitches = self.arsenal.pitches if hasattr(self, 'arsenal') and self.arsenal else None
         metrics = evaluate_pitch_arsenal(pitcher, arsenal_items=raw_pitches)
         self.pitch_arsenal_metrics = metrics

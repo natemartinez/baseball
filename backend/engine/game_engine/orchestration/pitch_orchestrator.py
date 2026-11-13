@@ -209,6 +209,8 @@ class PitchFlowOrchestrator:
             )
 
         self._context.delivery = exec_delivery
+        if hasattr(pitcher, 'record_pitch'):
+            pitcher.record_pitch(exec_delivery.get('pitch_name', ''))
         is_strike = bool(exec_delivery.get('is_strike', False))
         actual_zone_name = nearest_zone_name(
             is_strike, exec_delivery.get('realized_x', 0.0), exec_delivery.get('realized_z', 2.5)

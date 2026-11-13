@@ -1,11 +1,21 @@
 """In-game pitcher ratings and fatigue adjustments."""
 
+from .pitch_objects import (
+    PITCH_CATEGORIES,
+    DEFAULT_ARSENAL,
+    DEFAULT_PITCH_MOVEMENT,
+    DEFAULT_MOVEMENT,
+    movement_for,
+    Pitch,
+    PitchArsenal,
+)
 from .adjusted_ratings import (
     InGamePitcherRatings,
     PitcherInstanceManager,
     PitchArsenalMetrics,
     evaluate_pitch_arsenal,
 )
+from .active_pitcher import ActivePitcherState
 from .pitch_confidence import (
     calculate_pitch_confidence_delta,
     calculate_consecutive_miss_penalty,
@@ -31,6 +41,14 @@ from .pitch_effectiveness import (
 )
 
 __all__ = [
+    'PITCH_CATEGORIES',
+    'DEFAULT_ARSENAL',
+    'DEFAULT_PITCH_MOVEMENT',
+    'DEFAULT_MOVEMENT',
+    'movement_for',
+    'Pitch',
+    'PitchArsenal',
+    'ActivePitcherState',
     'InGamePitcherRatings',
     'PitcherInstanceManager',
     'PitchArsenalMetrics',

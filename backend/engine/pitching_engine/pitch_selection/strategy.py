@@ -7,7 +7,7 @@ situational multipliers, and normalized pitch selection probabilities.
 import random
 from typing import Any, Dict, List, Optional
 
-from ..pitch_execution.pitch_objects import PITCH_CATEGORIES, PitchArsenal
+from ..pitcher_info.pitch_objects import PITCH_CATEGORIES, PitchArsenal
 
 
 class PitchStrategy:
@@ -18,11 +18,12 @@ class PitchStrategy:
         pitcher: Any,
         batter: Any,
         rng: Optional[random.Random] = None,
+        arsenal: Optional[PitchArsenal] = None,
     ):
         self.pitcher = pitcher
         self.batter = batter
         self.rng = rng or random
-        self.arsenal_obj = PitchArsenal.extract_from_pitcher(pitcher)
+        self.arsenal_obj = arsenal or PitchArsenal.extract_from_pitcher(pitcher)
         self.pitch_arsenal = self.arsenal_obj.to_raw_list()
 
     def get_leverage_state(self, balls: int, strikes: int) -> str:

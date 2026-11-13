@@ -13,8 +13,7 @@ from backend.engine.game_engine.gameday_math import (
     is_rulebook_strike,
 )
 from backend.engine.game_engine.orchestration import PitchFlowError
-from backend.engine.pitching_engine.pitch_execution.pitch_objects import movement_for
-from backend.engine.pitching_engine.pitcher_info.adjusted_ratings import PitcherInstanceManager
+from backend.engine.pitching_engine.pitcher_info.pitch_objects import movement_for
 
 
 class PracticeDeliveryBuilder:
@@ -55,6 +54,8 @@ class PracticeDeliveryBuilder:
         target_z = float(custom_target['z'])
         nominal_zone = target_zone or 'heart'
         intended_zone_cat = classify_gameday_zone(target_x, target_z)
+
+        from backend.engine.pitching_engine.pitcher_info.adjusted_ratings import PitcherInstanceManager
 
         # In-game adjusted ratings for a fresh pitcher throwing 0-0 drill pitch
         adjusted_ratings = PitcherInstanceManager.get_adjusted_ratings(

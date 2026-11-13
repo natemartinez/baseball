@@ -15,6 +15,7 @@ from .pitch_execution import (
 )
 from .pitch_selection import PitchStrategy
 from .pitcher_info import (
+    ActivePitcherState,
     InGamePitcherRatings,
     PitcherInstanceManager,
     PitchArsenalMetrics,
@@ -32,6 +33,7 @@ from .pitcher_info import (
 
 __all__ = [
     'PitchingEngine',
+    'ActivePitcherState',
     'PitchStrategy',
     'Pitch',
     'PitchArsenal',

@@ -124,7 +124,7 @@ class GameEngine:
         return player_or_dict
 
     @staticmethod
-    def _build_arsenal_payload(pitcher: Any) -> List[Dict[str, Any]]:
+    def _build_arsenal_payload(pitcher: Any, active_state: Optional[Any] = None) -> List[Dict[str, Any]]:
         """
         Serializes the pitcher's hydrated arsenal for the client payload.
 
@@ -136,11 +136,14 @@ class GameEngine:
             return [dict(item) for item in _DEFAULT_ARSENAL_PAYLOAD]
 
         metrics_by_name = {}
-        try:
-            from ..pitching_engine.pitcher_info import evaluate_pitch_arsenal
-            metrics_by_name = evaluate_pitch_arsenal(pitcher, raw)
-        except Exception:
-            metrics_by_name = {}
+        if active_state and hasattr(active_state, 'baseline_metrics') and active_state.baseline_metrics:
+            metrics_by_name = active_state.baseline_metrics
+        else:
+            try:
+                from ..pitching_engine.pitcher_info import evaluate_pitch_arsenal
+                metrics_by_name = evaluate_pitch_arsenal(pitcher, raw)
+            except Exception:
+                metrics_by_name = {}
 
         payload: List[Dict[str, Any]] = []
         for item in raw:
@@ -245,6 +248,19 @@ class GameEngine:
         self.away_pitcher = self._ensure_player(raw_away_pitchers[0] if raw_away_pitchers else None)
         self.home_pitcher = self._ensure_player(raw_home_pitchers[0] if raw_home_pitchers else None)
 
+        from ..pitching_engine import PitchingEngine
+
+        self.away_pitcher_state = (
+            PitchingEngine.create_pitcher_state(self.away_pitcher)
+            if self.away_pitcher is not None
+            else None
+        )
+        self.home_pitcher_state = (
+            PitchingEngine.create_pitcher_state(self.home_pitcher)
+            if self.home_pitcher is not None
+            else None
+        )
+
 
         self.pitch_count_home = 0
         self.pitch_count_away = 0
@@ -302,6 +318,26 @@ class GameEngine:
         else:
             self.away_pitcher = default_pitcher
         return default_pitcher
+
+    def current_pitcher_state(self) -> Any:
+        """Returns the ActivePitcherState for the pitcher currently on the mound."""
+        self.current_pitcher_obj()
+        from ..pitching_engine import PitchingEngine
+
+        if self.top_bottom == 'TOP':
+            if self.home_pitcher_state is None and self.home_pitcher is not None:
+                self.home_pitcher_state = PitchingEngine.create_pitcher_state(self.home_pitcher)
+            return self.home_pitcher_state
+        else:
+            if self.away_pitcher_state is None and self.away_pitcher is not None:
+                self.away_pitcher_state = PitchingEngine.create_pitcher_state(self.away_pitcher)
+            return self.away_pitcher_state
+
+    def build_pitcher_arsenal_payload(self) -> List[Dict[str, Any]]:
+        """Builds client pitch arsenal payload using cached metrics from the active pitcher state."""
+        cur_p = self.current_pitcher_obj()
+        cur_state = self.current_pitcher_state()
+        return self._build_arsenal_payload(cur_p, active_state=cur_state)
 
     def _advance_batter_order(self):
         if self.top_bottom == 'TOP':
@@ -699,7 +735,7 @@ class GameEngine:
                 'message': 'A pitch is already in flight; resolve it before throwing another.',
             }
 
-        pitcher = self.current_pitcher_obj()
+        pitcher = self.current_pitcher_state() or self.current_pitcher_obj()
         batter = self.current_batter_obj()
 
         # In calibration benchmarks (e.g. plate discipline baseline), lock to baseline GOOD
@@ -1205,7 +1241,7 @@ class GameEngine:
                 'velocity_rating': int(cur_p.get_rating('velocity_rating', 98)) if cur_p else 98,
                 'arm_strength': int(cur_p.get_rating('arm_strength', 97)) if cur_p else 97,
                 'control': int(cur_p.get_rating('control', 68)) if cur_p else 68,
-                'arsenal': self._build_arsenal_payload(cur_p),
+                'arsenal': self._build_arsenal_payload(cur_p, active_state=self.current_pitcher_state()),
                 'stats': {'pitches_thrown': pitch_count, 'strikeouts': 6, 'walks': 1, 'hits_allowed': 3, 'runs_allowed': 1}
             },
             'game_over': self.game_over,

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from ..pitch_execution.pitch_objects import Pitch, PitchArsenal
+from ..pitcher_info.pitch_objects import Pitch, PitchArsenal
 from .intent import (
     PitchSelectionError,
     TargetIntent,

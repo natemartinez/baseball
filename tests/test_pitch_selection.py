@@ -39,6 +39,20 @@ from backend.engine.pitching_engine.pitch_selection import (
 from backend.engine.pitching_engine.pitch_selection.intent import pitch_specific_zone
 
 
+def test_pitch_strategy_reuses_pre_extracted_arsenal():
+    from backend.models.player import Player
+    from backend.engine.pitching_engine.pitcher_info.pitch_objects import PitchArsenal
+    from backend.engine.pitching_engine.pitch_selection.strategy import PitchStrategy
+
+    player = Player.from_dict({"id": 1, "name": "Pitcher", "pitch_arsenal": [{"name": "Cutter", "velocity_mph": 90}]})
+    batter = Player.from_dict({"id": 2, "name": "Batter"})
+    arsenal = PitchArsenal.extract_from_pitcher(player)
+
+    strategy = PitchStrategy(player, batter, arsenal=arsenal)
+    assert strategy.arsenal_obj is arsenal
+    assert strategy.pitch_arsenal[0]["name"] == "Cutter"
+
+
 def _matchup():
     """Fixture: Nolan McLean (pitcher) and Aaron Judge (batter)."""
     p1 = get_player(1)

@@ -9,11 +9,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
-from ...game_engine.gameday_math import (
-    get_max_error_radius_inches,
-    calculate_execution_sigma,
-)
-from ..pitch_execution.pitch_objects import PITCH_CATEGORIES
+from .pitch_objects import PITCH_CATEGORIES
 
 from ..pitch_execution.tiers import (
     AbilityTier,
@@ -323,6 +319,11 @@ class PitcherInstanceManager:
           - Calculates exact max radius (inches), execution sigma, baseline effectiveness,
             and ability_tier.
         """
+        from ...game_engine.gameday_math import (
+            get_max_error_radius_inches,
+            calculate_execution_sigma,
+        )
+
         pitcher_control = cls.extract_base_rating(pitcher, 'Control', default=75.0)
 
         raw_list = arsenal_items

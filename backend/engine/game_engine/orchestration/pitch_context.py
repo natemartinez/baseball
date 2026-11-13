@@ -6,17 +6,18 @@ match situation, participant rating snapshots, pitcher delivery execution,
 gameday flight telemetry, batter reaction, and game outcome resolution.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from __future__ import annotations
 
-from ...pitching_engine.pitcher_info.adjusted_ratings import (
-    PitcherInstanceManager,
-    InGamePitcherRatings,
-)
-from ...batting_engine.batters import (
-    BatterInstanceManager,
-    InGameBatterRatings,
-)
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ...pitching_engine.pitcher_info.adjusted_ratings import (
+        InGamePitcherRatings,
+    )
+    from ...batting_engine.batters import (
+        InGameBatterRatings,
+    )
 
 
 @dataclass
@@ -145,17 +146,21 @@ class PitchContext:
         Creates and snapshots a PitchContext for a single pitch.
         Calculates in-game situational ratings ONCE at creation.
         """
+        pitcher_obj = getattr(pitcher, "pitcher", pitcher)
         pitcher_hand = (
             "L"
-            if str(getattr(pitcher, "handedness", "R") or "R").upper().startswith("L")
+            if str(getattr(pitcher_obj, "handedness", "R") or "R").upper().startswith("L")
             else "R"
         )
         is_leverage = bool(
             count.runners[1] or count.runners[2] or (count.inning >= 7 and abs(count.score_diff) <= 2)
         )
 
+        from ...pitching_engine.pitcher_info.adjusted_ratings import PitcherInstanceManager
+        from ...batting_engine.batters import BatterInstanceManager
+
         pitcher_ratings = PitcherInstanceManager.get_adjusted_ratings(
-            pitcher=pitcher,
+            pitcher=pitcher_obj,
             pitch_count=pitch_count,
             balls=count.balls,
             strikes=count.strikes,
@@ -170,7 +175,7 @@ class PitchContext:
         )
 
         pitcher_part = PitcherParticipant(
-            pitcher=pitcher,
+            pitcher=pitcher_obj,
             pitch_count=pitch_count,
             ratings=pitcher_ratings,
             pitch_sequence=tuple(recent_pitches or []),
@@ -206,3 +211,4 @@ class PitchContext:
             "activity": getattr(self.activity, "to_dict", lambda: str(self.activity))() if self.activity else None,
             "game_delta": self.game_delta,
         }
+

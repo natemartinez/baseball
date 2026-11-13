@@ -34,6 +34,37 @@ def get_test_matchup():
     return mclean, judge
 
 
+def test_pitching_engine_consumes_active_pitcher_state():
+    from backend.models.player import Player
+    from backend.engine.pitching_engine import PitchingEngine
+    from backend.engine.pitching_engine.pitcher_info import ActivePitcherState
+
+    p = Player.from_dict({"id": 1, "name": "Pitcher", "pitch_arsenal": [{"name": "Slider", "velocity_mph": 85.0}]})
+    b = Player.from_dict({"id": 2, "name": "Batter"})
+
+    state = PitchingEngine.create_pitcher_state(p)
+    assert isinstance(state, ActivePitcherState)
+
+    engine = PitchingEngine(pitcher=state, batter=b)
+    assert engine.pitcher_state is state
+    assert engine.arsenal is state.arsenal
+    assert engine.pitch_arsenal_metrics is state.baseline_metrics
+    assert engine.strategy.arsenal_obj is state.arsenal
+
+
+def test_pitching_engine_legacy_player_backward_compatibility():
+    from backend.models.player import Player
+    from backend.engine.pitching_engine import PitchingEngine
+
+    p = Player.from_dict({"id": 1, "name": "Pitcher", "pitch_arsenal": [{"name": "4-Seam Fastball", "velocity_mph": 95.0}]})
+    b = Player.from_dict({"id": 2, "name": "Batter"})
+
+    engine = PitchingEngine(pitcher=p, batter=b)
+    assert hasattr(engine, "pitcher_state")
+    assert engine.pitcher_state.pitcher.id == 1
+    assert "4-Seam Fastball" in engine.pitch_arsenal_metrics
+
+
 def test_pitcher_in_game_fatigue_ratings():
     """
     Consolidated Test 1: In-Game Pitcher Rating Adjustments.
