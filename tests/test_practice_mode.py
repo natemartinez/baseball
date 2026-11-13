@@ -14,14 +14,14 @@ EXACT_TARGET = {'x': 0.0, 'z': 2.5}
 
 def test_practice_freezes_the_drill_state_and_repeats_exact_delivery():
     game = _game(seed=2026, batter_id=4)
-    game.start_practice()
+    game.set_mode('PRACTICE')
 
-    first = game.practice_throw_pitch(
+    first = game.mode_controller.throw_pitch(
         'Spin Monster Sweeper', target_zone='heart', custom_target=dict(EXACT_TARGET)
     )
     first_details = first['pitch_details']
     first_packet = first_details['gameday_packet']
-    resolved = game.practice_resolve_pitch(batter_decision='TAKE')
+    resolved = game.mode_controller.resolve_pitch(batter_decision='TAKE')
     state = resolved['game_state']
 
     assert state['balls'] == 0
@@ -31,7 +31,7 @@ def test_practice_freezes_the_drill_state_and_repeats_exact_delivery():
     assert state['current_batter']['name'] == 'Gleyber Torres'
     assert resolved['pitch_details']['pitch_result'] == 'CALLED_STRIKE'
 
-    second = game.practice_throw_pitch(
+    second = game.mode_controller.throw_pitch(
         'Spin Monster Sweeper', target_zone='heart', custom_target=dict(EXACT_TARGET)
     )
     second_details = second['pitch_details']
@@ -56,16 +56,16 @@ def test_practice_end_restores_the_real_game_exactly():
     game.pitch()
     real = game.get_game_state_payload()
 
-    game.start_practice()
-    game.practice_throw_pitch(
+    game.set_mode('PRACTICE')
+    game.mode_controller.throw_pitch(
         'Power Sinker', target_zone='lower-away', custom_target={'x': 0.4, 'z': 1.9}
     )
-    game.practice_resolve_pitch(batter_decision='TAKE')
-    game.practice_throw_pitch(
+    game.mode_controller.resolve_pitch(batter_decision='TAKE')
+    game.mode_controller.throw_pitch(
         'Power Sinker', target_zone='lower-away', custom_target={'x': 0.4, 'z': 1.9}
     )
-    game.practice_resolve_pitch(batter_decision='TAKE')
-    restored = game.end_practice()
+    game.mode_controller.resolve_pitch(batter_decision='TAKE')
+    restored = game.set_mode('NORMAL')
 
     assert restored['balls'] == real['balls']
     assert restored['strikes'] == real['strikes']
@@ -79,7 +79,7 @@ def test_practice_end_restores_the_real_game_exactly():
 
 def test_normal_pitch_endpoints_are_guarded_during_practice():
     game = _game(seed=2026, batter_id=4)
-    game.start_practice()
+    game.set_mode('PRACTICE')
     blocked = game.throw_pitch(pitch_intent='STRIKE', target_zone='heart')
     assert blocked['status'] == 'error'
     assert 'practice' in blocked['message'].lower()
@@ -87,9 +87,9 @@ def test_normal_pitch_endpoints_are_guarded_during_practice():
 
 def test_practice_requires_a_pitch_and_exact_target():
     game = _game(seed=2026, batter_id=4)
-    game.start_practice()
-    assert game.practice_throw_pitch('', target_zone='heart', custom_target=EXACT_TARGET)['status'] == 'error'
-    assert game.practice_throw_pitch('Spin Monster Sweeper', target_zone='heart', custom_target=None)['status'] == 'error'
+    game.set_mode('PRACTICE')
+    assert game.mode_controller.throw_pitch('', target_zone='heart', custom_target=EXACT_TARGET)['status'] == 'error'
+    assert game.mode_controller.throw_pitch('Spin Monster Sweeper', target_zone='heart', custom_target=None)['status'] == 'error'
 
 
 def test_practice_api_contract():
@@ -146,9 +146,9 @@ def test_practice_api_contract():
 
 def test_practice_controller_throws_via_direct_delivery_injection():
     game = _game(seed=42, batter_id=4)
-    game.start_practice()
+    game.set_mode('PRACTICE')
 
-    thrown = game.practice_throw_pitch(
+    thrown = game.mode_controller.throw_pitch(
         pitch_name='Spin Monster Sweeper',
         target_zone='heart',
         custom_target={'x': 0.0, 'z': 2.5},

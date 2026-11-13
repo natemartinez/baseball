@@ -15,14 +15,9 @@ from ...pitching_engine.pitch_execution.pitch_shape import (
     shape_telemetry,
 )
 
-def is_swing_decision_telemetry_enabled() -> bool:
-    try:
-        import backend.engine.game_engine.engine as engine_module
-        if hasattr(engine_module, 'SWING_DECISION_TELEMETRY'):
-            return bool(engine_module.SWING_DECISION_TELEMETRY)
-    except (ImportError, AttributeError):
-        pass
-    return os.environ.get("SWING_DECISION_TELEMETRY", "0").strip().lower() in ("1", "true", "on", "yes")
+from ..game_logic.config import swing_decision_telemetry_enabled
+
+is_swing_decision_telemetry_enabled = swing_decision_telemetry_enabled
 
 
 def build_gameday_packet(

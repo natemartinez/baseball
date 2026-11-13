@@ -80,3 +80,4 @@ def test_start_game_with_custom_team_selection():
     assert state["teams"] == ["New York Yankees", "New York Mets"]
     assert state["lineups"][0]["team_name"] == "New York Yankees"
     assert state["lineups"][1]["team_name"] == "New York Mets"
+

@@ -526,11 +526,23 @@ def resolve_pitch():
     return _pitch_response(outcome, 200 if outcome.get('status') == 'success' else _pitch_error_status(outcome))
 
 
+@api_bp.route('/api/mode', methods=['POST'])
+def set_game_mode():
+    engine = get_or_create_engine()
+    data = request.get_json(silent=True) or {}
+    mode = data.get('mode', 'NORMAL')
+    try:
+        engine.set_mode(mode)
+    except Exception as error:
+        return jsonify({'status': 'error', 'message': str(error)}), 400
+    return jsonify(_build_state_payload(engine))
+
+
 @api_bp.route('/api/practice/start', methods=['POST'])
 def start_practice():
     engine = get_or_create_engine()
     try:
-        engine.start_practice()
+        engine.set_mode('PRACTICE')
     except PitchFlowError as error:
         return jsonify({'status': 'error', 'message': str(error)}), 409
     return jsonify(_build_state_payload(engine))
@@ -545,7 +557,7 @@ def practice_throw_pitch():
     except ValueError as error:
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
-    outcome = engine.practice_throw_pitch(
+    outcome = engine.mode_controller.throw_pitch(
         pitch_name=options['pitch_name'],
         target_zone=options['target_zone'],
         custom_target=options['custom_target'],
@@ -565,7 +577,7 @@ def practice_resolve_pitch():
     except ValueError as error:
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
-    outcome = engine.practice_resolve_pitch(
+    outcome = engine.mode_controller.resolve_pitch(
         batter_approach=data.get('batter_approach', 'AUTO'),
         batter_decision=batter_decision,
         contact=_parse_contact(data),
@@ -579,7 +591,7 @@ def practice_resolve_pitch():
 @api_bp.route('/api/practice/end', methods=['POST'])
 def end_practice():
     engine = get_or_create_engine()
-    engine.end_practice()
+    engine.set_mode('NORMAL')
     return jsonify(_build_state_payload(engine))
 
 

@@ -1,116 +1,44 @@
 """
 MLB Statcast Authoritative Game Engine.
-Implements the full 6-stage simulation pipeline, count state machine,
-truncated spray-cloud delivery resolution, and emits standardized Gameday2DPitchPacket telemetry.
+
+Implements the central simulation highway coordinating pitch execution,
+batter reactions, count state, and telemetry serialization.
 """
 
-import os
 import random
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Any, Dict, List, Optional
 
-from .gameday_math import determine_situation_category
+from backend.models.player import Player
 from .strike_zone import StrikeZone
-from backend.engine.batting_engine import (
-    BatterInstanceManager,
-    normalize_traits,
-)
+from .gameday_math import determine_situation_category
+from backend.engine.modes.mode_controller import ModeController
 from .orchestration import (
     PitchFlowError,
     PitchFlowOrchestrator,
 )
-from backend.models.player import Player
-from backend.engine.pitching_engine.pitch_execution.pitch_shape import build_pitch_shape, shape_telemetry
-from backend.engine.modes.practice_mode import PracticeModeController
+from .orchestration.packet_builder import (
+    build_gameday_packet,
+    build_pitch_details,
+)
+from .game_logic import (
+    count_after_pitch,
+    HalfInningState,
+    switch_half_inning,
+    BatterStatsTracker,
+    GameSnapshot,
+    StateDiff,
+    apply_activity,
+    swing_decision_telemetry_enabled,
+)
+from .serialization import (
+    build_arsenal_payload,
+    build_state_payload,
+    DEFAULT_ARSENAL_PAYLOAD,
+)
 
 
-SWING_DECISION_TELEMETRY = os.environ.get(
-    'SWING_DECISION_TELEMETRY', '0'
-).strip().lower() in ('1', 'true', 'on', 'yes')
-
-
-# Display/Statcast metadata used when a pitcher's hydrated arsenal does not carry
-# its own visualization fields. The names also form the fallback arsenal for a
-# pitcher with no hydrated pitch data.
-_DEFAULT_ARSENAL_PAYLOAD = [
-    {
-        'id': '4SFB',
-        'name': '4-Seam Fastball',
-        'category': 'FASTBALL',
-        'velocity_mph': 97.4,
-        'velocity_min_mph': 95.4,
-        'velocity_max_mph': 99.4,
-        'velocity_display': '95–99 mph',
-        'spin_rpm': 2480,
-        'break_rating': 90,
-        'control_rating': 84,
-        'command': 84.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
-        'tunnel_partners': ['SWP', 'KC'],
-        'statcast': {'whiff_pct': 25.0, 'chase_pct': 24.2, 'gb_pct': 34.0, 'stuff_plus': 118, 'zone_pct': 56.0, 'run_value': -4},
-    },
-    {
-        'id': 'SWP',
-        'name': 'Spin Monster Sweeper',
-        'category': 'BREAKING',
-        'velocity_mph': 83.5,
-        'velocity_min_mph': 81.5,
-        'velocity_max_mph': 85.5,
-        'velocity_display': '82–86 mph',
-        'spin_rpm': 2980,
-        'break_rating': 99,
-        'control_rating': 80,
-        'command': 80.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
-        'tunnel_partners': ['4SFB', 'SI'],
-        'statcast': {'whiff_pct': 44.5, 'chase_pct': 36.5, 'gb_pct': 42.0, 'stuff_plus': 135, 'zone_pct': 42.0, 'run_value': -12},
-    },
-    {
-        'id': 'SI',
-        'name': 'Power Sinker',
-        'category': 'FASTBALL',
-        'velocity_mph': 95.8,
-        'velocity_min_mph': 93.8,
-        'velocity_max_mph': 97.8,
-        'velocity_display': '94–98 mph',
-        'spin_rpm': 2310,
-        'break_rating': 88,
-        'control_rating': 85,
-        'command': 85.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
-        'tunnel_partners': ['SWP', 'KC'],
-        'statcast': {'whiff_pct': 14.0, 'chase_pct': 28.0, 'gb_pct': 57.0, 'stuff_plus': 112, 'zone_pct': 58.0, 'run_value': -7},
-    },
-    {
-        'id': 'KC',
-        'name': 'Spike Curveball',
-        'category': 'BREAKING',
-        'velocity_mph': 81.2,
-        'velocity_min_mph': 79.2,
-        'velocity_max_mph': 83.2,
-        'velocity_display': '79–83 mph',
-        'spin_rpm': 2840,
-        'break_rating': 94,
-        'control_rating': 78,
-        'command': 78.0,
-        'max_radius_inches': 2.0,
-        'sigma': 0.067,
-        'tunnel_partners': ['4SFB', 'SI'],
-        'statcast': {'whiff_pct': 38.0, 'chase_pct': 33.0, 'gb_pct': 48.0, 'stuff_plus': 122, 'zone_pct': 46.0, 'run_value': -6},
-    },
-]
-
-
-def _arsenal_key(name: str) -> str:
-    """Normalizes pitch names for metadata lookup and four-seam alias matching."""
-    return str(name or '').strip().lower().replace('four-seam', '4-seam')
-
-
-_ARSENAL_DISPLAY_METADATA = {
-    _arsenal_key(item['name']): item for item in _DEFAULT_ARSENAL_PAYLOAD
-}
+SWING_DECISION_TELEMETRY = swing_decision_telemetry_enabled()
+_DEFAULT_ARSENAL_PAYLOAD = DEFAULT_ARSENAL_PAYLOAD
 
 
 class GameEngine:
@@ -124,92 +52,11 @@ class GameEngine:
         return player_or_dict
 
     @staticmethod
-    def _build_arsenal_payload(pitcher: Any, active_state: Optional[Any] = None) -> List[Dict[str, Any]]:
-        """
-        Serializes the pitcher's hydrated arsenal for the client payload.
-
-        The display/Statcast metadata is merged by name so the client chips and
-        recommendations match the pitch names the engine actually resolves.
-        """
-        raw = list(getattr(pitcher, 'pitch_arsenal', None) or []) if pitcher else []
-        if not raw:
-            return [dict(item) for item in _DEFAULT_ARSENAL_PAYLOAD]
-
-        metrics_by_name = {}
-        if active_state and hasattr(active_state, 'baseline_metrics') and active_state.baseline_metrics:
-            metrics_by_name = active_state.baseline_metrics
-        else:
-            try:
-                from ..pitching_engine.pitcher_info import evaluate_pitch_arsenal
-                metrics_by_name = evaluate_pitch_arsenal(pitcher, raw)
-            except Exception:
-                metrics_by_name = {}
-
-        payload: List[Dict[str, Any]] = []
-        for item in raw:
-            if not isinstance(item, dict):
-                continue
-            name = item.get('name') or item.get('pitch')
-            if not name:
-                continue
-            display = _ARSENAL_DISPLAY_METADATA.get(_arsenal_key(name), {})
-            velocity = float(
-                item.get('velocity_mph')
-                or item.get('avg_velo_mph')
-                or display.get('velocity_mph', 94.0)
-            )
-            spin = int(
-                item.get('spin_rpm')
-                or item.get('avg_spin_rpm')
-                or display.get('spin_rpm', 2400)
-            )
-            horizontal_break = item.get('horizontal_break_in')
-            vertical_break = item.get('induced_vertical_break_in')
-
-            m = metrics_by_name.get(name)
-            max_radius = round(m.max_radius_inches, 3) if m else 1.5
-            effectiveness = round(m.baseline_effectiveness, 1) if m else 80.0
-
-            payload.append({
-                'id': str(item.get('id') or getattr(m, 'pitch_id', '') or _arsenal_key(name)),
-                'name': name,
-                'category': str(item.get('category') or getattr(m, 'category', 'FASTBALL') if m else 'FASTBALL'),
-                'velocity_mph': velocity,
-                'velocity_min_mph': float(
-                    item.get('velocity_min_mph')
-                    or display.get('velocity_min_mph', velocity - 2.0)
-                ),
-                'velocity_max_mph': float(
-                    item.get('velocity_max_mph')
-                    or display.get('velocity_max_mph', velocity + 2.0)
-                ),
-                'velocity_display': str(
-                    item.get('velocity_display')
-                    or f"{round(velocity - 2.0)}–{round(velocity + 2.0)} mph"
-                ),
-                'spin_rpm': spin,
-                'spin_rate_rpm': spin,
-                'spin_axis_deg': float(item.get('spin_axis_deg', getattr(m, 'spin_axis_deg', 180.0) if m else 180.0)),
-                'command': float(item.get('command') or item.get('control_rating') or display.get('control_rating', 75.0)),
-                'control_rating': float(item.get('control_rating') or item.get('command') or display.get('control_rating', 75.0)),
-                'break_rating': float(item.get('break_rating') or display.get('break_rating', 80.0)),
-                'max_radius_inches': max_radius,
-                'sigma': round(m.sigma, 4) if m else 0.05,
-                'effectiveness': effectiveness,
-                'horizontal_break_in': float(
-                    horizontal_break
-                    if horizontal_break is not None
-                    else display.get('horizontal_break_in', 0.0)
-                ),
-                'induced_vertical_break_in': float(
-                    vertical_break
-                    if vertical_break is not None
-                    else display.get('induced_vertical_break_in', 0.0)
-                ),
-                'tunnel_partners': list(item.get('tunnel_partners') or (getattr(m, 'tunnel_partners', []) if m else [])),
-                'statcast': item.get('statcast') or display.get('statcast', {}),
-            })
-        return payload or [dict(item) for item in _DEFAULT_ARSENAL_PAYLOAD]
+    def _build_arsenal_payload(
+        pitcher: Any, active_state: Optional[Any] = None
+    ) -> List[Dict[str, Any]]:
+        """Serializes the pitcher's hydrated arsenal for client display."""
+        return build_arsenal_payload(pitcher, active_state=active_state)
 
     def __init__(
         self,
@@ -269,25 +116,25 @@ class GameEngine:
             else None
         )
 
-
         self.pitch_count_home = 0
         self.pitch_count_away = 0
         self.session_pitch_count = 0
         self.recent_pitches_sequence: List[str] = []
-        # Full pitch history for the current plate appearance. The pending pitch
-        # is appended only after its outcome is known.
+        # Full pitch history for current plate appearance
         self.current_at_bat_pitches: List[Dict[str, Any]] = []
 
         self.strike_zone = StrikeZone()
         self.last_command_quality = 'TARGET_EXECUTED'
-        # The orchestrator owns the pitch phase and pending delivery snapshot.
+        # The orchestrator owns pitch phase and pending delivery snapshot
         self.orchestrator = PitchFlowOrchestrator(
             rng=self.rng, batter_controller=batter_controller
         )
-        # Live per-batter game line: at_bats, hits, rbis, home_runs.
-        self._batter_game_stats: Dict[str, Dict[str, int]] = {}
-        # Batting Practice sandbox controller
-        self.practice_mode = PracticeModeController(self)
+
+        # Domain managers
+        self._stats_tracker = BatterStatsTracker()
+        self.mode_controller = ModeController(self)
+
+    # ─── Read-only Field Lookups ──────────────────────────────────────────────
 
     def current_batter_obj(self) -> Any:
         lineup = self.away_lineup if self.top_bottom == 'TOP' else self.home_lineup
@@ -301,7 +148,6 @@ class GameEngine:
         if pitcher is not None:
             return pitcher
 
-        # Defensive fallback: resolve a pitcher from the active fielding team's roster
         defensive_roster = self.home_roster if self.top_bottom == 'TOP' else self.away_roster
         defensive_team_name = self.home_name if self.top_bottom == 'TOP' else self.away_name
         starters = defensive_roster.get('pitchers', {}).get('starters', []) if defensive_roster else []
@@ -315,7 +161,6 @@ class GameEngine:
                     self.away_pitcher = resolved
                 return resolved
 
-        # Final defensive fallback: generate a default pitcher for the fielding team
         default_pitcher = Player(
             name=f"{defensive_team_name} Pitcher",
             position="P",
@@ -342,12 +187,48 @@ class GameEngine:
             return self.away_pitcher_state
 
     def build_pitcher_arsenal_payload(self) -> List[Dict[str, Any]]:
-        """Builds client pitch arsenal payload using cached metrics from the active pitcher state."""
+        """Builds client pitch arsenal payload using cached metrics from active pitcher state."""
         cur_p = self.current_pitcher_obj()
         cur_state = self.current_pitcher_state()
-        return self._build_arsenal_payload(cur_p, active_state=cur_state)
+        return build_arsenal_payload(cur_p, active_state=cur_state)
 
-    def _advance_batter_order(self):
+    def get_game_state_payload(self) -> Dict[str, Any]:
+        """Constructs the authoritative client payload representing current game state."""
+        return build_state_payload(self)
+
+    # ─── Batter Stats Delegators ──────────────────────────────────────────────
+
+    @property
+    def _batter_game_stats(self) -> Dict[str, Dict[str, int]]:
+        return self._stats_tracker.all_stats()
+
+    @_batter_game_stats.setter
+    def _batter_game_stats(self, val: Dict[str, Dict[str, int]]) -> None:
+        self._stats_tracker._stats = val
+
+    def _copy_batter_stats(self) -> Dict[str, Dict[str, int]]:
+        return self._stats_tracker.copy()
+
+    def _batter_game_line(self, batter: Any) -> Dict[str, int]:
+        return self._stats_tracker.get_line(batter)
+
+    def _batter_stats_key(self, batter: Any) -> str:
+        return self._stats_tracker.stats_key(batter)
+
+    # ─── Game Mode FSM & State ────────────────────────────────────────────────
+
+    def set_mode(self, mode: Any) -> Dict[str, Any]:
+        """Switches game execution mode (e.g. 'NORMAL', 'PRACTICE')."""
+        return self.mode_controller.set_mode(mode)
+
+    @property
+    def active_mode(self) -> str:
+        """Current execution mode name."""
+        return self.mode_controller.active_mode.value
+
+    # ─── State Mutation & Order Advancement ───────────────────────────────────
+
+    def _advance_batter_order(self) -> None:
         if self.top_bottom == 'TOP':
             self.away_batter_idx = (self.away_batter_idx + 1) % max(1, len(self.away_lineup))
         else:
@@ -360,275 +241,67 @@ class GameEngine:
             return self.score[self.away_name] - self.score[self.home_name]
         return self.score[self.home_name] - self.score[self.away_name]
 
-    @staticmethod
-    def _count_after_pitch(
-        balls: int, strikes: int, pitch_result: str
-    ) -> Tuple[int, int]:
-        result = str(pitch_result or '').upper()
-        if result == 'BALL':
-            if balls >= 3:
-                return 0, 0
-            return balls + 1, strikes
-        if result in ('CALLED_STRIKE', 'SWINGING_STRIKE'):
-            if strikes >= 2:
-                return 0, 0
-            return balls, strikes + 1
-        if result == 'FOUL':
-            return balls, min(2, strikes + 1)
-        return 0, 0
-
-    def _advance_runners_on_hit(self, bases_taken: int, batter_summary: dict) -> int:
-        """Advances existing runners and places batter. Returns runs scored."""
-        runs = 0
-        new_bases = {'first': None, 'second': None, 'third': None}
-
-        # Clear existing runners forward
-        order = ['third', 'second', 'first']
-        base_map = {'first': 1, 'second': 2, 'third': 3}
-        rev_map = {1: 'first', 2: 'second', 3: 'third'}
-
-        for b_name in order:
-            runner = self.bases[b_name]
-            if runner:
-                dest = base_map[b_name] + bases_taken
-                if dest >= 4:
-                    runs += 1
-                else:
-                    new_bases[rev_map[dest]] = runner
-
-        if bases_taken >= 4:
-            runs += 1
-        elif bases_taken == 1:
-            new_bases['first'] = batter_summary
-        elif bases_taken == 2:
-            new_bases['second'] = batter_summary
-        elif bases_taken == 3:
-            new_bases['third'] = batter_summary
-
-        self.bases = new_bases
-        return runs
-
-    def _advance_runners_on_walk(self, batter_summary: dict) -> int:
-        """Forces runners forward on a walk. Returns runs scored."""
-        runs = 0
-        b1 = self.bases['first']
-        b2 = self.bases['second']
-        b3 = self.bases['third']
-
-        if b1 and b2 and b3:
-            runs += 1
-            self.bases['third'] = b2
-            self.bases['second'] = b1
-            self.bases['first'] = batter_summary
-        elif b1 and b2:
-            self.bases['third'] = b2
-            self.bases['second'] = b1
-            self.bases['first'] = batter_summary
-        elif b1:
-            self.bases['second'] = b1
-            self.bases['first'] = batter_summary
-        else:
-            self.bases['first'] = batter_summary
-
-        return runs
-
-    def _switch_half_inning(self):
-        self.outs = 0
-        self.balls = 0
-        self.strikes = 0
-        self.bases = {'first': None, 'second': None, 'third': None}
+    def _switch_half_inning(self) -> None:
+        """Switches half-inning, resets count/bases/outs and clears sequence buffers."""
+        state = HalfInningState(
+            outs=self.outs,
+            balls=self.balls,
+            strikes=self.strikes,
+            bases=self.bases,
+            top_bottom=self.top_bottom,
+            inning=self.inning,
+            game_over=self.game_over,
+        )
+        new_state = switch_half_inning(state, self.score, self.home_name, self.away_name)
+        self.outs = new_state.outs
+        self.balls = new_state.balls
+        self.strikes = new_state.strikes
+        self.bases = new_state.bases
+        self.top_bottom = new_state.top_bottom
+        self.inning = new_state.inning
+        self.game_over = new_state.game_over
         self.recent_pitches_sequence = []
         self.current_at_bat_pitches = []
 
-        if self.top_bottom == 'TOP':
-            self.top_bottom = 'BOT'
-        else:
-            self.top_bottom = 'TOP'
-            self.inning += 1
-            if self.inning > 9:
-                # Basic game over logic, will eventually need to have extra innings
-                if self.score[self.home_name] != self.score[self.away_name]:
-                    self.game_over = True
+    def _commit(self, diff: StateDiff) -> None:
+        """Single authoritative write point: applies a StateDiff to engine state."""
+        self.balls = diff.balls
+        self.strikes = diff.strikes
+        self.outs = diff.outs
+        self.bases = diff.bases
+        for team, delta in (diff.score_delta or {}).items():
+            self.score[team] = self.score.get(team, 0) + delta
+        if diff.advance_batter:
+            self._advance_batter_order()
+        if diff.switch_half:
+            self._switch_half_inning()
+        if diff.game_over:
+            self.game_over = True
 
-    def _build_gameday_packet(
-        self,
-        *,
-        pitcher: Any,
-        batter: Any,
-        delivery: Dict[str, Any],
-        sit_category: str,
-        command_rating: float,
-        cur_pitch_count: int,
-        result: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Builds a Gameday2DPitchPacket. ``result`` is pending during the throw phase."""
-        pitcher_name = getattr(pitcher, 'name', 'Pitcher') if pitcher else 'Pitcher'
-        batter_name = getattr(batter, 'name', 'Batter') if batter else 'Batter'
-        batter_id = getattr(batter, 'id', 1) if batter else 1
-
-        pitcher_hand = (
-            'L'
-            if str(getattr(pitcher, 'handedness', 'R') or 'R').upper().startswith('L')
-            else 'R'
+    def _apply_batter_activity(self, activity: Any, batter: Any) -> None:
+        """Pure delegator: routes activity through pure mutator and commits diff."""
+        snapshot = GameSnapshot(
+            balls=self.balls,
+            strikes=self.strikes,
+            outs=self.outs,
+            bases=self.bases,
+            score=self.score,
+            top_bottom=self.top_bottom,
+            inning=self.inning,
+            game_over=self.game_over,
         )
-        base_release = getattr(pitcher, 'release_point_ft', None) or {
-            'x': -1.85 if pitcher_hand == 'R' else 1.85,
-            'y': 54.6,
-            'z': 5.9,
+        batting_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
+        batter_summary = {
+            'id': getattr(batter, 'id', 1) if batter else 1,
+            'name': getattr(batter, 'name', 'Batter') if batter else 'Batter',
+            'jersey_number': getattr(batter, 'number', 99) if batter else 99,
+            'position': getattr(batter, 'position', 'DH') if batter else 'DH',
+            'team': batting_team,
         }
-        consistency = float(getattr(pitcher, 'consistency', getattr(pitcher, 'release_consistency', 80.0)) or 80.0)
-        jitter_sigma = max(0.0, (100.0 - consistency) / 100.0 * 0.04)
-        jitter_x = round(self.rng.gauss(0, jitter_sigma), 3) if jitter_sigma > 0 else 0.0
-        jitter_y = round(self.rng.gauss(0, jitter_sigma * 0.5), 3) if jitter_sigma > 0 else 0.0
-        jitter_z = round(self.rng.gauss(0, jitter_sigma), 3) if jitter_sigma > 0 else 0.0
+        diff = apply_activity(snapshot, activity, batter_summary, batting_team, self._stats_tracker)
+        self._commit(diff)
 
-        release = {
-            'x': round(float(base_release.get('x', -1.85 if pitcher_hand == 'R' else 1.85)) + jitter_x, 3),
-            'y': round(float(base_release.get('y', 54.6)) + jitter_y, 3),
-            'z': round(float(base_release.get('z', 5.9)) + jitter_z, 3),
-        }
-
-        # Tunneling synergy detection (O(1))
-        cur_pitch_name = delivery.get('selected_pitch')
-        cur_pitch_obj = None
-        if hasattr(pitcher, 'get_pitch_fast'):
-            cur_pitch_obj = pitcher.get_pitch_fast(cur_pitch_name)
-        tunnel_partners = list(cur_pitch_obj.get('tunnel_partners', []) if cur_pitch_obj else [])
-
-        # Determine previous pitch for tunneling detection
-        # Note: self.recent_pitches_sequence already has the current pitch appended at [-1],
-        # so the previous pitch is at [-2].
-        prev_pitch_name = (
-            self.recent_pitches_sequence[-2]
-            if len(self.recent_pitches_sequence) >= 2
-            else None
-        )
-        prev_pitch_obj = pitcher.get_pitch_fast(prev_pitch_name) if hasattr(pitcher, 'get_pitch_fast') and prev_pitch_name else None
-        prev_pitch_id = prev_pitch_obj.get('id') if prev_pitch_obj else prev_pitch_name
-
-        is_tunneled = bool(
-            prev_pitch_id and (
-                prev_pitch_id in tunnel_partners
-                or (prev_pitch_name and prev_pitch_name in tunnel_partners)
-            )
-        )
-
-        shape = build_pitch_shape(delivery)
-
-        return {
-            'meta': {
-                'pitchNumber': self.session_pitch_count,
-                'pitcherName': pitcher_name,
-                'pitcherHand': pitcher_hand,
-                'pitcherOvr': 85,
-                'commandRating': int(command_rating),
-                'staminaPct': max(10, 100 - cur_pitch_count),
-                'pitchesThrown': cur_pitch_count,
-                'armSlot': getattr(pitcher, 'arm_slot', 'THREE_QUARTERS'),
-                'armSlotAngleDeg': getattr(pitcher, 'arm_slot_angle_deg', 50.0),
-                'consistency': consistency,
-                'releaseConsistency': consistency,
-                'motionBio': getattr(pitcher, 'motion_bio', None),
-                'inning': self.inning,
-                'isTopInning': (self.top_bottom == 'TOP'),
-                'count': {'balls': self.balls, 'strikes': self.strikes, 'outs': self.outs},
-                'runnersOnBase': {
-                    'first': self.bases['first'] is not None,
-                    'second': self.bases['second'] is not None,
-                    'third': self.bases['third'] is not None,
-                },
-                'batterName': batter_name,
-                'batterId': batter_id,
-                'situationCategory': sit_category,
-            },
-            'release': release,
-            'tunneling': {
-                'isTunneled': is_tunneled,
-                'previousPitchId': prev_pitch_id,
-                'tunnelPartners': tunnel_partners,
-            },
-            'strategy': {
-                'repertoireProbabilities': delivery['strat_result']['repertoire_probabilities'],
-                'selectedPitch': delivery['selected_pitch'],
-                'dynamicModifier': delivery['strat_result']['dynamic_modifier'],
-                'strategyName': delivery['strat_result']['strategy_name'],
-                'rationale': delivery['strat_result']['rationale'],
-            },
-            'intent': {
-                'targetX': delivery['target_x'],
-                'targetZ': delivery['target_z'],
-                'intendedZone': delivery['intended_zone_cat'],
-                'targetSpeedMph': delivery['velocity_mph'],
-                'isManualOverride': delivery['is_manual_override'],
-            },
-            'execution': {
-                'realizedX': delivery['realized_x'],
-                'realizedZ': delivery['realized_z'],
-                'realizedSpeedMph': delivery['velocity_mph'],
-                'releaseSpeedMph': delivery.get('release_speed_mph', delivery['velocity_mph']),
-                'horizontalBreakInches': delivery.get('horizontal_break_in', 0.0),
-                'inducedVerticalBreakInches': delivery.get('induced_vertical_break_in', 0.0),
-                'maxRadiusInches': delivery.get('max_radius_inches', 0.0),
-                'radialMissInches': delivery['radial_miss_in'],
-                'deltaXInches': delivery['delta_x_in'],
-                'deltaZInches': delivery['delta_z_in'],
-                'sigmaXFeet': round(delivery['sigma'], 3),
-                'sigmaZFeet': round(delivery['sigma'], 3),
-                'isHeartZoneLeak': delivery['is_heart_leak'],
-                'hitShadowZoneTarget': delivery['hit_shadow_target'],
-                'realizedZoneCategory': delivery['realized_zone_cat'],
-                'pitchId': cur_pitch_obj.get('id', '') if cur_pitch_obj else '',
-                'spinRateRpm': cur_pitch_obj.get('spin_rate_rpm', delivery.get('spin_rpm', 2400)) if cur_pitch_obj else delivery.get('spin_rpm', 2400),
-                'spinAxisDeg': cur_pitch_obj.get('spin_axis_deg', 180.0) if cur_pitch_obj else 180.0,
-                'abilityTier': delivery.get('ability_tier'),
-                'timingTier': delivery.get('timing_tier'),
-                'timingLabel': delivery.get('timing_label'),
-                'baseRadiusInches': delivery.get('base_radius_inches'),
-                'executedRadiusInches': delivery.get('executed_radius_inches'),
-                'shape': shape_telemetry(shape),
-            },
-            'result': result,
-        }
-
-    def _build_pitch_details(
-        self,
-        *,
-        delivery: Dict[str, Any],
-        actual_zone_name: str,
-        target_zone: Optional[str],
-        batter_decision: Optional[str],
-        pitch_result_type: Optional[str],
-        exit_velo: Optional[float],
-        launch_angle: Optional[float],
-        description: str,
-        gameday_packet: Dict[str, Any],
-        spray_angle: Optional[float] = None,
-        batted_ball: Optional[Dict[str, Any]] = None,
-        swing_decision: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        radial_miss_in = delivery['radial_miss_in']
-        details = {
-            'pitch_name': delivery['selected_pitch'],
-            'velocity_mph': delivery['velocity_mph'],
-            'spin_rpm': delivery['spin_rpm'],
-            'intended_zone': delivery.get('nominal_zone', target_zone or 'heart'),
-            'actual_zone': actual_zone_name,
-            'batter_decision': batter_decision,
-            'pitch_result': pitch_result_type,
-            'exit_velocity_mph': exit_velo,
-            'launch_angle_deg': launch_angle,
-            'spray_angle_deg': spray_angle,
-            'batted_ball': batted_ball,
-            'description': description,
-            'strategy_name': delivery['strat_result']['strategy_name'],
-            'command_quality': 'PINPOINT' if radial_miss_in <= 2.0 else 'TARGET_EXECUTED' if radial_miss_in <= 4.0 else 'SLIGHT_MISS',
-            'pitch_effectiveness': delivery.get('pitch_effectiveness', 75.0),
-            'adjusted_ratings': delivery.get('adjusted_ratings', {}),
-            'gameday_packet': gameday_packet,
-        }
-        if SWING_DECISION_TELEMETRY and swing_decision is not None:
-            details['swing_decision'] = swing_decision
-        return details
+    # ─── Orchestrator Properties ──────────────────────────────────────────────
 
     @property
     def has_pending_pitch(self) -> bool:
@@ -645,67 +318,7 @@ class GameEngine:
         """Current pitch-flow phase (owned by the orchestrator)."""
         return self.orchestrator.phase.value
 
-    # ─── Batting Practice sandbox ─────────────────────────────────────────────
-
-    def _copy_batter_stats(self) -> Dict[str, Dict[str, int]]:
-        return {key: dict(value) for key, value in self._batter_game_stats.items()}
-
-    @property
-    def _practice_active(self) -> bool:
-        return self.practice_mode.is_active
-
-    @property
-    def _practice_pitch_count(self) -> int:
-        return self.practice_mode.pitch_count
-
-    @property
-    def _practice_saved(self) -> Optional[Dict[str, Any]]:
-        return self.practice_mode.saved_state
-
-    @property
-    def _practice_baseline(self) -> Optional[Dict[str, Any]]:
-        return self.practice_mode.baseline_state
-
-    def _reset_practice_state(self) -> None:
-        """Restores the frozen 0-0 drill state, keeping the practice pitch count."""
-        self.practice_mode.reset_drill_state()
-
-    def start_practice(self) -> Dict[str, Any]:
-        """
-        Snapshots the real game and switches the engine to a repeatable drill:
-        same batter/pitcher, 0-0, empty bases, no outs, frozen score/inning.
-        """
-        return self.practice_mode.start()
-
-    def end_practice(self) -> Dict[str, Any]:
-        """Restores the real game snapshot and returns to normal play."""
-        return self.practice_mode.end()
-
-    def practice_throw_pitch(
-        self,
-        pitch_type: Optional[str] = None,
-        target_zone: Optional[str] = None,
-        custom_target: Optional[Dict[str, float]] = None,
-        pitch_name: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        return self.practice_mode.throw_pitch(
-            pitch_type=pitch_type,
-            target_zone=target_zone,
-            custom_target=custom_target,
-            pitch_name=pitch_name,
-        )
-
-    def practice_resolve_pitch(
-        self,
-        batter_approach: str = 'AUTO',
-        batter_decision: Optional[str] = None,
-        contact: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        return self.practice_mode.resolve_pitch(
-            batter_approach=batter_approach,
-            batter_decision=batter_decision,
-            contact=contact,
-        )
+    # ─── Pitch Highway API ────────────────────────────────────────────────────
 
     def throw_pitch(
         self,
@@ -723,14 +336,9 @@ class GameEngine:
     ) -> Dict[str, Any]:
         """
         Stage 1 — Throw the ball.
-
-        Runs the pitching pipeline through delivery execution and returns the
-        pitch-flight telemetry (intent + realized location). Batter activity is
-        intentionally NOT resolved and the count/bases/outs are left untouched,
-        so the client can animate the ball before any outcome lands. Call
-        resolve_pitch() to apply the per-ball result.
+        Runs pitching pipeline through delivery execution and returns flight telemetry.
         """
-        if self._practice_active and delivery is None and not practice:
+        if self.mode_controller.is_practice_active and delivery is None and not practice:
             return {
                 'status': 'error',
                 'message': 'Batting practice is active; use the practice endpoints.',
@@ -746,12 +354,10 @@ class GameEngine:
         pitcher = self.current_pitcher_state() or self.current_pitcher_obj()
         batter = self.current_batter_obj()
 
-        # In calibration benchmarks (e.g. plate discipline baseline), lock to baseline GOOD
         if timing_tier is None and getattr(getattr(self, 'home_roster', None), 'get', lambda k: None)('name') == 'Calibration':
             timing_tier = 'GOOD'
             timing_label = 'GOOD'
 
-        # Pitch counts reflect the throw, not the outcome.
         if self.top_bottom == 'TOP':
             self.pitch_count_home += 1
             cur_pitch_count = self.pitch_count_home
@@ -767,7 +373,6 @@ class GameEngine:
             self.balls, self.strikes, self.outs, r1, r2, r3
         )
 
-        # 1. Orchestrator -> Pitching Engine: selection, intent, delivery.
         from ..pitching_engine.pitch_selection import PitchSelectionError
 
         try:
@@ -809,25 +414,21 @@ class GameEngine:
             'launchAngleDeg': None,
             'description': 'Pitch in flight - awaiting batter activity',
         }
-        gameday_packet = started.get('gameday_packet') or self._build_gameday_packet(
-            pitcher=pitcher,
-            batter=batter,
-            delivery=delivery,
-            sit_category=sit_category,
-            command_rating=delivery['adjusted_ratings'].get('base_command', 70.0),
-            cur_pitch_count=cur_pitch_count,
-            result=pending_result,
+
+        ctx = self.orchestrator.context
+        gameday_packet = started.get('gameday_packet') or (
+            build_gameday_packet(ctx, pending_result, rng=self.rng)
+            if ctx
+            else {}
         )
-        pitch_details = started.get('pitch_details') or self._build_pitch_details(
-            delivery=delivery,
-            actual_zone_name=actual_zone_name,
-            target_zone=target_zone,
-            batter_decision=None,
-            pitch_result_type=None,
-            exit_velo=None,
-            launch_angle=None,
-            description='Pitch in flight',
-            gameday_packet=gameday_packet,
+        pitch_details = started.get('pitch_details') or (
+            build_pitch_details(
+                ctx,
+                description='Pitch in flight',
+                gameday_packet=gameday_packet,
+            )
+            if ctx
+            else {}
         )
 
         game_state = self.get_game_state_payload()
@@ -860,15 +461,9 @@ class GameEngine:
     ) -> Dict[str, Any]:
         """
         Stage 2 — Batter activity.
-
-        Delegates the batter reaction and contact resolution to the
-        orchestrator, then applies the returned BatterActivity exactly once.
-        This is the hook to call once the pitch animation finishes.
-
-        ``contact`` is an optional player-contact report from the Rapier
-        batting layer. When present it overrides the ratings/RNG contact model.
+        Delegates reaction and contact to orchestrator, then commits state.
         """
-        if self._practice_active and not practice:
+        if self.mode_controller.is_practice_active and not practice:
             return {
                 'status': 'error',
                 'message': 'Batting practice is active; use the practice endpoints.',
@@ -902,7 +497,7 @@ class GameEngine:
     def submit_batter_reaction(
         self, decision: str, batter_approach: str = 'AUTO'
     ) -> Dict[str, Any]:
-        """Future-facing facade for a user-controlled batter reaction."""
+        """Future-facing facade for user-controlled batter reaction."""
         try:
             outcome = self.orchestrator.submit_reaction(
                 decision, approach=batter_approach
@@ -914,8 +509,8 @@ class GameEngine:
         )
 
     def _finalize_resolved_pitch(self, pending: Any, activity: Any) -> Dict[str, Any]:
-        """Applies the activity once and builds the resolved response."""
-        balls_after, strikes_after = self._count_after_pitch(
+        """Applies resolved activity to state and constructs response payload."""
+        balls_after, strikes_after = count_after_pitch(
             pending.balls, pending.strikes, activity.pitch_result
         )
         self.current_at_bat_pitches.append({
@@ -929,7 +524,6 @@ class GameEngine:
             'strikes': strikes_after,
         })
 
-        # 3. GameEngine is the only state machine.
         self._apply_batter_activity(activity, pending.batter)
         self.orchestrator.mark_applied()
 
@@ -947,28 +541,26 @@ class GameEngine:
             'launchAngleDeg': launch_angle,
             'description': description,
         }
-        gameday_packet = getattr(self.orchestrator.context, 'gameday_packet', None) or self._build_gameday_packet(
-            pitcher=pending.pitcher,
-            batter=pending.batter,
-            delivery=pending.delivery,
-            sit_category=pending.situation,
-            command_rating=pending.command_rating,
-            cur_pitch_count=pending.pitch_count,
-            result=result_payload,
+
+        ctx = self.orchestrator.context
+        gameday_packet = getattr(ctx, 'gameday_packet', None) or (
+            build_gameday_packet(ctx, result_payload, rng=self.rng) if ctx else {}
         )
-        pitch_details = getattr(self.orchestrator.context, 'pitch_details', None) or self._build_pitch_details(
-            delivery=pending.delivery,
-            actual_zone_name=pending.actual_zone_name,
-            target_zone=None,
-            batter_decision='SWING' if activity.decision == 'SWING' else 'TAKE',
-            pitch_result_type=pitch_result_type,
-            exit_velo=exit_velo,
-            launch_angle=launch_angle,
-            description=description,
-            gameday_packet=gameday_packet,
-            spray_angle=activity.spray_angle_deg,
-            batted_ball=activity.batted_ball,
-            swing_decision=getattr(activity, 'swing_decision', None),
+        pitch_details = getattr(ctx, 'pitch_details', None) or (
+            build_pitch_details(
+                ctx,
+                description=description,
+                result_type=pitch_result_type,
+                batter_decision='SWING' if activity.decision == 'SWING' else 'TAKE',
+                exit_velo=exit_velo,
+                launch_angle=launch_angle,
+                spray_angle=activity.spray_angle_deg,
+                batted_ball=activity.batted_ball,
+                swing_decision=getattr(activity, 'swing_decision', None),
+                gameday_packet=gameday_packet,
+            )
+            if ctx
+            else {}
         )
 
         self.orchestrator.finish()
@@ -983,86 +575,6 @@ class GameEngine:
             'game': game_state,
         }
 
-    @staticmethod
-    def _batter_stats_key(batter: Any) -> str:
-        batter_id = getattr(batter, 'id', None) if batter is not None else None
-        batter_name = getattr(batter, 'name', '') if batter is not None else ''
-        return f'{batter_id if batter_id is not None else 0}:{batter_name}'
-
-    def _batter_game_line(self, batter: Any) -> Dict[str, int]:
-        key = self._batter_stats_key(batter)
-        return self._batter_game_stats.setdefault(
-            key, {'at_bats': 0, 'hits': 0, 'rbis': 0, 'home_runs': 0}
-        )
-
-    def _apply_batter_activity(self, activity: Any, batter: Any) -> None:
-        """
-        Applies a resolved BatterActivity to the game state. This is the only
-        place where count, bases, outs, score, and batting lines change.
-        """
-        batter_summary = {
-            'id': getattr(batter, 'id', 1) if batter else 1,
-            'name': getattr(batter, 'name', 'Batter') if batter else 'Batter',
-            'jersey_number': getattr(batter, 'number', 99) if batter else 99,
-            'position': getattr(batter, 'position', 'DH') if batter else 'DH',
-            'team': self.away_name if self.top_bottom == 'TOP' else self.home_name,
-        }
-        stats = self._batter_game_line(batter)
-        batting_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
-        result = activity.pitch_result
-
-        if result == 'BALL':
-            self.balls += 1
-            if self.balls == 4:
-                runs = self._advance_runners_on_walk(batter_summary)
-                self.score[batting_team] += runs
-                stats['rbis'] += runs
-                self.balls = 0
-                self.strikes = 0
-                self._advance_batter_order()
-
-        elif result in ('CALLED_STRIKE', 'SWINGING_STRIKE'):
-            self.strikes += 1
-            if self.strikes == 3:
-                stats['at_bats'] += 1
-                self.outs += 1
-                self.balls = 0
-                self.strikes = 0
-                self._advance_batter_order()
-
-        elif result == 'FOUL':
-            if self.strikes < 2:
-                self.strikes += 1
-
-        elif result == 'IN_PLAY_OUT':
-            stats['at_bats'] += 1
-            self.outs += 1
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        elif result in ('SINGLE', 'DOUBLE', 'TRIPLE', 'HOME_RUN'):
-            stats['at_bats'] += 1
-            stats['hits'] += 1
-            if result == 'HOME_RUN':
-                stats['home_runs'] += 1
-
-            bases_taken = {
-                'SINGLE': 1,
-                'DOUBLE': 2,
-                'TRIPLE': 3,
-                'HOME_RUN': 4,
-            }[result]
-            runs = self._advance_runners_on_hit(bases_taken, batter_summary)
-            self.score[batting_team] += runs
-            stats['rbis'] += runs
-            self.balls = 0
-            self.strikes = 0
-            self._advance_batter_order()
-
-        if self.outs >= 3:
-            self._switch_half_inning()
-
     def pitch(
         self,
         pitch_intent: Optional[str] = None,
@@ -1076,13 +588,7 @@ class GameEngine:
         timing_label: Optional[str] = None,
         pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """
-        Synchronous convenience wrapper: throw + resolve in one call.
-
-        Kept for the existing /api/pitch contract and simulations. Use
-        throw_pitch()/resolve_pitch() when the client needs to animate the
-        pitch before the per-ball result takes effect.
-        """
+        """Synchronous throw + resolve convenience wrapper."""
         thrown = self.throw_pitch(
             pitch_intent=pitch_intent,
             pitch_type=pitch_type,
@@ -1092,6 +598,7 @@ class GameEngine:
             pitch_name=pitch_name,
             timing_tier=timing_tier,
             timing_label=timing_label,
+            pitch_effectiveness=pitch_effectiveness,
         )
         if thrown.get('status') != 'success':
             return thrown
@@ -1113,10 +620,7 @@ class GameEngine:
         timing_label: Optional[str] = None,
         pitch_effectiveness: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """
-        Public alias for pitch() that delegates all pitching responsibilities
-        to the Pitching Engine module.
-        """
+        """Public alias for pitch()."""
         return self.pitch(
             pitch_intent=pitch_intent,
             pitch_type=pitch_type,
@@ -1127,6 +631,7 @@ class GameEngine:
             pitch_name=pitch_name,
             timing_tier=timing_tier,
             timing_label=timing_label,
+            pitch_effectiveness=pitch_effectiveness,
         )
 
     def sim_at_bat(self) -> Dict[str, Any]:
@@ -1145,13 +650,15 @@ class GameEngine:
                 break
         return last_result or self.pitch()
 
-    def calculate_strategy_and_intent(self, state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def calculate_strategy_and_intent(
+        self, state: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         from ..pitching_engine.pitch_selection.recommendation import (
             calculate_strategy_and_intent,
         )
 
-        batter = (state.get('current_batter', {}) if state else {})
-        pitcher = (state.get('current_pitcher', {}) if state else {})
+        batter = state.get('current_batter', {}) if state else {}
+        pitcher = state.get('current_pitcher', {}) if state else {}
         return calculate_strategy_and_intent(
             outs=self.outs,
             balls=self.balls,
@@ -1160,103 +667,3 @@ class GameEngine:
             batter=batter,
             pitcher=pitcher,
         )
-
-    def get_game_state_payload(self) -> Dict[str, Any]:
-        cur_p = self.current_pitcher_obj()
-        cur_b = self.current_batter_obj()
-
-        p_name = getattr(cur_p, 'name', 'Pitcher') if cur_p else 'Pitcher'
-        p_num = getattr(cur_p, 'number', 26) if cur_p else 26
-        p_pos = getattr(cur_p, 'position', 'SP') if cur_p else 'SP'
-        p_team = self.home_name if self.top_bottom == 'TOP' else self.away_name
-
-        b_name = getattr(cur_b, 'name', 'Batter') if cur_b else 'Batter'
-        b_num = getattr(cur_b, 'number', 99) if cur_b else 99
-        b_pos = getattr(cur_b, 'position', 'RF') if cur_b else 'RF'
-        b_team = self.away_name if self.top_bottom == 'TOP' else self.home_name
-
-        pitch_count = self.pitch_count_home if self.top_bottom == 'TOP' else self.pitch_count_away
-        pitcher_hand = (
-            'L'
-            if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
-            else 'R'
-        ) if cur_p else 'R'
-        batter_ratings = BatterInstanceManager.get_adjusted_ratings(
-            cur_b,
-            balls=self.balls,
-            strikes=self.strikes,
-            pitcher_hand=pitcher_hand,
-        )
-        batter_line = dict(
-            self._batter_game_stats.get(
-                self._batter_stats_key(cur_b),
-                {'at_bats': 0, 'hits': 0, 'rbis': 0, 'home_runs': 0},
-            )
-        )
-
-        payload = {
-            'inning': self.inning,
-            'top_bottom': self.top_bottom,
-            'outs': self.outs,
-            'balls': self.balls,
-            'strikes': self.strikes,
-            'score': {'home': self.score[self.home_name], 'away': self.score[self.away_name]},
-            'bases': self.bases,
-            'current_batter': {
-                'id': getattr(cur_b, 'id', 201) if cur_b else 201,
-                'name': b_name,
-                'jersey_number': int(b_num) if str(b_num).isdigit() else 99,
-                'position': b_pos,
-                'team': b_team,
-                'handedness': getattr(cur_b, 'handedness', 'R') if cur_b else 'R',
-                'power': int(round(batter_ratings.power)),
-                'contact': int(round(batter_ratings.contact)),
-                'vision': int(round(batter_ratings.vision)),
-                'traits': normalize_traits(cur_b),
-                'hot_zones': {k: round(v, 3) for k, v in batter_ratings.hot_zones.items()},
-                'stats': batter_line,
-            },
-            'current_pitcher': {
-                'id': getattr(cur_p, 'id', 101) if cur_p else 101,
-                'name': p_name,
-                'jersey_number': int(p_num) if str(p_num).isdigit() else 26,
-                'position': p_pos,
-                'team': p_team,
-                'throws': (
-                    'L'
-                    if str(getattr(cur_p, 'handedness', 'R') or 'R').upper().startswith('L')
-                    else 'R'
-                ) if cur_p else 'R',
-                'stamina': float(getattr(cur_p, 'stamina', 75.0) if cur_p else 75.0),
-                'composure': float(getattr(cur_p, 'composure', 75.0) if cur_p else 75.0),
-                'consistency': float(getattr(cur_p, 'consistency', getattr(cur_p, 'release_consistency', 80.0)) if cur_p else 80.0),
-                'release_consistency': float(getattr(cur_p, 'consistency', getattr(cur_p, 'release_consistency', 80.0)) if cur_p else 80.0),
-                'motion_bio': getattr(cur_p, 'motion_bio', None),
-                'arm_slot': getattr(cur_p, 'arm_slot', 'THREE_QUARTERS') if cur_p else 'THREE_QUARTERS',
-                'arm_slot_angle_deg': float(getattr(cur_p, 'arm_slot_angle_deg', 50.0) if cur_p else 50.0),
-                'release_point_ft': dict(
-                    getattr(cur_p, 'release_point_ft', {
-                        'x': -1.85 if pitcher_hand == 'R' else 1.85,
-                        'y': 54.6,
-                        'z': 5.9,
-                    })
-                ) if cur_p else {
-                    'x': -1.85 if pitcher_hand == 'R' else 1.85,
-                    'y': 54.6,
-                    'z': 5.9,
-                },
-                'break_rating': int(cur_p.get_rating('break_rating', 99)) if cur_p else 99,
-                'velocity_rating': int(cur_p.get_rating('velocity_rating', 98)) if cur_p else 98,
-                'arm_strength': int(cur_p.get_rating('arm_strength', 97)) if cur_p else 97,
-                'control': int(cur_p.get_rating('control', 68)) if cur_p else 68,
-                'arsenal': self._build_arsenal_payload(cur_p, active_state=self.current_pitcher_state()),
-                'stats': {'pitches_thrown': pitch_count, 'strikeouts': 6, 'walks': 1, 'hits_allowed': 3, 'runs_allowed': 1}
-            },
-            'game_over': self.game_over,
-            'home_team': self.home_name,
-            'away_team': self.away_name,
-            'win_probability': 0.52
-        }
-        payload['strategy_intent'] = self.calculate_strategy_and_intent(payload)
-        return payload
-
