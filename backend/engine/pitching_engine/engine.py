@@ -41,7 +41,7 @@ class PitchingEngine:
             return player
         if isinstance(player, dict):
             try:
-                from backend.models.player import Player
+                from backend.engine.models.player import Player
                 player = Player.from_dict(player)
             except ImportError:
                 pass

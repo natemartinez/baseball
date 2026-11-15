@@ -30,7 +30,7 @@ from backend.engine.batting_engine import (
     normalize_hot_zones,
 )
 from backend.engine.game_engine import GameEngine
-from backend.models.player import Player
+from backend.engine.models.player import Player
 
 
 def _ratings(

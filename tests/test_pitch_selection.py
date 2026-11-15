@@ -40,7 +40,7 @@ from backend.engine.pitching_engine.pitch_selection.intent import pitch_specific
 
 
 def test_pitch_strategy_reuses_pre_extracted_arsenal():
-    from backend.models.player import Player
+    from backend.engine.models.player import Player
     from backend.engine.pitching_engine.pitcher_info.pitch_objects import PitchArsenal
     from backend.engine.pitching_engine.pitch_selection.strategy import PitchStrategy
 

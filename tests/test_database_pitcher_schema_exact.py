@@ -17,7 +17,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from backend.database.db import get_player, get_team_roster, init_db
-from backend.models.player import Player
+from backend.engine.models.player import Player
 
 SEED_DATA_PATH = ROOT_DIR / "backend" / "database" / "seed_data.json"
 

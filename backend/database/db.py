@@ -9,7 +9,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.models import Player
+from backend.engine.models import Player
 
 # Resolves to backend/database/mlb.db regardless of execution directory
 DB_DIR = Path(__file__).resolve().parent

@@ -11,7 +11,7 @@ import random
 
 from backend.database.db import get_player
 from backend.engine.game_engine.gameday_math import sample_directional_dispersion
-from backend.models.player import Player
+from backend.engine.models.player import Player
 from tiers import TimingTier
 
 

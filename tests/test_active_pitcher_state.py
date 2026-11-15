@@ -1,5 +1,5 @@
 import pytest
-from backend.models.player import Player
+from backend.engine.models.player import Player
 from backend.engine.pitching_engine.pitcher_info import ActivePitcherState
 from backend.engine.pitching_engine.pitcher_info.pitch_objects import PitchArsenal
 

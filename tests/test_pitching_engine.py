@@ -35,7 +35,7 @@ def get_test_matchup():
 
 
 def test_pitching_engine_consumes_active_pitcher_state():
-    from backend.models.player import Player
+    from backend.engine.models.player import Player
     from backend.engine.pitching_engine import PitchingEngine
     from backend.engine.pitching_engine.pitcher_info import ActivePitcherState
 
@@ -53,7 +53,7 @@ def test_pitching_engine_consumes_active_pitcher_state():
 
 
 def test_pitching_engine_legacy_player_backward_compatibility():
-    from backend.models.player import Player
+    from backend.engine.models.player import Player
     from backend.engine.pitching_engine import PitchingEngine
 
     p = Player.from_dict({"id": 1, "name": "Pitcher", "pitch_arsenal": [{"name": "4-Seam Fastball", "velocity_mph": 95.0}]})

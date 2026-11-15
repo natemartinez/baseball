@@ -374,7 +374,7 @@ class TestEffectivenessOnCommandAndTiming:
     def test_pitching_engine_execute_pitch_reflects_effectiveness(self):
         """End-to-end PitchingEngine.execute_pitch reflects effectiveness in delivery."""
         from backend.engine.pitching_engine import PitchingEngine
-        from backend.models.player import Player
+        from backend.engine.models.player import Player
 
         pitcher_data = {
             "id": 101,

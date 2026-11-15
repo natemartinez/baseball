@@ -11,7 +11,7 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from backend.models.player import Player
+from backend.engine.models.player import Player
 from backend.database.db import get_player, get_team_roster_players
 from backend.engine.pitching_engine import PitchingEngine
 from backend.engine.game_engine import GameEngine

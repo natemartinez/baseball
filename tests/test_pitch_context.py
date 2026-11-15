@@ -1,5 +1,5 @@
 import pytest
-from backend.models.player import Player
+from backend.engine.models.player import Player
 from backend.engine.game_engine.orchestration.pitch_context import (
     PitchContext,
     CountSnapshot,

@@ -1,7 +1,7 @@
 from backend.database.db import get_player
 from backend.engine.game_engine.engine import GameEngine
 from backend.engine.pitching_engine.pitcher_info import ActivePitcherState
-from backend.models.player import Player
+from backend.engine.models.player import Player
 
 def _make_game():
     p1 = get_player(1)

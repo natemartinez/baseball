@@ -222,7 +222,7 @@ class PitchArsenal:
 
         if isinstance(pitcher, dict):
             try:
-                from backend.models.player import Player
+                from backend.engine.models.player import Player
                 pitcher = Player.from_dict(pitcher)
             except ImportError:
                 pass

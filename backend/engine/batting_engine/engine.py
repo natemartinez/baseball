@@ -78,7 +78,7 @@ class BattingEngine:
     ):
         if isinstance(batter, dict):
             try:
-                from backend.models.player import Player
+                from backend.engine.models.player import Player
                 batter = Player.from_dict(batter)
             except ImportError:
                 pass
