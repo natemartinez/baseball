@@ -12,6 +12,9 @@ export const Text = 'Text';
 export const TouchableOpacity = 'TouchableOpacity';
 export const ScrollView = 'ScrollView';
 export const Modal = 'Modal';
+export const FlatList = 'FlatList';
+export const ActivityIndicator = 'ActivityIndicator';
+export const useWindowDimensions = () => ({ width: 1200, height: 800 });
 export const Animated = {
   Value: class {
     constructor(v) { this.val = v; }

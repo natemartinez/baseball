@@ -25,18 +25,45 @@ export async function resolve(specifier, context, nextResolve) {
   try {
     return await nextResolve(specifier, context);
   } catch (err) {
-    if (
-      (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'ERR_UNSUPPORTED_DIR_IMPORT') &&
-      (specifier.startsWith('.') || specifier.startsWith('/'))
-    ) {
-      const parentDir = context.parentURL ? path.dirname(fileURLToPath(context.parentURL)) : process.cwd();
-      const target = path.resolve(parentDir, specifier);
-      for (const ext of ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.js']) {
-        if (fs.existsSync(target + ext)) {
-          return nextResolve(pathToFileURL(target + ext).href, context);
+    if (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'ERR_UNSUPPORTED_DIR_IMPORT') {
+      if (specifier.startsWith('.') || specifier.startsWith('/')) {
+        const parentDir = context.parentURL ? path.dirname(fileURLToPath(context.parentURL)) : process.cwd();
+        const target = path.resolve(parentDir, specifier);
+        for (const ext of ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.js']) {
+          if (fs.existsSync(target + ext)) {
+            return nextResolve(pathToFileURL(target + ext).href, context);
+          }
+        }
+      } else {
+        for (const ext of ['.js', '.mjs', '/index.js']) {
+          try {
+            return await nextResolve(specifier + ext, context);
+          } catch {}
         }
       }
     }
     throw err;
   }
+}
+
+export async function load(url, context, nextLoad) {
+  if (url.endsWith('.tsx') || url.endsWith('.jsx')) {
+    const filePath = fileURLToPath(url);
+    const source = fs.readFileSync(filePath, 'utf8');
+    const { default: ts } = await import('typescript');
+    const transpiled = ts.transpileModule(source, {
+      compilerOptions: {
+        jsx: ts.JsxEmit.ReactJSX,
+        module: ts.ModuleKind.ESNext,
+        target: ts.ScriptTarget.ESNext,
+      },
+      fileName: filePath,
+    });
+    return {
+      format: 'module',
+      shortCircuit: true,
+      source: transpiled.outputText,
+    };
+  }
+  return nextLoad(url, context);
 }

@@ -25,7 +25,7 @@ export const FielderLayer = React.memo(function FielderLayer() {
             <meshStandardMaterial color="#E2E8F0" roughness={0.6} />
           </mesh>
           <mesh
-            position={[0, 0.035, 0]}
+            position={[0, 0.080, 0]}
             rotation={[-Math.PI / 2, 0, 0]}
             renderOrder={1}
           >

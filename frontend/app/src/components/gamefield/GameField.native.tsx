@@ -37,6 +37,8 @@ export const GameField = React.memo(function GameField({
         camera={{
           position: PITCH_SHOT.position,
           fov: PITCH_SHOT.fov,
+          near: 1.0,
+          far: 1000,
         }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >
@@ -55,7 +57,7 @@ export const GameField = React.memo(function GameField({
           onBattingPitchArrival={onBattingPitchArrival}
         />
       </Canvas>
-      <FieldScrims birdseye={mode === 'BIRDSEYE'} batting={isBatting} />
+      <FieldScrims birdseye={mode === 'BIRDSEYE' || mode === 'TRACKING' || mode === 'GROUNDER'} batting={isBatting} />
     </View>
   );
 });

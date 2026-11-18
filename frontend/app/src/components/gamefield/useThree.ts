@@ -1,1 +1,1 @@
-export { useThree } from '@react-three/fiber';
+export { useThree, useFrame } from '@react-three/fiber';

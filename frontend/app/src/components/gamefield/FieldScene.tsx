@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import * as THREE from 'three';
 
@@ -14,7 +14,9 @@ import type { ControlMode, PitchPhase } from '../../store/gameStore';
 import { BattedBallVisualizer } from './BattedBallVisualizer';
 import { BattingLayer } from './BattingLayer';
 import { FielderLayer } from './FielderLayer';
+import { FoulPoles } from './FoulPoles';
 import { PitchVisualizer } from './PitchVisualizer';
+import { WallDistanceMarkers } from './WallDistanceMarkers';
 import {
   BATTERS_BOX_LEFT_POS,
   BATTERS_BOX_RIGHT_POS,
@@ -31,18 +33,25 @@ import {
   MOUND_POS,
   RUBBER_POS,
   battersBoxShape,
+  createOutfieldWallCapGeometry,
+  createOutfieldWallGeometry,
   dirtSkirtShape,
   homePlateCircleShape,
   homePlateShape,
   infieldGrassShape,
+  warningTrackShape,
 } from './fieldGeometry';
 
-const BACKGROUND_COLOR = '#0A0F15';
-const GRASS_COLOR = '#2d6a3f';
-const DIRT_COLOR = '#8e5836';
-const BASE_COLOR = '#f8f9fa';
+export const BACKGROUND_COLOR = '#0A0F15';
+export const GRASS_COLOR = '#2d6a3f';
+export const DIRT_COLOR = '#8e5836';
+export const BASE_COLOR = '#f8f9fa';
 
-const NOOP = () => {};
+export const WALL_COLOR = '#12212C';
+export const WALL_TRIM_COLOR = '#1F3546';
+export const FOUL_POLE_GOLD = '#FFD700';
+
+const NOOP = () => { };
 
 export function FieldScene({
   onPlateProjected,
@@ -75,9 +84,22 @@ export function FieldScene({
   const chargeRef = battingChargeRef ?? fallbackChargeRef;
   const isBatting = controlMode === 'BATTING';
 
+  const [outfieldWallGeometry, outfieldWallCapGeometry] = useMemo(() => {
+    const wall = createOutfieldWallGeometry();
+    const cap = createOutfieldWallCapGeometry();
+    return [wall, cap];
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      outfieldWallGeometry.dispose();
+      outfieldWallCapGeometry.dispose();
+    };
+  }, [outfieldWallGeometry, outfieldWallCapGeometry]);
+
   return (
     <>
-      <GameCameraDirector mode={cameraMode} />
+      <GameCameraDirector mode={cameraMode} activeBattedBall={activeBattedBall} />
       <color attach="background" args={[BACKGROUND_COLOR]} />
 
       <ambientLight intensity={0.7} />
@@ -89,22 +111,52 @@ export function FieldScene({
         <meshStandardMaterial color={GRASS_COLOR} roughness={0.9} metalness={0.1} />
       </mesh>
 
+      {/* Outfield warning track dirt */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+        <shapeGeometry args={[warningTrackShape]} />
+        <meshStandardMaterial
+          color={DIRT_COLOR}
+          roughness={0.95}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
+        />
+      </mesh>
+
       {/* Infield dirt skirt */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.020, 0]}>
         <shapeGeometry args={[dirtSkirtShape]} />
-        <meshStandardMaterial color={DIRT_COLOR} roughness={0.95} />
+        <meshStandardMaterial
+          color={DIRT_COLOR}
+          roughness={0.95}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
+        />
       </mesh>
 
       {/* Home plate sand circle (holds home plate & batter's boxes) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={HOME_PLATE_CIRCLE_POS}>
         <circleGeometry args={[HOME_PLATE_CIRCLE_RADIUS, 64]} />
-        <meshStandardMaterial color={DIRT_COLOR} roughness={0.95} />
+        <meshStandardMaterial
+          color={DIRT_COLOR}
+          roughness={0.95}
+          polygonOffset
+          polygonOffsetFactor={-1}
+          polygonOffsetUnits={-1}
+        />
       </mesh>
 
       {/* Infield grass diamond (mound cutout & home plate cutout come from the shape) */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.010, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.040, 0]}>
         <shapeGeometry args={[infieldGrassShape]} />
-        <meshStandardMaterial color={GRASS_COLOR} roughness={0.9} />
+        <meshStandardMaterial
+          color={GRASS_COLOR}
+          roughness={0.9}
+          polygonOffset
+          polygonOffsetFactor={-2}
+          polygonOffsetUnits={-2}
+        />
       </mesh>
 
       {/* Pitcher's mound */}
@@ -138,34 +190,78 @@ export function FieldScene({
       </mesh>
 
       {/* Home plate */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.015, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.070, 0]}>
         <shapeGeometry args={[homePlateShape]} />
-        <meshStandardMaterial color={BASE_COLOR} roughness={0.5} />
+        <meshStandardMaterial
+          color={BASE_COLOR}
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-4}
+          polygonOffsetUnits={-4}
+        />
       </mesh>
 
       {/* Left Batter's Box */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={BATTERS_BOX_LEFT_POS}>
         <shapeGeometry args={[battersBoxShape]} />
-        <meshStandardMaterial color="#f8f9fa" roughness={0.5} />
+        <meshStandardMaterial
+          color="#f8f9fa"
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-3}
+          polygonOffsetUnits={-3}
+        />
       </mesh>
 
       {/* Right Batter's Box */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={BATTERS_BOX_RIGHT_POS}>
         <shapeGeometry args={[battersBoxShape]} />
-        <meshStandardMaterial color="#f8f9fa" roughness={0.5} />
+        <meshStandardMaterial
+          color="#f8f9fa"
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-3}
+          polygonOffsetUnits={-3}
+        />
       </mesh>
 
       {/* Left-field foul line */}
       <mesh position={FOUL_LINE_LEFT_POS} rotation={FOUL_LINE_LEFT_ROTATION}>
         <boxGeometry args={[0.35, 0.01, FOUL_LINE_LENGTH]} />
-        <meshStandardMaterial color={BASE_COLOR} roughness={0.5} />
+        <meshStandardMaterial
+          color={BASE_COLOR}
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-3}
+          polygonOffsetUnits={-3}
+        />
       </mesh>
 
       {/* Right-field foul line */}
       <mesh position={FOUL_LINE_RIGHT_POS} rotation={FOUL_LINE_RIGHT_ROTATION}>
         <boxGeometry args={[0.35, 0.01, FOUL_LINE_LENGTH]} />
-        <meshStandardMaterial color={BASE_COLOR} roughness={0.5} />
+        <meshStandardMaterial
+          color={BASE_COLOR}
+          roughness={0.5}
+          polygonOffset
+          polygonOffsetFactor={-3}
+          polygonOffsetUnits={-3}
+        />
       </mesh>
+
+      {/* Outfield home run fence wall */}
+      <mesh geometry={outfieldWallGeometry}>
+        <meshStandardMaterial color={WALL_COLOR} roughness={0.8} metalness={0.1} />
+      </mesh>
+      <mesh geometry={outfieldWallCapGeometry}>
+        <meshStandardMaterial color={FOUL_POLE_GOLD} roughness={0.4} metalness={0.3} />
+      </mesh>
+
+      {/* Outfield distance markers (330, 365, 400) mounted on wall face */}
+      <WallDistanceMarkers />
+
+      {/* Outfield foul poles with fair-territory screen wings */}
+      <FoulPoles />
 
       <FielderLayer />
 

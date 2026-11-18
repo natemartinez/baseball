@@ -9,6 +9,9 @@ import type { GameCameraMode, ProjectedPlatePosition } from '../camera/types';
 
 export type { GameCameraMode, ProjectedPlatePosition };
 
+/** Calibrated visual radius of a batted baseball in Three.js scene feet (~1.8x real size for mobile visibility). */
+export const DEFAULT_BATTED_BALL_RADIUS = 0.22;
+
 export interface ActivePitchData {
   id: string;
   release: [number, number, number];
@@ -22,6 +25,11 @@ export interface ActiveBattedBallData {
   id: string;
   hangTime: number;
   samples: BattedBallSample[];
+  isGrounder?: boolean;
+  landingPos?: [number, number, number];
+  launchAngle?: number;
+  apexHeight?: number;
+  distance?: number;
 }
 
 export interface BattingLayerProps {
