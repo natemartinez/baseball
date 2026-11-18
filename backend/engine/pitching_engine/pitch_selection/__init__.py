@@ -15,17 +15,19 @@ from .intent import (
     resolve_target_intent,
     sample_waste_target,
 )
-from .recommendation import calculate_strategy_and_intent
+from .matchup import BatterMatchupPlan, evaluate_platoon_and_arsenal
 from .selection import PitchSelection, PitchSelectionMode, select_pitch
-from .strategy import PitchStrategy
+from .strategy import PitchStrategy, calculate_strategy_and_intent
 
 __all__ = [
+    'BatterMatchupPlan',
     'PitchSelection',
     'PitchSelectionError',
     'PitchSelectionMode',
     'PitchStrategy',
     'TargetIntent',
     'calculate_strategy_and_intent',
+    'evaluate_platoon_and_arsenal',
     'mix_ball_intent',
     'normalize_pitch_intent',
     'resolve_target_intent',

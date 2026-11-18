@@ -47,3 +47,17 @@ def test_build_arsenal_payload_uses_cached_metrics():
     assert len(payload) > 0
     # Payload items include velocity, spin, and command
     assert "name" in payload[0]
+
+
+def test_game_engine_prebakes_lineup_game_plan_for_both_pitchers():
+    game = _make_game()
+    assert len(game.home_pitcher_state.game_plan) > 0
+    assert len(game.away_pitcher_state.game_plan) > 0
+
+
+def test_game_engine_strategy_intent_uses_active_pitcher_state():
+    game = _make_game()
+    intent = game.calculate_strategy_and_intent()
+    assert intent['recommended_pitch']
+    assert intent['recommended_zone']
+

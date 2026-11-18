@@ -64,7 +64,13 @@ class Player:
         self.ratings: Dict[str, float] = ratings or {}
         self.zones: Dict[str, float] = zones or {}
         self.traits: List[Dict[str, Any]] = traits or []
-        self.vitals: Dict[str, Any] = vitals or {}
+        self.vitals: Dict[str, Any] = dict(vitals or {})
+        if "throws" not in self.vitals and self.throws:
+            self.vitals["throws"] = self.throws
+        if "bats" not in self.vitals and self.bats:
+            self.vitals["bats"] = self.bats
+        if "handedness" not in self.vitals and self.handedness:
+            self.vitals["handedness"] = self.handedness
         self.stats: List[Dict[str, Any]] = stats or []
         self.pitch_arsenal: List[Dict[str, Any]] = pitch_arsenal or []
         self.arsenal: List[Dict[str, Any]] = self.pitch_arsenal

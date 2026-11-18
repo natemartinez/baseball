@@ -115,6 +115,14 @@ class GameEngine:
             if self.home_pitcher is not None
             else None
         )
+        if self.away_pitcher_state:
+            self.away_pitcher_state.prebake_lineup_game_plan(
+                home_roster.get('position_players', [])
+            )
+        if self.home_pitcher_state:
+            self.home_pitcher_state.prebake_lineup_game_plan(
+                away_roster.get('position_players', [])
+            )
 
         self.pitch_count_home = 0
         self.pitch_count_away = 0
@@ -180,10 +188,22 @@ class GameEngine:
         if self.top_bottom == 'TOP':
             if self.home_pitcher_state is None and self.home_pitcher is not None:
                 self.home_pitcher_state = PitchingEngine.create_pitcher_state(self.home_pitcher)
+                opp_lineup = getattr(self, 'away_lineup', None) or (
+                    getattr(self, 'away_roster', {}).get('position_players', [])
+                    if isinstance(getattr(self, 'away_roster', None), dict)
+                    else []
+                )
+                self.home_pitcher_state.prebake_lineup_game_plan(opp_lineup)
             return self.home_pitcher_state
         else:
             if self.away_pitcher_state is None and self.away_pitcher is not None:
                 self.away_pitcher_state = PitchingEngine.create_pitcher_state(self.away_pitcher)
+                opp_lineup = getattr(self, 'home_lineup', None) or (
+                    getattr(self, 'home_roster', {}).get('position_players', [])
+                    if isinstance(getattr(self, 'home_roster', None), dict)
+                    else []
+                )
+                self.away_pitcher_state.prebake_lineup_game_plan(opp_lineup)
             return self.away_pitcher_state
 
     def build_pitcher_arsenal_payload(self) -> List[Dict[str, Any]]:
@@ -513,10 +533,18 @@ class GameEngine:
         balls_after, strikes_after = count_after_pitch(
             pending.balls, pending.strikes, activity.pitch_result
         )
+        delivery_dict = pending.delivery if isinstance(pending.delivery, dict) else {}
+        target_zone_val = (
+            delivery_dict.get('target_zone')
+            or delivery_dict.get('nominal_zone')
+            or delivery_dict.get('intended_zone')
+            or pending.actual_zone_name
+        )
         self.current_at_bat_pitches.append({
-            'pitch_name': pending.delivery.get('selected_pitch', '4-Seam Fastball'),
-            'pitch_category': pending.delivery.get('pitch_category', 'Fastball'),
+            'pitch_name': delivery_dict.get('selected_pitch', '4-Seam Fastball'),
+            'pitch_category': delivery_dict.get('pitch_category', 'Fastball'),
             'zone_name': pending.actual_zone_name,
+            'target_zone': target_zone_val,
             'zone_category': pending.zone_category,
             'is_strike': pending.is_strike,
             'result': activity.pitch_result,
@@ -653,9 +681,7 @@ class GameEngine:
     def calculate_strategy_and_intent(
         self, state: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        from ..pitching_engine.pitch_selection.recommendation import (
-            calculate_strategy_and_intent,
-        )
+        from ..pitching_engine.pitch_selection import calculate_strategy_and_intent
 
         batter = state.get('current_batter', {}) if state else {}
         pitcher = state.get('current_pitcher', {}) if state else {}
@@ -666,4 +692,6 @@ class GameEngine:
             bases=self.bases,
             batter=batter,
             pitcher=pitcher,
+            active_state=self.current_pitcher_state(),
+            pitch_sequence=[dict(p) for p in self.current_at_bat_pitches],
         )

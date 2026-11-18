@@ -206,11 +206,17 @@ class PitchFlowOrchestrator:
                 timing_tier=timing_tier,
                 timing_label=timing_label,
                 pitch_effectiveness=pitch_effectiveness,
+                pitch_sequence=pitch_sequence,
             )
 
         self._context.delivery = exec_delivery
+        pitch_name_thrown = exec_delivery.get('pitch_name', '')
         if hasattr(pitcher, 'record_pitch'):
-            pitcher.record_pitch(exec_delivery.get('pitch_name', ''))
+            pitcher.record_pitch(pitch_name_thrown)
+        if hasattr(pitcher, 'record_at_bat_pitch'):
+            pitcher.record_at_bat_pitch(batter, pitch_name_thrown)
+        if 'pitching_engine' in locals() and hasattr(pitching_engine, 'pitcher_state') and pitching_engine.pitcher_state:
+            pitching_engine.pitcher_state.record_at_bat_pitch(batter, pitch_name_thrown)
         is_strike = bool(exec_delivery.get('is_strike', False))
         actual_zone_name = nearest_zone_name(
             is_strike, exec_delivery.get('realized_x', 0.0), exec_delivery.get('realized_z', 2.5)

@@ -10,6 +10,7 @@ import random
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Tuple
 
+from ..pitcher_info.pitch_objects import PITCH_CATEGORIES
 from ...game_engine.gameday_math import (
     CHASE_BORDER_FT,
     ZONE_TARGET_BOUNDS,
@@ -57,6 +58,8 @@ def pitch_specific_zone(
     pitch_name: str,
     pitcher_hand: str = 'R',
     batter_side: str = 'R',
+    last_pitch_name: Optional[str] = None,
+    last_target_zone: Optional[str] = None,
 ) -> str:
     """Shifts a tactical target into the selected pitch's vertical profile.
 
@@ -64,43 +67,108 @@ def pitch_specific_zone(
     Four-seams prefer the upper third; sinkers prefer the lower third and the
     pitcher's arm-side corner. The mapping is deterministic and adds no RNG
     draws.
+
+    When doubling up on the same pitch (pitch_name == last_pitch_name), alternates
+    the target corridor so the pitcher does not repeatedly attack the exact same zone.
     """
     zone = str(recommended_zone or '').lower().strip()
-    if not zone or zone == 'waste' or zone.startswith('chase-'):
+    if not zone or zone == 'waste':
         return recommended_zone
 
     hand = 'L' if str(pitcher_hand or 'R').upper().startswith('L') else 'R'
     batter = 'L' if str(batter_side or 'R').upper().startswith('L') else 'R'
 
-    if _is_four_seam(pitch_name):
-        if zone in _UPPER_ZONES:
-            return zone
-        if zone in _LOWER_ZONES:
-            side = zone.split('-', 1)[1]
-            return f'upper-{side}'
-        if zone == 'middle-in':
+    # Compute base vertical profile zone
+    base_zone = zone
+    if not zone.startswith('chase-'):
+        if _is_four_seam(pitch_name):
+            if zone in _UPPER_ZONES:
+                base_zone = zone
+            elif zone in _LOWER_ZONES:
+                side = zone.split('-', 1)[1]
+                base_zone = f'upper-{side}'
+            elif zone == 'middle-in':
+                base_zone = 'upper-in'
+            elif zone == 'middle-away':
+                base_zone = 'upper-away'
+            elif zone == 'heart':
+                base_zone = 'upper-middle'
+            else:
+                base_zone = 'upper-in' if batter == 'R' else 'upper-away'
+
+        elif _is_sinker(pitch_name):
+            if zone in _LOWER_ZONES:
+                base_zone = zone
+            elif zone in _UPPER_ZONES:
+                side = zone.split('-', 1)[1]
+                base_zone = f'lower-{side}'
+            elif zone == 'heart':
+                base_zone = 'lower-middle'
+            elif zone == 'middle-in' or zone == 'middle-away':
+                base_zone = 'lower-in' if hand == 'R' else 'lower-away'
+            else:
+                base_zone = 'lower-in' if hand == 'R' else 'lower-away'
+
+    # Check for doubling-up alternation
+    is_doubled_up = bool(
+        last_pitch_name
+        and str(last_pitch_name).strip().lower() == str(pitch_name).strip().lower()
+        and last_target_zone
+    )
+
+    if not is_doubled_up:
+        return base_zone
+
+    prev_zone = str(last_target_zone).lower().strip()
+    if base_zone != prev_zone:
+        return base_zone
+
+    # Apply tactical alternation based on pitch type
+    cat = PITCH_CATEGORIES.get(pitch_name, 'Fastball')
+
+    if _is_four_seam(pitch_name) or 'CUTTER' in pitch_name.upper():
+        if prev_zone == 'upper-away':
             return 'upper-in'
-        if zone == 'middle-away':
+        elif prev_zone == 'upper-in':
             return 'upper-away'
-        if zone == 'heart':
-            return 'upper-middle'
-        return 'upper-in' if batter == 'R' else 'upper-away'
+        elif prev_zone == 'upper-middle':
+            return 'upper-in' if batter == 'R' else 'upper-away'
+        else:
+            return 'upper-away' if prev_zone != 'upper-away' else 'upper-in'
 
     if _is_sinker(pitch_name):
-        if zone in _LOWER_ZONES:
-            return zone
-        if zone in _UPPER_ZONES:
-            side = zone.split('-', 1)[1]
-            return f'lower-{side}'
-        if zone == 'heart':
-            return 'lower-middle'
-        if zone == 'middle-in':
+        if prev_zone == 'lower-away':
+            return 'lower-in'
+        elif prev_zone == 'lower-in':
+            return 'lower-away'
+        elif prev_zone == 'lower-middle':
             return 'lower-in' if hand == 'R' else 'lower-away'
-        if zone == 'middle-away':
-            return 'lower-in' if hand == 'R' else 'lower-away'
-        return 'lower-in' if hand == 'R' else 'lower-away'
+        else:
+            return 'lower-in'
 
-    return recommended_zone
+    if cat == 'Breaking' or any(t in pitch_name.upper() for t in ('SLIDER', 'SWEEPER', 'CURVE')):
+        if prev_zone.startswith('chase-'):
+            return 'chase-low' if prev_zone == 'chase-away' else 'chase-away'
+        elif prev_zone == 'lower-away':
+            return 'lower-in' if hand == 'R' else 'middle-away'
+        elif prev_zone == 'lower-in':
+            return 'lower-away'
+        elif prev_zone == 'middle-away':
+            return 'lower-away'
+        else:
+            return 'middle-away'
+
+    if cat == 'OffSpeed' or any(t in pitch_name.upper() for t in ('CHANGEUP', 'SPLITTER')):
+        if prev_zone.startswith('chase-'):
+            return 'chase-low' if prev_zone == 'chase-away' else 'chase-away'
+        elif prev_zone == 'lower-away':
+            return 'lower-middle'
+        elif prev_zone == 'lower-middle':
+            return 'lower-away'
+        else:
+            return 'lower-middle'
+
+    return base_zone
 
 
 @dataclass(frozen=True)

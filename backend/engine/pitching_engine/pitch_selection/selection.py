@@ -112,6 +112,7 @@ def select_pitch(
     custom_target: Optional[Dict[str, float]] = None,
     double_play_situation: bool = False,
     rng=None,
+    pitch_sequence: Optional[List[Dict[str, Any]]] = None,
 ) -> PitchSelection:
     """
     Resolves who selects the pitch, the concrete pitch, and the target intent.
@@ -135,12 +136,30 @@ def select_pitch(
 
     normalized_intent = normalize_pitch_intent(pitch_intent)
 
+    # Resolve recent pitches and prior pitch target details from pitch_sequence if available
+    effective_recent = recent_pitches
+    last_pitch_name = None
+    last_target_zone = None
+
+    if pitch_sequence and len(pitch_sequence) >= 1:
+        effective_recent = [
+            str(p.get('pitch_name') or p.get('selected_pitch'))
+            for p in pitch_sequence
+            if isinstance(p, dict) and (p.get('pitch_name') or p.get('selected_pitch'))
+        ]
+        last_entry = pitch_sequence[-1]
+        if isinstance(last_entry, dict):
+            last_pitch_name = last_entry.get('pitch_name') or last_entry.get('selected_pitch')
+            last_target_zone = last_entry.get('target_zone') or last_entry.get('nominal_zone') or last_entry.get('zone_name')
+    elif effective_recent and len(effective_recent) >= 1:
+        last_pitch_name = effective_recent[-1]
+
     if mode is PitchSelectionMode.AI:
         strat_result = strategy.choose_pitch(
             balls=balls,
             strikes=strikes,
             situation=situation,
-            recent_pitches=recent_pitches,
+            recent_pitches=effective_recent,
             double_play_situation=double_play_situation,
         )
         selected_pitch_name = strat_result['selected_pitch']
@@ -155,7 +174,7 @@ def select_pitch(
             balls=balls,
             strikes=strikes,
             situation=situation,
-            recent_pitches=recent_pitches,
+            recent_pitches=effective_recent,
             double_play_situation=double_play_situation,
         )
         selected_pitch_name = selected_pitch.name
@@ -171,6 +190,8 @@ def select_pitch(
             selected_pitch_name,
             pitcher_hand=pitcher_hand,
             batter_side=batter_side,
+            last_pitch_name=last_pitch_name,
+            last_target_zone=last_target_zone,
         )
 
     target = resolve_target_intent(

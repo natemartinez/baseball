@@ -116,6 +116,7 @@ class PitchingEngine:
         timing_tier: Optional[Any] = None,
         timing_label: Optional[str] = None,
         pitch_effectiveness: Optional[float] = None,
+        pitch_sequence: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
         """
         Main Hand-Off Method:
@@ -154,6 +155,7 @@ class PitchingEngine:
             target_zone=target_zone,
             custom_target=custom_target,
             rng=self.rng,
+            pitch_sequence=pitch_sequence,
         )
 
         strat_result = {

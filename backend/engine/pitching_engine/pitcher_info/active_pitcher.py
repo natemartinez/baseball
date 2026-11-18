@@ -8,8 +8,10 @@ Encapsulates the persistent lifecycle of a pitcher on the mound:
 3. Dynamic ratings adjustments (InGamePitcherRatings) reflecting count and fatigue deltas (Hot Path).
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .pitch_objects import PitchArsenal
 from .adjusted_ratings import (
@@ -33,6 +35,8 @@ class ActivePitcherState:
     pitch_count: int = 0
     pitch_confidences: Dict[str, float] = field(default_factory=dict)
     pitch_effectivenesses: Dict[str, float] = field(default_factory=dict)
+    game_plan: Dict[Any, Any] = field(default_factory=dict)
+    at_bat_history: Dict[Any, List[str]] = field(default_factory=dict)
 
     @classmethod
     def from_player(cls, pitcher: Any) -> 'ActivePitcherState':
@@ -91,4 +95,48 @@ class ActivePitcherState:
         Increments pitch count and advances running pitcher state.
         """
         self.pitch_count += 1
+
+    @staticmethod
+    def _batter_key(batter: Any) -> Any:
+        if batter is None:
+            return 'default'
+        if isinstance(batter, dict):
+            return batter.get('id') or batter.get('name') or 'unknown'
+        return getattr(batter, 'id', None) or getattr(batter, 'name', None) or str(batter)
+
+    def prebake_lineup_game_plan(self, lineup: List[Any]) -> None:
+        """
+        Pre-computes and caches matchup plans for all batters in the opposing lineup.
+        """
+        from ..pitch_selection.matchup import evaluate_platoon_and_arsenal
+
+        for b in lineup:
+            if b:
+                key = self._batter_key(b)
+                self.game_plan[key] = evaluate_platoon_and_arsenal(
+                    self.pitcher, b, self.arsenal
+                )
+
+    def get_matchup_plan(self, batter: Any) -> Any:
+        """
+        Retrieves cached matchup plan or evaluates on demand.
+        """
+        key = self._batter_key(batter)
+        if key not in self.game_plan:
+            from ..pitch_selection.matchup import evaluate_platoon_and_arsenal
+
+            self.game_plan[key] = evaluate_platoon_and_arsenal(
+                self.pitcher, batter, self.arsenal
+            )
+        return self.game_plan[key]
+
+    def record_at_bat_pitch(self, batter: Any, pitch_name: str) -> None:
+        """
+        Records a pitch thrown to a specific batter across their plate appearances.
+        """
+        key = self._batter_key(batter)
+        if key not in self.at_bat_history:
+            self.at_bat_history[key] = []
+        self.at_bat_history[key].append(pitch_name)
+
 
