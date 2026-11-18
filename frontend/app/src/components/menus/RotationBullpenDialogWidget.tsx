@@ -34,6 +34,8 @@ export function RotationBullpenDialogWidget({
 
   const activeRotation = rotations[selectedTeamTab];
 
+  const canSwap = (activeRotation?.starters?.length ?? 0) >= 2;
+
   function handleTabChange(index: number) {
     setSelectedTeamTab(index);
     setSelectedFirstPos(null);
@@ -41,6 +43,7 @@ export function RotationBullpenDialogWidget({
   }
 
   function handleStarterTap(pos: number) {
+    if (!canSwap) return;
     if (selectedFirstPos === null) {
       setSelectedFirstPos(pos);
     } else if (selectedFirstPos === pos) {
@@ -56,24 +59,31 @@ export function RotationBullpenDialogWidget({
   }
 
   function handleConfirmSwap() {
-    if (selectedFirstPos !== null && selectedSecondPos !== null && activeRotation) {
-      onSwapRotation(activeRotation.team_id, selectedFirstPos, selectedSecondPos);
+    if (swapReady && activeRotation) {
+      onSwapRotation(activeRotation.team_id, selectedFirstPos!, selectedSecondPos!);
       setSelectedFirstPos(null);
       setSelectedSecondPos(null);
     }
   }
 
-  const swapReady = selectedFirstPos !== null && selectedSecondPos !== null;
-  const swapHint =
-    selectedFirstPos !== null && selectedSecondPos !== null
+  function handleDismiss() {
+    setSelectedFirstPos(null);
+    setSelectedSecondPos(null);
+    onDismiss();
+  }
+
+  const swapReady = canSwap && selectedFirstPos !== null && selectedSecondPos !== null;
+  const swapHint = !canSwap
+    ? 'Rotation has only 1 starter — reordering unavailable'
+    : selectedFirstPos !== null && selectedSecondPos !== null
       ? `Ready to swap SP${selectedFirstPos} and SP${selectedSecondPos}`
       : selectedFirstPos !== null
         ? `Selected SP${selectedFirstPos}. Tap a second starter to swap.`
         : 'Tap two starters to reorder the rotation';
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onDismiss}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={handleDismiss}>
+      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={handleDismiss}>
         <TouchableOpacity activeOpacity={1} style={styles.dialog}>
           <Text style={styles.title}>ROTATION & BULLPEN</Text>
           <Text style={styles.subtitle}>
@@ -147,7 +157,7 @@ export function RotationBullpenDialogWidget({
 
           {/* Buttons */}
           <View style={styles.buttonRow}>
-            <TouchableOpacity onPress={onDismiss} style={styles.cancelBtn}>
+            <TouchableOpacity onPress={handleDismiss} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Close</Text>
             </TouchableOpacity>
             <TouchableOpacity

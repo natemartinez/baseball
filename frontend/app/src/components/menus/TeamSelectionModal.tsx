@@ -223,7 +223,7 @@ export function TeamSelectionModal() {
                             {p.name ?? `Player ${idx + 1}`} (#{p.number ?? p.jersey_number ?? 99})
                           </Text>
                           <Text style={styles.playerDetails}>
-                            {p.position ?? 'DH'} • Power {p.ratings?.Power ?? 80} / Contact {p.ratings?.Contact ?? 80}
+                            {p.position ?? 'DH'} • Power {p.ratings?.power ?? p.ratings?.Power ?? 80} / Contact {p.ratings?.contact ?? p.ratings?.Contact ?? 80}
                           </Text>
                         </View>
                         <View style={styles.positionBadge}>
@@ -250,7 +250,7 @@ export function TeamSelectionModal() {
                           {sp.name ?? `Pitcher ${idx + 1}`} (#{sp.number ?? 26})
                         </Text>
                         <Text style={styles.playerDetails}>
-                          Starting Pitcher • Control {sp.ratings?.Control ?? 82}
+                          Starting Pitcher • Control {sp.ratings?.control ?? sp.ratings?.Control ?? 82}
                         </Text>
                       </View>
                       <View style={[styles.positionBadge, styles.starterBadge]}>
@@ -271,7 +271,7 @@ export function TeamSelectionModal() {
                           {rp.name ?? `Reliever ${idx + 1}`} (#{rp.number ?? 99})
                         </Text>
                         <Text style={styles.playerDetails}>
-                          Bullpen Reliever • Control {rp.ratings?.Control ?? 80}
+                          Bullpen Reliever • Control {rp.ratings?.control ?? rp.ratings?.Control ?? 80}
                         </Text>
                       </View>
                       <View style={[styles.positionBadge, styles.relieverBadge]}>

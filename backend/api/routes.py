@@ -9,12 +9,7 @@ import math
 from flask import Blueprint, jsonify, request
 from typing import Dict, Any, Optional, List, Tuple
 
-from backend.database.db import (
-    get_all_teams,
-    get_player,
-    get_team_by_id_or_name,
-    get_team_roster_players,
-)
+from backend.database.roster_store import roster_store
 from backend.engine.game_engine import GameEngine, PitchFlowError
 
 api_bp = Blueprint('api', __name__)
@@ -23,61 +18,28 @@ game_engine = None
 current_home_roster = None
 current_away_roster = None
 
+# Backward-compatible alias for route callers & tests
+get_all_teams = roster_store.get_all_teams
+
 
 def load_team_roster(team_identifier: Any, season: int = 2026) -> dict:
-    """Queries SQLite via db.py and categorizes hydrated Player objects using roster metadata."""
-    team = get_team_by_id_or_name(team_identifier)
-    if not team:
-        team_name = str(team_identifier)
-        team_id = 1
-    else:
-        team_name = team['name']
-        team_id = team['id']
-
-    players = get_team_roster_players(team_name, season=season)
-
-    # Separate position players from pitchers using is_pitcher and role/position
-    position_players = [
-        p for p in players if p.position not in ('SP', 'RP', 'P', 'CP') and not p.is_pitcher
-    ]
-    starters = [
-        p for p in players if p.is_pitcher and (getattr(p, 'role', None) == 'starter' or p.position in ('SP', 'P'))
-    ]
-    bullpen = [
-        p for p in players if p.is_pitcher and (getattr(p, 'role', None) == 'bullpen' or p.position in ('RP', 'CP'))
-    ]
-
-    # Fallbacks if database has fewer players
-    if not starters and players:
-        pitchers = [p for p in players if p.is_pitcher]
-        starters = pitchers[:1] if pitchers else [players[0]]
-    if not position_players and players:
-        position_players = players
-
-    # Sort position players by batting_order ASC (non-ordered placed at the bottom)
-    position_players.sort(
-        key=lambda p: (
-            getattr(p, 'batting_order', None) is None,
-            getattr(p, 'batting_order', 999) or 999,
-            p.name,
-        )
-    )
-
-    return {
-        'team_id': team_id,
-        'team_name': team_name,
-        'all_players': players,
-        'position_players': position_players,
-        'pitchers': {
-            'starters': starters,
-            'bullpen': bullpen,
-        },
+    """Retrieves hydrated Player objects via in-memory RosterStore in O(1) time."""
+    roster = roster_store.get_roster(team_identifier, season=season, clone=True)
+    if roster:
+        return roster
+    fallback = roster_store.get_roster(1, season=season, clone=True)
+    return fallback if fallback else {
+        'team_id': 1,
+        'team_name': str(team_identifier),
+        'all_players': [],
+        'position_players': [],
+        'pitchers': {'starters': [], 'bullpen': []},
     }
 
 def get_or_create_engine() -> GameEngine:
     global game_engine, current_home_roster, current_away_roster
     if game_engine is None:
-        teams = get_all_teams()
+        teams = roster_store.get_all_teams()
         home_team = teams[0] if len(teams) > 0 else {'id': 1, 'name': 'New York Mets'}
         away_team = teams[1] if len(teams) > 1 else {'id': 2, 'name': 'New York Yankees'}
 
@@ -437,7 +399,7 @@ def start_game():
     except ValueError as error:
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
-    teams = get_all_teams()
+    teams = roster_store.get_all_teams()
     # Default to 1 (Home: Mets) and 2 (Away: Yankees) if not specified
     home_id = data.get('home_team_id') or data.get('home_team') or (teams[0]['id'] if teams else 1)
     away_id = data.get('away_team_id') or data.get('away_team') or (teams[1]['id'] if len(teams) > 1 else 2)
@@ -604,10 +566,13 @@ def sim_at_bat():
 
 def _resolve_target_roster(team_param: Any) -> Optional[dict]:
     """Resolves target team roster by DB team_id, team_name, or index."""
+    active_rosters = [r for r in [current_home_roster, current_away_roster] if r]
+    if not active_rosters:
+        get_or_create_engine()
+        active_rosters = [r for r in [current_home_roster, current_away_roster] if r]
+
     if team_param is None:
         return current_home_roster
-
-    active_rosters = [r for r in [current_home_roster, current_away_roster] if r]
     # Check by team_id
     for r in active_rosters:
         if str(r.get('team_id')) == str(team_param):
@@ -617,8 +582,8 @@ def _resolve_target_roster(team_param: Any) -> Optional[dict]:
         if r.get('team_name', '').lower() == str(team_param).lower():
             return r
 
-    # Match by DB team lookup
-    team = get_team_by_id_or_name(team_param)
+    # Match by team lookup
+    team = roster_store.get_team(team_param)
     if team:
         for r in active_rosters:
             if r.get('team_name') == team['name']:
@@ -650,7 +615,7 @@ def reset():
     except ValueError as error:
         return jsonify({'status': 'error', 'message': str(error)}), 400
 
-    teams = get_all_teams()
+    teams = roster_store.get_all_teams()
     home_id = data.get('home_team_id') or (current_home_roster.get('team_id') if current_home_roster else (teams[0]['id'] if teams else 1))
     away_id = data.get('away_team_id') or (current_away_roster.get('team_id') if current_away_roster else (teams[1]['id'] if len(teams) > 1 else 2))
 
@@ -711,6 +676,9 @@ def swap_rotation():
         return jsonify({'error': f'Invalid team identifier: {team_param}'}), 400
 
     rotation = roster['pitchers']['starters']
+    if len(rotation) < 2:
+        return jsonify({'error': 'Rotation must contain at least 2 starters to swap.'}), 400
+
     if min(pos1, pos2) < 1 or max(pos1, pos2) > len(rotation):
         return jsonify({'error': 'Rotation index out of range.'}), 400
 
@@ -738,7 +706,7 @@ def get_teams():
     )
     season = int(request.args.get('season', 2026))
 
-    teams = get_all_teams()
+    teams = roster_store.get_all_teams()
     teams_payload = []
     for t in teams:
         item = {
@@ -768,7 +736,7 @@ def get_teams():
 def get_team_selection():
     """Direct bridge returning all teams with their complete rosters for team selection."""
     season = int(request.args.get('season', 2026))
-    teams = get_all_teams()
+    teams = roster_store.get_all_teams()
     teams_payload = []
     for t in teams:
         r = load_team_roster(t['id'], season=season)
@@ -815,7 +783,7 @@ def rosters():
             }
         })
 
-    teams = get_all_teams()
+    teams = roster_store.get_all_teams()
     data = {}
     for t in teams:
         r = load_team_roster(t['id'], season=season)
@@ -841,7 +809,7 @@ def pitcher_info():
     pitcher = None
     if pitcher_id:
         try:
-            pitcher = get_player(int(pitcher_id))
+            pitcher = roster_store.get_player(int(pitcher_id))
         except (ValueError, TypeError):
             return jsonify({'status': 'error', 'message': 'Invalid pitcher_id'}), 400
     else:
