@@ -20,8 +20,8 @@ DEFAULT_ARSENAL_PAYLOAD: List[Dict[str, Any]] = [
         'break_rating': 90,
         'control_rating': 84,
         'command': 84.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
+        'max_radius_inches': 3.0,
+        'sigma': 0.10,
         'tunnel_partners': ['SWP', 'KC'],
         'statcast': {
             'whiff_pct': 25.0,
@@ -44,8 +44,8 @@ DEFAULT_ARSENAL_PAYLOAD: List[Dict[str, Any]] = [
         'break_rating': 99,
         'control_rating': 80,
         'command': 80.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
+        'max_radius_inches': 3.0,
+        'sigma': 0.10,
         'tunnel_partners': ['4SFB', 'SI'],
         'statcast': {
             'whiff_pct': 44.5,
@@ -68,8 +68,8 @@ DEFAULT_ARSENAL_PAYLOAD: List[Dict[str, Any]] = [
         'break_rating': 88,
         'control_rating': 85,
         'command': 85.0,
-        'max_radius_inches': 1.5,
-        'sigma': 0.05,
+        'max_radius_inches': 3.0,
+        'sigma': 0.10,
         'tunnel_partners': ['SWP', 'KC'],
         'statcast': {
             'whiff_pct': 14.0,
@@ -92,8 +92,8 @@ DEFAULT_ARSENAL_PAYLOAD: List[Dict[str, Any]] = [
         'break_rating': 94,
         'control_rating': 78,
         'command': 78.0,
-        'max_radius_inches': 2.0,
-        'sigma': 0.067,
+        'max_radius_inches': 4.0,
+        'sigma': 0.133,
         'tunnel_partners': ['4SFB', 'SI'],
         'statcast': {
             'whiff_pct': 38.0,
@@ -166,7 +166,7 @@ def build_arsenal_payload(
         vertical_break = item.get('induced_vertical_break_in')
 
         m = metrics_by_name.get(name)
-        max_radius = round(m.max_radius_inches, 3) if m else 1.5
+        max_radius = round(m.max_radius_inches, 3) if m else 3.0
         effectiveness = round(m.baseline_effectiveness, 1) if m else 80.0
 
         payload.append({
@@ -210,7 +210,7 @@ def build_arsenal_payload(
                 item.get('break_rating') or display.get('break_rating', 80.0)
             ),
             'max_radius_inches': max_radius,
-            'sigma': round(m.sigma, 4) if m else 0.05,
+            'sigma': round(m.sigma, 4) if m else round(max_radius / 30.0, 4),
             'effectiveness': effectiveness,
             'horizontal_break_in': float(
                 horizontal_break

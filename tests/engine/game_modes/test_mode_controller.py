@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from backend.api.app import create_app
-from backend.engine.modes.mode_controller import ModeController, GameMode
+from backend.engine.game_modes.mode_controller import ModeController, GameMode
 from backend.engine.game_engine.engine import GameEngine
 
 

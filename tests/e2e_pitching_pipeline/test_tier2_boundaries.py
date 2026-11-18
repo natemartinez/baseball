@@ -158,17 +158,17 @@ def test_f1_b5_pitch_count_zero_and_negative_tolerance():
 # ============================================================================
 
 def test_f2_b1_sub_40_command_radius_clamping():
-    """F2.B1: Command ratings below 40 clamp base radius to exactly 10.50 inches."""
+    """F2.B1: Command ratings below 40 clamp base radius to exactly 21.00 inches."""
     for cmd in [39.9, 30.0, 15.0, 0.0, -10.0]:
         r = get_max_error_radius_inches(cmd)
-        assert math.isclose(r, 10.50, abs_tol=1e-3), f"Base radius at command {cmd} should clamp to 10.50\", got {r}\""
+        assert math.isclose(r, 21.00, abs_tol=1e-3), f"Base radius at command {cmd} should clamp to 21.00\", got {r}\""
 
 
 def test_f2_b2_over_99_command_radius_clamping():
-    """F2.B2: Command ratings above 99 clamp base radius to exactly 1.50 inches."""
+    """F2.B2: Command ratings above 99 clamp base radius to exactly 3.00 inches."""
     for cmd in [99.1, 100.0, 105.0, 150.0]:
         r = get_max_error_radius_inches(cmd)
-        assert math.isclose(r, 1.50, abs_tol=1e-3), f"Base radius at command {cmd} should clamp to 1.50\", got {r}\""
+        assert math.isclose(r, 3.00, abs_tol=1e-3), f"Base radius at command {cmd} should clamp to 3.00\", got {r}\""
 
 
 def test_f2_b3_perfect_scaling_at_extrema():
@@ -176,13 +176,13 @@ def test_f2_b3_perfect_scaling_at_extrema():
     tiers = get_tiers_module()
     mult = tiers.TIMING_MULTIPLIERS[tiers.TimingTier.PERFECT]
 
-    # At command 99: base 1.50" -> 0.78"
+    # At command 99: base 3.00" -> 1.56"
     r_elite = get_max_error_radius_inches(99.0) * mult
-    assert math.isclose(r_elite, 0.78, abs_tol=0.02)
+    assert math.isclose(r_elite, 1.56, abs_tol=0.02)
 
-    # At command 40: base 10.50" -> 5.46"
+    # At command 40: base 21.00" -> 10.92"
     r_poor = get_max_error_radius_inches(40.0) * mult
-    assert math.isclose(r_poor, 5.46, abs_tol=0.05)
+    assert math.isclose(r_poor, 10.92, abs_tol=0.05)
 
 
 def test_f2_b4_poor_scaling_at_extrema():
@@ -190,13 +190,13 @@ def test_f2_b4_poor_scaling_at_extrema():
     tiers = get_tiers_module()
     mult = tiers.TIMING_MULTIPLIERS[tiers.TimingTier.POOR]
 
-    # At command 99: base 1.50" -> 5.625"
+    # At command 99: base 3.00" -> 11.25"
     r_elite = get_max_error_radius_inches(99.0) * mult
-    assert math.isclose(r_elite, 5.625, abs_tol=0.05)
+    assert math.isclose(r_elite, 11.25, abs_tol=0.05)
 
-    # At command 40: base 10.50" -> 39.375"
+    # At command 40: base 21.00" -> 78.75"
     r_poor = get_max_error_radius_inches(40.0) * mult
-    assert math.isclose(r_poor, 39.375, abs_tol=0.1)
+    assert math.isclose(r_poor, 78.75, abs_tol=0.1)
 
 
 def test_f2_b5_radius_strictly_positive_finite():
@@ -558,21 +558,21 @@ def test_f6_b5_label_consistency_for_all_possible_timings():
 # ============================================================================
 
 def test_f7_b1_reticle_scale_at_command_zero():
-    """F7.B1: Base reticle at command 0 is 10.50\", POOR reticle expands to 39.375\"."""
+    """F7.B1: Base reticle at command 0 is 21.00\", POOR reticle expands to 78.75\"."""
     base_r = get_max_error_radius_inches(0.0)
-    assert math.isclose(base_r, 10.50, abs_tol=1e-3)
+    assert math.isclose(base_r, 21.00, abs_tol=1e-3)
 
     geom = calculate_reticle_geometry(base_r, "POOR")
-    assert math.isclose(geom["executed_radius_inches"], 39.375, abs_tol=0.1)
+    assert math.isclose(geom["executed_radius_inches"], 78.75, abs_tol=0.1)
 
 
 def test_f7_b2_reticle_scale_at_command_100():
-    """F7.B2: Base reticle at command 100 is 1.50\", PERFECT reticle contracts to 0.78\"."""
+    """F7.B2: Base reticle at command 100 is 3.00\", PERFECT reticle contracts to 1.56\"."""
     base_r = get_max_error_radius_inches(100.0)
-    assert math.isclose(base_r, 1.50, abs_tol=1e-3)
+    assert math.isclose(base_r, 3.00, abs_tol=1e-3)
 
     geom = calculate_reticle_geometry(base_r, "PERFECT")
-    assert math.isclose(geom["executed_radius_inches"], 0.78, abs_tol=0.02)
+    assert math.isclose(geom["executed_radius_inches"], 1.56, abs_tol=0.02)
 
 
 def test_f7_b3_exact_zero_miss_vector():

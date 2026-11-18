@@ -190,7 +190,12 @@ export function PlayerCardModal() {
                   );
                 const itemConf = confidences[item.name] ?? holisticConfidence;
                 const baseCmd = item.command ?? item.control_rating ?? pitcherControl;
-                const effCmd = calculateCombinedEffectiveCommand(baseCmd, itemConf, itemEff);
+                const effCmd = calculateCombinedEffectiveCommand(
+                  baseCmd,
+                  itemConf,
+                  itemEff,
+                  item.id || item.name,
+                );
                 const tier = getAbilityTier(effCmd);
                 const tierColor = getAbilityTierColor(tier);
                 const isSelected = item.name === selectedPitchName;

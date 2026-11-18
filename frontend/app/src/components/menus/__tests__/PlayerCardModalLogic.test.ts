@@ -27,10 +27,18 @@ describe('PlayerCardModal pitch data synthesis and edge cases', () => {
     );
     assert.ok(eff >= 70 && eff <= 95);
 
-    const effCmd = calculateCombinedEffectiveCommand(samplePitch.control_rating ?? 80, 60, eff);
-    assert.ok(effCmd > 0);
+    const effCmdWithoutType = calculateCombinedEffectiveCommand(samplePitch.control_rating ?? 80, 60, eff);
+    const effCmdWithType = calculateCombinedEffectiveCommand(
+      samplePitch.control_rating ?? 80,
+      60,
+      eff,
+      samplePitch.name,
+    );
+    assert.ok(effCmdWithType > 0);
+    // Slider difficulty modifier is 1.15 -> penalty = 3
+    assert.strictEqual(effCmdWithType, effCmdWithoutType - 3);
 
-    const tier = getAbilityTier(effCmd);
+    const tier = getAbilityTier(effCmdWithType);
     const color = getAbilityTierColor(tier);
     assert.ok(['ELITE', 'GREAT', 'GOOD', 'OKAY'].includes(tier));
     assert.ok(typeof color === 'string' && color.startsWith('#'));

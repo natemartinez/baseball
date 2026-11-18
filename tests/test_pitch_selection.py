@@ -317,7 +317,7 @@ def test_execute_pitch_uses_the_user_pitch_in_delivery_telemetry():
 
 
 def test_practice_delivery_builder_forces_the_pitch_and_exact_target():
-    from backend.engine.modes.practice_mode import PracticeDeliveryBuilder
+    from backend.engine.game_modes.practice_mode import PracticeDeliveryBuilder
     engine = _engine()
     delivery = PracticeDeliveryBuilder.build(
         pitcher=engine.pitcher,

@@ -11,7 +11,7 @@ from ..pitcher_info.pitch_objects import PITCH_CATEGORIES, PitchArsenal
 
 
 class PitchStrategy:
-    """Evaluates count leverage and selects pitches based on arsenal usage and context."""
+    """Evaluates count leverage and selects pitches based on arsenal usage and context of batter and situation."""
 
     def __init__(
         self,

@@ -29,3 +29,23 @@ def test_returns_list_of_dicts():
     assert isinstance(result, list)
     assert all(isinstance(item, dict) for item in result)
 
+
+def test_default_arsenal_payload_sigma_scaled_to_radius():
+    """Validates that DEFAULT_ARSENAL_PAYLOAD and DEFAULT_ARSENAL sigmas match max_radius_inches / 30.0."""
+    from backend.engine.pitching_engine.pitcher_info.pitch_objects import DEFAULT_ARSENAL
+
+    for source, label in [
+        (DEFAULT_ARSENAL_PAYLOAD, "DEFAULT_ARSENAL_PAYLOAD"),
+        (DEFAULT_ARSENAL, "DEFAULT_ARSENAL"),
+    ]:
+        for pitch in source:
+            radius = pitch["max_radius_inches"]
+            expected_sigma = round(radius / 30.0, 3)
+            actual_sigma = round(pitch["sigma"], 3)
+            assert actual_sigma == expected_sigma, (
+                f"{label} {pitch.get('name') or pitch.get('id')} has unscaled sigma: "
+                f"radius={radius}, sigma={actual_sigma}, expected={expected_sigma}"
+            )
+
+
+

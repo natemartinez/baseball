@@ -220,14 +220,14 @@ def test_f2_timing_tier_multipliers():
 
 
 def test_f2_base_radius_anchor_calibration_curve():
-    """F2.2: Base error radius anchors to GOOD 1.0x curve (1.50\" to 10.50\")."""
+    """F2.2: Base error radius anchors to GOOD 1.0x curve (3.00\" to 21.00\")."""
     expected_curve = [
-        (99.0, 1.50),
-        (90.0, 1.875),
-        (82.0, 2.25),
-        (68.0, 4.50),
-        (55.0, 6.75),
-        (40.0, 10.50),
+        (99.0, 3.00),
+        (90.0, 3.75),
+        (82.0, 4.50),
+        (68.0, 9.00),
+        (55.0, 13.50),
+        (40.0, 21.00),
     ]
 
     for cmd, expected_r in expected_curve:

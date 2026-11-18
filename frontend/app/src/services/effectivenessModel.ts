@@ -231,9 +231,62 @@ export function calculateCommandAdjustmentFromEffectiveness(
   }
 }
 
+export const PITCH_TYPE_MODIFIERS: Record<string, number> = {
+  '4SFB': 1.00,
+  '2SFB': 1.02,
+  'CUT': 1.05,
+  'SNK': 1.05,
+  'CH': 1.08,
+  'SL': 1.15,
+  'SWP': 1.18,
+  'CB': 1.20,
+  'SPL': 1.25,
+  'KN': 1.35,
+};
+
+export const PITCH_TYPE_ALIASES: Record<string, string> = {
+  'FOUR-SEAM FASTBALL': '4SFB',
+  '4-SEAM FASTBALL': '4SFB',
+  'TWO-SEAM FASTBALL': '2SFB',
+  '2-SEAM FASTBALL': '2SFB',
+  'CUTTER': 'CUT',
+  'SINKER': 'SNK',
+  'POWER SINKER': 'SNK',
+  'SI': 'SNK',
+  'CHANGEUP': 'CH',
+  'CIRCLE CHANGEUP': 'CH',
+  'SLIDER': 'SL',
+  'SWEEPER': 'SWP',
+  'SPIN MONSTER SWEEPER': 'SWP',
+  'CURVEBALL': 'CB',
+  'SPIKE CURVEBALL': 'CB',
+  'SLOW CURVE': 'CB',
+  'KNUCKLE CURVE': 'CB',
+  'KC': 'CB',
+  'SPLITTER': 'SPL',
+  'FORKBALL': 'SPL',
+  'GHOST FORK': 'SPL',
+  'GFORK': 'SPL',
+  'FS': 'SPL',
+  'KNUCKLEBALL': 'KN',
+};
+
+export function getPitchTypeModifier(pitchType?: string): number {
+  if (!pitchType) return 1.00;
+  const cleaned = pitchType.trim().toUpperCase();
+  if (cleaned in PITCH_TYPE_MODIFIERS) {
+    return PITCH_TYPE_MODIFIERS[cleaned];
+  }
+  const mapped = PITCH_TYPE_ALIASES[cleaned];
+  if (mapped && mapped in PITCH_TYPE_MODIFIERS) {
+    return PITCH_TYPE_MODIFIERS[mapped];
+  }
+  return 1.00;
+}
+
 /**
- * Calculates combined effective command factoring both psychological confidence
- * and physical pitch effectiveness.
+ * Calculates combined effective command factoring pitch type difficulty,
+ * psychological confidence, and physical pitch effectiveness.
  *
  * Clamped to [30, 99].
  */
@@ -241,6 +294,7 @@ export function calculateCombinedEffectiveCommand(
   baseCommand: number,
   confidence: number = 50.0,
   effectiveness: number = 80.0,
+  pitchType?: string,
 ): number {
   const conf = Math.max(0, Math.min(100, confidence));
   let confDelta = 0;
@@ -251,7 +305,9 @@ export function calculateCombinedEffectiveCommand(
   }
 
   const effDelta = calculateCommandAdjustmentFromEffectiveness(effectiveness);
-  const effective = baseCommand + confDelta + effDelta;
+  const pitchMod = getPitchTypeModifier(pitchType);
+  const pitchPenalty = Math.max(0.0, (pitchMod - 1.0) * 20.0);
+  const effective = baseCommand - pitchPenalty + confDelta + effDelta;
   return Math.max(30, Math.min(99, Math.round(effective * 10) / 10));
 }
 

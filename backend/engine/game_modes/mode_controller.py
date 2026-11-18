@@ -29,7 +29,7 @@ class ModeController:
     @property
     def practice_controller(self) -> Any:
         if self._practice_controller is None:
-            from backend.engine.modes.practice_mode import PracticeModeController
+            from backend.engine.game_modes.practice_mode import PracticeModeController
             self._practice_controller = PracticeModeController(self.engine)
         return self._practice_controller
 

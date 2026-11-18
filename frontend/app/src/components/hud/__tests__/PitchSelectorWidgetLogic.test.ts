@@ -26,6 +26,17 @@ describe('PitchSelectorWidget ArsenalChip Visual Logic', () => {
     assert.ok(typeof colorMid === 'string' && colorMid.startsWith('#'));
   });
 
+  it('differentiates chip effective command based on pitch type difficulty modifier', () => {
+    const fbCmd = calculateCombinedEffectiveCommand(80, 50, 80, '4-Seam Fastball');
+    const slCmd = calculateCombinedEffectiveCommand(80, 50, 80, 'Slider');
+    const cbCmd = calculateCombinedEffectiveCommand(80, 50, 80, 'Curveball');
+    assert.strictEqual(fbCmd, 80);
+    assert.strictEqual(slCmd, 77); // (1.15 - 1.0) * 20 = 3
+    assert.strictEqual(cbCmd, 76); // (1.20 - 1.0) * 20 = 4
+    assert.ok(slCmd < fbCmd);
+    assert.ok(cbCmd < slCmd);
+  });
+
   it('safely handles pitcher with undefined or null arsenal', () => {
     const pitcherWithoutArsenal = {
       id: 1,

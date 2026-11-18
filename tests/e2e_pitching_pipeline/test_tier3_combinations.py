@@ -43,9 +43,9 @@ def test_f3_combo_poor_pitcher_knuckleball_high_leverage_late_release():
     assert tier == tiers.AbilityTier.POOR
     assert eff_cmd < 40.0
 
-    # 2. Base error radius clamps to max 10.50"
+    # 2. Base error radius clamps to max 21.00"
     base_r = get_max_error_radius_inches(eff_cmd)
-    assert math.isclose(base_r, 10.50, abs_tol=1e-3)
+    assert math.isclose(base_r, 21.00, abs_tol=1e-3)
 
     # 3. Delivery execution with LATE POOR release
     rng = random.Random(111)
@@ -62,11 +62,11 @@ def test_f3_combo_poor_pitcher_knuckleball_high_leverage_late_release():
         rng=rng,
     )
 
-    # Executed radius blooms ~3.75x (10.50 * 3.75 = 39.375)
-    assert math.isclose(delivery["executed_radius_inches"], 39.375, abs_tol=0.2)
+    # Executed radius blooms ~3.75x (21.00 * 3.75 = 78.75)
+    assert math.isclose(delivery["executed_radius_inches"], 78.75, abs_tol=0.2)
     # Late miss directional spike into dirt (-Z)
     assert delivery["realized_z"] < target_z
-    assert delivery["radial_miss_inches"] <= 39.375 + 0.1
+    assert delivery["radial_miss_inches"] <= 78.75 + 0.1
 
 
 def test_f3_combo_elite_pitcher_slider_perfect_timing():
@@ -90,7 +90,7 @@ def test_f3_combo_elite_pitcher_slider_perfect_timing():
     assert eff_cmd >= 82.0
 
     base_r = get_max_error_radius_inches(eff_cmd)
-    assert base_r <= 2.25
+    assert base_r <= 4.50
 
     rng = random.Random(222)
     delivery = calc.calculate_pitch_delivery(
@@ -105,10 +105,10 @@ def test_f3_combo_elite_pitcher_slider_perfect_timing():
         rng=rng,
     )
 
-    # Contracted radius: <= 2.25 * 0.52 = ~1.17"
-    assert delivery["executed_radius_inches"] <= 1.25
+    # Contracted radius: <= 4.50 * 0.52 = ~2.34"
+    assert delivery["executed_radius_inches"] <= 2.50
     assert delivery["radial_miss_inches"] <= delivery["executed_radius_inches"] + 0.05
-    assert delivery["radial_miss_inches"] < 1.10
+    assert delivery["radial_miss_inches"] < 2.20
 
 
 def test_f3_combo_mediocre_pitcher_changeup_early_okay_release_lhp():

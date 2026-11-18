@@ -800,7 +800,12 @@ const ArsenalChip = React.memo(function ArsenalChip({
   const chipEffectiveness = Math.max(0, Math.min(100, effectiveness));
   const effColor = getEffectivenessColor(chipEffectiveness);
   const baseCmd = item.command ?? item.control_rating ?? pitcherControl;
-  const effCmd = calculateCombinedEffectiveCommand(baseCmd, confidencePct, chipEffectiveness);
+  const effCmd = calculateCombinedEffectiveCommand(
+    baseCmd,
+    confidencePct,
+    chipEffectiveness,
+    item.id || item.name,
+  );
   const abilityTier = getAbilityTier(effCmd);
   const tierColor = getAbilityTierColor(abilityTier);
 

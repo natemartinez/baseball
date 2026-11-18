@@ -163,6 +163,15 @@ describe('Pitch Effectiveness Model', () => {
       assert.strictEqual(getAbilityTier(p2), 'GREAT');
     });
 
+    it('applies pitch type difficulty penalty to effective command', () => {
+      const fbCmd = calculateCombinedEffectiveCommand(80, 50, 80, '4-Seam Fastball');
+      const slCmd = calculateCombinedEffectiveCommand(80, 50, 80, 'Slider');
+      const cbCmd = calculateCombinedEffectiveCommand(80, 50, 80, 'Curveball');
+      assert.strictEqual(fbCmd, 80);
+      assert.ok(slCmd < fbCmd, 'Slider must have lower effective command than Fastball');
+      assert.ok(cbCmd < slCmd, 'Curveball must have lower effective command than Slider');
+    });
+
     it('Pitcher 1 (90 Eff) throws consistently faster than Pitcher 2 (75 Eff)', () => {
       const baseVelo = 95.0;
       const veloP1 = applyEffectivenessToVelocity(baseVelo, 90.0);
