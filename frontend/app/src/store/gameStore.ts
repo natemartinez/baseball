@@ -170,6 +170,7 @@ export interface GameUiState {
   isPitchFeedOpen: boolean;
   isTrajectoryOpen: boolean;
   isPlayerCardModalOpen: boolean;
+  isBattedBallPaused: boolean;
 
   // Loading / error
   loadingState: LoadingState;
@@ -244,6 +245,8 @@ export interface GameActions {
   togglePitchFeed(open?: boolean): void
   toggleTrajectory(open?: boolean): void
   togglePlayerCardModal(open?: boolean): void
+  setBattedBallPaused(paused: boolean): void;
+  toggleBattedBallPaused(): void;
 
   // UI mutations
   setSelectedPitchName(pitchName: string): void;
@@ -286,6 +289,7 @@ const initialState: GameUiState = {
   isPitchFeedOpen: false,
   isTrajectoryOpen: false,
   isPlayerCardModalOpen: false,
+  isBattedBallPaused: false,
   activeDevTab: 'gameday',
   countFilter: 'ALL',
   situationFilter: 'ALL',
@@ -1118,6 +1122,14 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
       }
       return { isPlayerCardModalOpen: false };
     });
+  },
+
+  setBattedBallPaused(paused: boolean) {
+    set({ isBattedBallPaused: paused });
+  },
+
+  toggleBattedBallPaused() {
+    set((s) => ({ isBattedBallPaused: !s.isBattedBallPaused }));
   },
 
   setCustomTarget(coords: { x: number; z: number } | null) {
