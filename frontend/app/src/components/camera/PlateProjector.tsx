@@ -8,7 +8,7 @@ import {
 import type { ProjectedPlatePosition } from './types';
 import { useThree } from '../gamefield/useThree';
 
-const PLATE_Y = 0.015;
+const PLATE_Y = 0.070;
 const PLATE_WORLD_POSITION = new THREE.Vector3(0, PLATE_Y, 0);
 
 /** Strike-zone bounds used by the 2D HUD (Statcast feet). */

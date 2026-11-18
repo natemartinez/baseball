@@ -1,4 +1,4 @@
-export type GameCameraMode = 'PITCH' | 'BIRDSEYE';
+export type GameCameraMode = 'PITCH' | 'BIRDSEYE' | 'TRACKING' | 'GROUNDER';
 
 export interface ProjectedPlatePosition {
   xRatio: number;

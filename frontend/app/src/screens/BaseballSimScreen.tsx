@@ -31,6 +31,7 @@ import type {
 } from '../components/gamefield/types';
 import {
   CAMERA_SEQUENCE_ENABLED,
+  resolveGameCameraMode,
   type GameCameraMode,
   type ProjectedPlatePosition,
 } from '../components/camera';
@@ -55,6 +56,7 @@ import { SwingMeterWidget } from '../components/hud/SwingMeterWidget';
 import { BattingDrillHud } from '../components/hud/BattingDrillHud';
 import { BattingDrillModal } from '../components/menus/BattingDrillModal';
 import { GamedayDevMenuModal } from '../components/debug/GamedayDevMenuModal';
+import { HitTestLauncher } from '../components/debug/HitTestLauncher';
 import { getZoneNominalTarget, getAbilityTier } from '../services/gamedayMath';
 import { calculateConfidenceEffectiveCommand } from '../services/confidenceModel';
 import { computeBaselineEffectiveness, calculateCombinedEffectiveCommand } from '../services/effectivenessModel';
@@ -65,26 +67,12 @@ import {
 } from '../services/pitchTrajectory';
 import { Colors } from '../theme/colors';
 
+import { isValidBattedBallTrace } from '../services/battedBallValidation';
+export { isValidBattedBallTrace };
+
 const DEFAULT_RELEASE_EXTENSION: [number, number, number] = [-1.5, 6.0, -59.5];
 
 const RESULT_CAMERA_HOLD_MS = 1600;
-
-/** A trace is only playable when it has a finite hang time and 3D samples. */
-function isValidBattedBallTrace(trace: unknown): trace is BattedBallTelemetry {
-  if (!trace || typeof trace !== 'object') return false;
-  const candidate = trace as Partial<BattedBallTelemetry>;
-  if (!Number.isFinite(candidate.hang_time_s)) return false;
-
-  const samples = candidate.samples;
-  if (!Array.isArray(samples) || samples.length < 2) return false;
-
-  return samples.every(
-    (sample) =>
-      Array.isArray(sample) &&
-      sample.length === 3 &&
-      sample.every((value) => Number.isFinite(value)),
-  );
-}
 
 /**
  * BaseballSimScreen — Root screen of the simulation client.
@@ -262,17 +250,30 @@ export function BaseballSimScreen() {
   const pendingBattedBall = pendingResolution?.pitch_details?.batted_ball;
   const hasPendingBattedBall = isValidBattedBallTrace(pendingBattedBall);
 
-  // Pitch -> Contact -> Result. The automatic bird's-eye cut starts at contact
-  // (the REACTING beat) and lasts through the flight, reveal, and result hold.
-  const isBattedBallCameraActive =
-    CAMERA_SEQUENCE_ENABLED &&
-    ((pitchPhase === 'REACTING' && hasPendingBattedBall) ||
-      pitchPhase === 'BATTED_BALL' ||
-      (pitchPhase === 'IDLE' && resultCameraHold));
+  const [debugCameraMode, setDebugCameraMode] = useState<GameCameraMode | null>(null);
 
-  const cameraMode: GameCameraMode = isBattedBallCameraActive
-    ? 'BIRDSEYE'
-    : manualCameraMode;
+  const isGrounder =
+    activeBattedBall?.isGrounder ??
+    (pendingBattedBall
+      ? Number.isFinite(pendingBattedBall.launch_angle_deg) &&
+        (pendingBattedBall.launch_angle_deg <= 10.0 ||
+          (Number.isFinite(pendingBattedBall.apex_height_ft) &&
+            pendingBattedBall.apex_height_ft < 8.0))
+      : false);
+
+  // Pitch -> Contact -> Result. The automatic follow camera engages when the
+  // batted ball takes flight in BATTED_BALL and holds through the result reveal.
+  const cameraMode: GameCameraMode =
+    debugCameraMode ??
+    resolveGameCameraMode(
+      pitchPhase,
+      Boolean(activeBattedBall || (pitchPhase === 'BATTED_BALL' && hasPendingBattedBall)),
+      resultCameraHold,
+      manualCameraMode,
+      undefined,
+      isGrounder,
+    );
+  const isBattedBallCameraActive = cameraMode === 'TRACKING' || cameraMode === 'GROUNDER';
 
   const handleToggleCamera = useCallback(() => {
     setManualCameraMode((prev) => (prev === 'PITCH' ? 'BIRDSEYE' : 'PITCH'));
@@ -389,6 +390,11 @@ export function BaseballSimScreen() {
     if (revealedResolutionRef.current === pendingResolution) return;
     revealedResolutionRef.current = pendingResolution;
 
+    const isBatted = isValidBattedBallTrace(pendingResolution.pitch_details?.batted_ball);
+    // Batted ball uses a crisp 160ms contact follow-through in batting view before
+    // handing off to the follow camera.
+    const delayMs = isBatted ? 160 : 650;
+
     const timer = setTimeout(() => {
       if (isValidBattedBallTrace(pendingResolution.pitch_details?.batted_ball)) {
         animatedBattedBallTraceRef.current =
@@ -397,7 +403,7 @@ export function BaseballSimScreen() {
       } else {
         revealPitch();
       }
-    }, 650);
+    }, delayMs);
     return () => clearTimeout(timer);
   }, [pitchPhase, pendingResolution, revealPitch, beginBattedBall]);
 
@@ -410,10 +416,24 @@ export function BaseballSimScreen() {
     }
 
     battedBallSequence.current += 1;
+    const isGrounder =
+      Number.isFinite(trace.launch_angle_deg) &&
+      (trace.launch_angle_deg <= 10.0 || (Number.isFinite(trace.apex_height_ft) && trace.apex_height_ft < 8.0));
+    const landingPos: [number, number, number] = [
+      Number.isFinite(trace.landing_x_ft) ? trace.landing_x_ft : 0,
+      0,
+      Number.isFinite(trace.landing_y_ft) ? -trace.landing_y_ft : -50,
+    ];
+
     setActiveBattedBall({
       id: `batted-${battedBallSequence.current}`,
       hangTime: trace.hang_time_s,
       samples: trace.samples,
+      isGrounder,
+      landingPos,
+      launchAngle: trace.launch_angle_deg,
+      apexHeight: trace.apex_height_ft,
+      distance: trace.distance_ft,
     });
 
     const timeoutMs = Math.min(
@@ -426,7 +446,6 @@ export function BaseballSimScreen() {
       // that already ran does not unmount the retained visual.
       if (useGameStore.getState().pitchPhase !== 'BATTED_BALL') return;
       setResultCameraHold(true);
-      setActiveBattedBall(null);
       completeBattedBall();
     }, timeoutMs);
 
@@ -434,14 +453,15 @@ export function BaseballSimScreen() {
   }, [pitchPhase, pendingResolution, completeBattedBall]);
 
   // One-shot result hold after the reveal, then back to the pitch camera.
+  // Guard against debug camera overrides from HitTestLauncher so debug launches own their timing.
   useEffect(() => {
-    if (pitchPhase !== 'IDLE' || !resultCameraHold) return;
+    if (pitchPhase !== 'IDLE' || !resultCameraHold || debugCameraMode !== null) return;
     const timer = setTimeout(() => {
       setResultCameraHold(false);
       setActiveBattedBall(null);
     }, RESULT_CAMERA_HOLD_MS);
     return () => clearTimeout(timer);
-  }, [pitchPhase, resultCameraHold]);
+  }, [pitchPhase, resultCameraHold, debugCameraMode]);
 
   // A new pitch always returns to the pitch camera and drops any retained
   // batted-ball visual. Reset/clear paths also land here.
@@ -463,11 +483,11 @@ export function BaseballSimScreen() {
   }, [latestPitch]);
 
   // Clear a retained visual if the phase drops to IDLE without a hold
-  // (for example clearPendingPitch).
+  // (for example clearPendingPitch). Guard against clearing active debug hits.
   useEffect(() => {
-    if (pitchPhase !== 'IDLE' || resultCameraHold) return;
+    if (pitchPhase !== 'IDLE' || resultCameraHold || debugCameraMode !== null) return;
     if (activeBattedBall) setActiveBattedBall(null);
-  }, [pitchPhase, resultCameraHold, activeBattedBall]);
+  }, [pitchPhase, resultCameraHold, debugCameraMode, activeBattedBall]);
 
   const handleBattedBallComplete = useCallback(() => {
     // Read the live phase: a stale completion callback can arrive after the
@@ -479,6 +499,24 @@ export function BaseballSimScreen() {
     // Keep the ball, arc, and ring mounted through the hold.
     completeBattedBall();
   }, [completeBattedBall]);
+
+  const handleLaunchDebugBattedBall = useCallback((battedBall: ActiveBattedBallData) => {
+    setActiveBattedBall(battedBall);
+  }, []);
+
+  const handleSetDebugCameraMode = useCallback((mode: GameCameraMode | null) => {
+    setDebugCameraMode(mode);
+  }, []);
+
+  const handleSetDebugCameraHold = useCallback((hold: boolean) => {
+    setResultCameraHold(hold);
+  }, []);
+
+  const handleResetDebugHit = useCallback(() => {
+    setActiveBattedBall(null);
+    setDebugCameraMode(null);
+    setResultCameraHold(false);
+  }, []);
 
   const handleBattingContact = useCallback((contact: SwingContactReport) => {
     if (useGameStore.getState().pitchPhase !== 'IN_FLIGHT') return;
@@ -626,14 +664,19 @@ export function BaseballSimScreen() {
       : null;
 
   const selectedPitchConfidence = currentPitcherConfMap[selectedPitchName] ?? holisticConfidence;
-  const effectiveCommand = calculateCombinedEffectiveCommand(commandRating, selectedPitchConfidence, activeEffectiveness);
+  const effectiveCommand = calculateCombinedEffectiveCommand(
+    commandRating,
+    selectedPitchConfidence,
+    activeEffectiveness,
+    selectedPitchItem?.id || selectedPitchName,
+  );
   const pitcherAbilityTier = getAbilityTier(effectiveCommand);
 
   const battedBallTelemetry: BattedBallTelemetry | null =
     (pitchPhase === 'REACTING' || pitchPhase === 'BATTED_BALL') &&
       hasPendingBattedBall
       ? pendingBattedBall ?? null
-      : pitchPhase === 'IDLE'
+      : pitchPhase === 'IDLE' && (resultCameraHold || debugCameraMode !== null)
         ? latestPitch?.batted_ball ?? null
         : null;
 
@@ -911,6 +954,14 @@ export function BaseballSimScreen() {
 
       {/* Gameday Dev Menu Modal */}
       <GamedayDevMenuModal />
+
+      {/* Plug-and-play hit debugger for camera and flight testing */}
+      <HitTestLauncher
+        onLaunchBattedBall={handleLaunchDebugBattedBall}
+        onSetCameraMode={handleSetDebugCameraMode}
+        onSetCameraHold={handleSetDebugCameraHold}
+        onReset={handleResetDebugHit}
+      />
     </View>
   );
 }

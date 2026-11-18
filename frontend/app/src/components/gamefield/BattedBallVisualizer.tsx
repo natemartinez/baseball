@@ -2,17 +2,23 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
 
-import type { ActiveBattedBallData } from './types';
+import { DEFAULT_BATTED_BALL_RADIUS, type ActiveBattedBallData } from './types';
+import { resolveTrajectoryInterpolation } from '../camera/cameraShots';
+import { useGameStore } from '../../store/gameStore';
 
 const TRACE_COLOR = '#ffb347';
 const BALL_COLOR = '#ffd166';
 const LANDING_RING_INNER_RADIUS = 4.5;
 const LANDING_RING_OUTER_RADIUS = 6;
 const LANDING_RING_Y = 0.15;
+const FLOOR_SURFACE_Y = 0.04;
 
-interface BattedBallVisualizerProps {
+export { DEFAULT_BATTED_BALL_RADIUS };
+
+export interface BattedBallVisualizerProps {
   data: ActiveBattedBallData;
   onComplete: () => void;
+  ballRadius?: number;
 }
 
 /**
@@ -24,6 +30,7 @@ interface BattedBallVisualizerProps {
 export const BattedBallVisualizer = React.memo(function BattedBallVisualizer({
   data,
   onComplete,
+  ballRadius = DEFAULT_BATTED_BALL_RADIUS,
 }: BattedBallVisualizerProps) {
   const ballRef = useRef<THREE.Mesh>(null);
   const elapsedRef = useRef(0);
@@ -37,9 +44,9 @@ export const BattedBallVisualizer = React.memo(function BattedBallVisualizer({
   const points = useMemo(
     () =>
       data.samples.map(
-        ([x, y, z]) => new THREE.Vector3(x, z, -y),
+        ([x, y, z]) => new THREE.Vector3(x, z + ballRadius + FLOOR_SURFACE_Y, -y),
       ),
-    [data.samples],
+    [data.samples, ballRadius],
   );
 
   const lineGeometry = useMemo(() => {
@@ -53,14 +60,6 @@ export const BattedBallVisualizer = React.memo(function BattedBallVisualizer({
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return geometry;
   }, [points]);
-
-  const ballRadius = useMemo(() => {
-    const maxDepth = data.samples.reduce(
-      (furthest, sample) => Math.max(furthest, sample[1]),
-      0,
-    );
-    return THREE.MathUtils.clamp(0.35 + maxDepth * 0.004, 0.5, 2.2);
-  }, [data.samples]);
 
   const lineObject = useMemo(
     () =>
@@ -86,23 +85,25 @@ export const BattedBallVisualizer = React.memo(function BattedBallVisualizer({
   useFrame((_state, delta) => {
     const ball = ballRef.current;
     if (!ball || completedRef.current || points.length === 0) return;
+    if (useGameStore.getState().isBattedBallPaused) return;
 
     elapsedRef.current += delta;
     const elapsed = elapsedRef.current;
-
     const duration = Math.max(data.hangTime, 0.05);
-    const progress = Math.min(elapsed / duration, 1);
-    const lastIndex = points.length - 1;
-    const scaled = progress * lastIndex;
-    const index = Math.min(Math.floor(scaled), lastIndex);
-    const nextIndex = Math.min(index + 1, lastIndex);
-    const alpha = scaled - index;
-    ball.position.lerpVectors(points[index], points[nextIndex], alpha);
 
-    if (progress >= 1) {
+    if (elapsed >= duration) {
+      ball.position.copy(points[points.length - 1]);
       completedRef.current = true;
       onCompleteRef.current();
+      return;
     }
+
+    const { index, nextIndex, alpha } = resolveTrajectoryInterpolation(
+      data.samples,
+      elapsed,
+      duration,
+    );
+    ball.position.lerpVectors(points[index], points[nextIndex], alpha);
   });
 
   if (points.length === 0) return null;
