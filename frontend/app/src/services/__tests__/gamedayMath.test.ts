@@ -6,30 +6,30 @@ import {
 } from '../gamedayMath.ts';
 
 describe('Gameday Math Radius Tiers', () => {
-  it('has Elite (99) error radius equal to the former Great radius (1.50")', () => {
-    assert.equal(getMaxErrorRadiusInches(99), 1.50);
+  it('has Elite (99) error radius of 3.00"', () => {
+    assert.equal(getMaxErrorRadiusInches(99), 3.00);
   });
 
-  it('evaluates exact anchor tiers proportionally scaled by 1.5x', () => {
-    assert.equal(getMaxErrorRadiusInches(99), 1.50);
-    assert.equal(getMaxErrorRadiusInches(90), 1.875);
-    assert.equal(getMaxErrorRadiusInches(82), 2.25);
-    assert.equal(getMaxErrorRadiusInches(68), 4.50);
-    assert.equal(getMaxErrorRadiusInches(55), 6.75);
-    assert.equal(getMaxErrorRadiusInches(40), 10.50);
+  it('evaluates exact anchor tiers proportionally scaled', () => {
+    assert.equal(getMaxErrorRadiusInches(99), 3.00);
+    assert.equal(getMaxErrorRadiusInches(90), 3.75);
+    assert.equal(getMaxErrorRadiusInches(82), 4.50);
+    assert.equal(getMaxErrorRadiusInches(68), 9.00);
+    assert.equal(getMaxErrorRadiusInches(55), 13.50);
+    assert.equal(getMaxErrorRadiusInches(40), 21.00);
   });
 
   it('interpolates linearly between tiers', () => {
-    // 85 command is halfway between 90 (1.875) and 82 (2.25)
+    // 85 command is halfway between 90 (3.75) and 82 (4.50)
     // t = (90 - 85) / (90 - 82) = 5 / 8 = 0.625
-    // radius = 1.875 + (2.25 - 1.875) * 0.625 = 2.109375
+    // radius = 3.75 + (4.50 - 3.75) * 0.625 = 4.21875
     const r85 = getMaxErrorRadiusInches(85);
-    assert.ok(Math.abs(r85 - 2.109375) < 1e-4, `Expected ~2.109, got ${r85}`);
+    assert.ok(Math.abs(r85 - 4.21875) < 1e-4, `Expected ~4.219, got ${r85}`);
   });
 
   it('clamps commands outside [40, 99]', () => {
-    assert.equal(getMaxErrorRadiusInches(20), 10.50);
-    assert.equal(getMaxErrorRadiusInches(0), 10.50);
-    assert.equal(getMaxErrorRadiusInches(120), 1.50);
+    assert.equal(getMaxErrorRadiusInches(20), 21.00);
+    assert.equal(getMaxErrorRadiusInches(0), 21.00);
+    assert.equal(getMaxErrorRadiusInches(120), 3.00);
   });
 });

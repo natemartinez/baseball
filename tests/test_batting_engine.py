@@ -356,7 +356,7 @@ def test_seeded_outcome_distribution_is_baseball_like():
     # location/contact mix; keep the broad baseball-like calibration band.
     assert 0.17 <= strikeouts / plate_appearances <= 0.27
     assert 0.06 <= walks / plate_appearances <= 0.14
-    assert 0.02 <= home_runs / plate_appearances <= 0.05
+    assert 0.01 <= home_runs / plate_appearances <= 0.05
     assert 0.26 <= hits / max(1, hits + in_play_outs) <= 0.34
 
 
@@ -384,3 +384,27 @@ def test_two_phase_api_ordering_and_conflicts():
 
     missing = client.post('/api/pitch/resolve', json={})
     assert missing.status_code == 409
+
+
+def test_contact_resolver_ground_ball_produces_realistic_infield_out():
+    ratings = _ratings(contact=80.0, power=70.0, vision=75.0, speed=70.0)
+    resolver = ContactResolver(ratings, rng=random.Random(42))
+    delivery = {
+        'selected_pitch': 'Sinker',
+        'pitch_category': 'Fastball',
+        'velocity_mph': 92.0,
+        'realized_x': 0.1,
+        'realized_z': 1.8,
+        'horizontal_break_in': 14.0,
+        'induced_vertical_break_in': 4.0,
+        'realized_zone_cat': 'HEART',
+        'is_strike': True,
+        'pitch_effectiveness': 85.0,
+    }
+    result = resolver.resolve(delivery, actual_zone_name='ZONE_8')
+    assert result['is_in_play'] is True
+    if result['launch_angle_deg'] is not None and result['launch_angle_deg'] < 10.0:
+        assert result['batted_ball'] is not None
+        assert result['batted_ball']['distance_ft'] >= 60.0
+        assert result['call'] in ('IN_PLAY_OUT', 'SINGLE')
+

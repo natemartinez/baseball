@@ -167,12 +167,12 @@ export const FATIGUE_ENABLED = false;
  * Interpolated linearly between tiers and clamped outside the range.
  */
 export const MAX_ERROR_RADIUS_TIERS: Array<[number, number]> = [
-  [99, 1.5],
-  [90, 1.875],
-  [82, 2.25],
-  [68, 4.5],
-  [55, 6.75],
-  [40, 10.5],
+  [99, 3.0],
+  [90, 3.75],
+  [82, 4.5],
+  [68, 9.0],
+  [55, 13.5],
+  [40, 21.0],
 ];
 
 /** sigma = radius / divisor for the truncated Gaussian cloud. */

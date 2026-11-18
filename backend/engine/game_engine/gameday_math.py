@@ -35,12 +35,12 @@ FATIGUE_ENABLED = False
 # Command -> hard maximum error radius (inches). Diameter = 2 * radius.
 # Interpolate linearly between tiers and clamp outside the range.
 MAX_ERROR_RADIUS_TIERS: list = [
-    (99.0, 1.50),
-    (90.0, 1.875),
-    (82.0, 2.25),
-    (68.0, 4.50),
-    (55.0, 6.75),
-    (40.0, 10.50),
+    (99.0, 3.00),
+    (90.0, 3.75),
+    (82.0, 4.50),
+    (68.0, 9.00),
+    (55.0, 13.50),
+    (40.0, 21.00),
 ]
 
 # The cloud is a truncated Gaussian; sigma = radius / SIGMA_RADIUS_DIVISOR.

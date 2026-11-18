@@ -179,7 +179,7 @@ class BattingEngine:
         )
 
         batted_ball = contact.get('batted_ball')
-        if batted_ball is None and contact.get('is_in_play'):
+        if batted_ball is None and (contact.get('is_in_play') or contact.get('call') == 'FOUL'):
             batted_ball = compute_batted_ball_trace(
                 contact.get('exit_velocity_mph'),
                 contact.get('launch_angle_deg'),

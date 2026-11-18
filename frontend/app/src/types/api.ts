@@ -276,7 +276,7 @@ export interface GameState {
   strategy_intent?: StrategyIntentDecision;
 }
 
-export type BattedBallSample = [number, number, number];
+export type BattedBallSample = [number, number, number, number?];
 
 export interface BattedBallTelemetry {
   exit_velocity_mph: number;

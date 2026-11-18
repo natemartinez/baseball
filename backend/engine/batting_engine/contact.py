@@ -82,15 +82,17 @@ class ContactResolver:
 
         foul_prob = self._foul_probability(zone_category, strikes)
         if roll < whiff_prob + foul_prob * (1.0 - whiff_prob):
-            return {
-                'call': 'FOUL',
-                'description': f'Fouled off ({velocity} mph {pitch_name})',
-                'is_in_play': False,
-                'exit_velocity_mph': None,
-                'launch_angle_deg': None,
-                'spray_angle_deg': None,
-                'contact_quality': None,
-            }
+            return self._resolve_batted_ball(
+                actual_zone_name=actual_zone_name,
+                pitch_name=pitch_name,
+                pitch_category=pitch_category,
+                velocity=velocity,
+                realized_x=realized_x,
+                realized_z=realized_z,
+                pitch_effectiveness=pitch_effectiveness,
+                shape=shape,
+                force_foul=True,
+            )
 
         return self._resolve_batted_ball(
             actual_zone_name=actual_zone_name,
@@ -180,6 +182,7 @@ class ContactResolver:
         realized_z: float,
         pitch_effectiveness: float = 80.0,
         shape: Optional[PitchShape] = None,
+        force_foul: bool = False,
     ) -> Dict[str, Any]:
         slugging = self.ratings.hot_zones.get(actual_zone_name, 0.400)
 
@@ -227,8 +230,13 @@ class ContactResolver:
         # batter pulls an inside pitch toward left field, and vice versa.
         pull_sign = -1.0 if self.ratings.batter_side == 'R' else 1.0
         pull_bias = pull_sign * (12.0 if inside else -6.0)
-        spray_angle = round(self.rng.gauss(pull_bias, 16.0), 1)
-        spray_angle = max(-65.0, min(65.0, spray_angle))
+        if force_foul:
+            pull_foul = self.rng.random() < (0.75 if inside else 0.45)
+            foul_sign = pull_sign if pull_foul else -pull_sign
+            spray_angle = round(foul_sign * self.rng.uniform(46.0, 72.0), 1)
+        else:
+            spray_angle = round(self.rng.gauss(pull_bias, 16.0), 1)
+            spray_angle = max(-65.0, min(65.0, spray_angle))
 
         # Every fair in-play ball is classified from its actual landing point.
         # A ball inside any fielder's baseline reach is an out; a ball outside
@@ -242,15 +250,21 @@ class ContactResolver:
         )
         if outcome is None:
             # Defensive fallback: valid clamped inputs should always resolve.
+            from ..game_engine.ball_flight import compute_batted_ball_trace
+            trace = compute_batted_ball_trace(exit_velocity, launch_angle, spray_angle)
+            call = 'FOUL' if force_foul or abs(spray_angle) > 45.0 else 'SINGLE'
             return {
-                'call': 'SINGLE',
-                'description': 'Ball in play.',
-                'is_in_play': True,
+                'call': call,
+                'description': f'Foul ball ({exit_velocity} mph)' if call == 'FOUL' else 'Ball in play.',
+                'is_in_play': call != 'FOUL',
                 'exit_velocity_mph': exit_velocity,
                 'launch_angle_deg': launch_angle,
                 'spray_angle_deg': spray_angle,
                 'contact_quality': 'WEAK',
-                'batted_ball': None,
+                'batted_ball': trace,
+                'fielder_name': None,
+                'fielder_distance_ft': None,
+                'fielder_radius_ft': None,
             }
 
         return {
@@ -262,4 +276,7 @@ class ContactResolver:
             'spray_angle_deg': outcome['spray_angle_deg'],
             'contact_quality': outcome['contact_quality'],
             'batted_ball': outcome['batted_ball'],
+            'fielder_name': outcome.get('fielder_name'),
+            'fielder_distance_ft': outcome.get('fielder_distance_ft'),
+            'fielder_radius_ft': outcome.get('fielder_radius_ft'),
         }

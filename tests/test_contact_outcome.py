@@ -37,12 +37,43 @@ def test_contact_outcome_maps_landing_to_result():
 
 
 def test_short_grounder_in_front_of_plate_is_not_an_automatic_out():
-    # The reported bug: this used to be IN_PLAY_OUT with a landing 5 ft in
-    # front of home. No fielder is within reach, so it is an infield hit.
+    # Grounder through the gap rolls past the infielders and is an infield/outfield hit
     contact = resolve_contact_outcome(119.3, -25.0, -33.6)
     assert contact['call'] == 'SINGLE'
-    assert contact['batted_ball']['landing_y_ft'] < 10
+    assert contact['batted_ball']['landing_y_ft'] >= 100.0
     assert contact['fielder_name'] is None
+
+
+def test_routine_grounders_are_fielded_by_infielders():
+    # Routine grounder toward SS (-18 deg, 92 mph) reaches SS depth and is an out
+    ss_grounder = resolve_contact_outcome(92.0, 2.0, -18.0)
+    assert ss_grounder['call'] == 'IN_PLAY_OUT'
+    assert ss_grounder['fielder_name'] == 'SS'
+    assert 'Ground out to SS' in ss_grounder['description']
+
+    # Routine grounder toward 2B (+18 deg, 92 mph) reaches 2B depth and is an out
+    second_grounder = resolve_contact_outcome(92.0, 2.0, 18.0)
+    assert second_grounder['call'] == 'IN_PLAY_OUT'
+    assert second_grounder['fielder_name'] == '2B'
+    assert 'Ground out to 2B' in second_grounder['description']
+
+
+def test_routine_ground_out_has_realistic_transit_time():
+    out_play = resolve_contact_outcome(92.0, 2.0, -18.0)
+    assert out_play['call'] == 'IN_PLAY_OUT'
+    assert out_play['fielder_name'] == 'SS'
+    trace = out_play['batted_ball']
+    assert trace is not None
+    # 123 ft to SS at 92 MPH should take 0.90s - 1.25s (NOT 4.26s)
+    assert 0.90 <= trace['hang_time_s'] <= 1.25
+    assert len(trace['samples']) == 20
+
+
+def test_gap_grounders_roll_into_outfield_for_singles():
+    # Scorcher through the gap (-33.6 deg) splits fielders into shallow outfield
+    gap_single = resolve_contact_outcome(105.0, 0.0, -33.6)
+    assert gap_single['call'] == 'SINGLE'
+    assert gap_single['batted_ball']['distance_ft'] >= 160.0
 
 
 def test_fly_ball_inside_a_fielder_radius_is_an_out():
@@ -53,11 +84,13 @@ def test_fly_ball_inside_a_fielder_radius_is_an_out():
     assert center_fly['fielder_distance_ft'] <= center_fly['fielder_radius_ft']
 
 
-def test_contact_outcome_foul_has_no_trace():
+def test_contact_outcome_foul_has_trace():
     foul = resolve_contact_outcome(95, 20, 60)
     assert foul['call'] == 'FOUL'
     assert foul['is_in_play'] is False
-    assert foul['batted_ball'] is None
+    assert foul['batted_ball'] is not None
+    assert len(foul['batted_ball']['samples']) >= 2
+    assert foul['batted_ball']['hang_time_s'] > 0
 
 
 def test_contact_outcome_is_deterministic():
@@ -103,8 +136,11 @@ def test_all_ai_in_play_results_follow_fielder_reach_rule():
             outs.append((fielder['id'], trace['landing_y_ft']))
         else:
             # Home runs clear the fence even if their landing point is within
-            # a deep outfielder's circle; all other hits must be outside reach.
-            if call != 'HOME_RUN':
+            # a deep outfielder's circle; airborne hits must land outside reach.
+            # Grounders that pierce the infield are base hits even if they roll
+            # to a stop in an outfielder's territory.
+            launch_deg = details.get('launch_angle_deg')
+            if call != 'HOME_RUN' and (launch_deg is None or launch_deg >= 10.0):
                 assert fielder is None, (
                     f'{call} landed inside {fielder["label"]}\'s radius'
                 )
@@ -153,7 +189,8 @@ def test_engine_contact_foul_has_no_trace():
         }
     )
     assert resolved['pitch_details']['pitch_result'] == 'FOUL'
-    assert resolved['pitch_details']['batted_ball'] is None
+    assert resolved['pitch_details']['batted_ball'] is not None
+    assert len(resolved['pitch_details']['batted_ball']['samples']) >= 2
 
 
 def test_take_resolution_is_unchanged_without_contact():
