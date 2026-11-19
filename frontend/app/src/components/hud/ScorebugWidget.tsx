@@ -2,7 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 import type { GameState, TeamLineup } from '../../types/api';
-import { getAbilityTierColor } from '../../services/gamedayMath';
+import {
+  formatMatchupPlayerInfo,
+  type FormattedMatchupPlayerInfo,
+} from './scorebugMatchupState';
+
+export { formatMatchupPlayerInfo, type FormattedMatchupPlayerInfo };
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -22,10 +27,6 @@ const TOKENS = {
 interface ScorebugWidgetProps {
   gameState: GameState | null;
   lineups?: TeamLineup[];
-  selectedPitchName?: string;
-  effectiveCommand?: number;
-  pitcherAbilityTier?: string;
-  activeEffectiveness?: number;
   onOpenPlayerCard?: () => void;
 }
 
@@ -70,10 +71,6 @@ function extractSurname(name?: string, fallback = 'PLAYER'): string {
 export function ScorebugWidget({
   gameState,
   lineups = [],
-  selectedPitchName,
-  effectiveCommand,
-  pitcherAbilityTier,
-  activeEffectiveness,
   onOpenPlayerCard,
 }: ScorebugWidgetProps) {
   const [matchupExpanded, setMatchupExpanded] = useState(true);
@@ -145,9 +142,16 @@ export function ScorebugWidget({
     }
   }
 
+  const matchupInfo = formatMatchupPlayerInfo(
+    currentBatter,
+    currentPitcher,
+  );
+
   return (
     <View style={styles.scorebugWrap}>
-      <View style={styles.cardContainer}>
+      {/* ── Main Scorebug Card with Toggle Button ── */}
+      <View style={styles.scorebugCardWithToggle}>
+        <View style={styles.cardContainer}>
       {/* ── Upper Block: Teams & Situation (72px) ─────────────────────────── */}
       <View style={styles.upperBlock}>
         {/* Left Column (50%): Away / Home Team Rows & Scores */}
@@ -266,94 +270,91 @@ export function ScorebugWidget({
           </Text>
         </View>
       </View>
-      </View>
+    </View>
 
         {/* Toggle arrow straddling the scorebug's right border */}
         <TouchableOpacity
           style={styles.matchupToggle}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           onPress={() => setMatchupExpanded((v) => !v)}
           activeOpacity={0.7}
+          accessibilityRole="button"
           accessibilityLabel={
             matchupExpanded ? 'Hide plate matchup preview' : 'Show plate matchup preview'
           }
         >
           <Text style={styles.matchupToggleText}>{matchupExpanded ? '‹' : '›'}</Text>
         </TouchableOpacity>
+      </View>
 
-      {/* ── Compact Plate Matchup • Statcast Preview (right of scorebug) ──── */}
+      {/* ── Side-by-Side Plate Matchup • Statcast Preview ──── */}
       {matchupExpanded && (
-      <TouchableOpacity
-        style={styles.matchupPreview}
-        activeOpacity={0.8}
-        onPress={onOpenPlayerCard}
-        accessibilityLabel="Open player card modal"
-      >
-        <View style={styles.matchupHeaderRow}>
-          <Text style={styles.matchupLabel}>PLATE MATCHUP</Text>
-          <Text style={styles.matchupCardPill}>CARD ↗</Text>
-        </View>
-        <Text style={styles.matchupSubLabel}>STATCAST PREVIEW</Text>
-
-        <View style={styles.matchupSide}>
-          <Text style={styles.matchupRole}>BAT</Text>
-          <Text style={styles.matchupName} numberOfLines={1}>
-            {extractSurname(currentBatter?.name, 'BATTER')}
-          </Text>
-          <View style={styles.matchupStatRow}>
-            <MatchupStat label="PWR" value={currentBatter?.power} />
-            <MatchupStat label="CON" value={currentBatter?.contact} />
-            <MatchupStat label="VIS" value={currentBatter?.vision} />
+        <TouchableOpacity
+          style={styles.matchupPreview}
+          activeOpacity={0.8}
+          onPress={onOpenPlayerCard}
+          disabled={!onOpenPlayerCard}
+          accessibilityRole="button"
+          accessibilityLabel="Open player card modal for detailed plate matchup"
+          accessibilityState={{ disabled: !onOpenPlayerCard }}
+        >
+          {/* Header row */}
+          <View style={styles.matchupHeaderRow}>
+            <View style={styles.matchupHeaderLeft}>
+              <Text style={styles.matchupLabel}>PLATE MATCHUP</Text>
+              <Text style={styles.matchupSubLabel}>STATCAST PREVIEW</Text>
+            </View>
+            <View style={styles.matchupCardPill}>
+              <Text style={styles.matchupCardPillText}>CARD ↗</Text>
+            </View>
           </View>
-        </View>
 
-        <View style={styles.matchupDivider} />
-
-        <View style={styles.matchupSide}>
-          <View style={styles.matchupPitHeader}>
-            <Text style={styles.matchupRole}>PIT</Text>
-            <Text style={styles.matchupPitchName} numberOfLines={1}>
-              {selectedPitchName ? selectedPitchName.toUpperCase() : extractSurname(currentPitcher?.name, 'PITCHER')}
-            </Text>
-            {pitcherAbilityTier && (
-              <View
-                style={[
-                  styles.tierBadge,
-                  {
-                    backgroundColor: `${getAbilityTierColor(pitcherAbilityTier as any)}20`,
-                    borderColor: getAbilityTierColor(pitcherAbilityTier as any),
-                  },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tierBadgeText,
-                    { color: getAbilityTierColor(pitcherAbilityTier as any) },
-                  ]}
-                >
-                  {pitcherAbilityTier}
-                </Text>
+          {/* Side-by-side columns: Batter (Left) & Pitcher (Right) */}
+          <View style={styles.matchupColumnsRow}>
+            {/* Batter Column */}
+            <View style={styles.matchupColumn}>
+              <View style={styles.playerRoleRow}>
+                <Text style={styles.matchupRole}>BATTER</Text>
+                {matchupInfo.batterMeta ? (
+                  <Text style={styles.playerMetaText} numberOfLines={1}>
+                    {matchupInfo.batterMeta}
+                  </Text>
+                ) : null}
               </View>
-            )}
+              <Text style={styles.matchupFullName} numberOfLines={1}>
+                {matchupInfo.batterName}
+              </Text>
+              <View style={styles.matchupStatRow}>
+                <MatchupStat label="PWR" value={matchupInfo.batterStats.pwr} />
+                <MatchupStat label="CON" value={matchupInfo.batterStats.con} />
+                <MatchupStat label="VIS" value={matchupInfo.batterStats.vis} />
+              </View>
+            </View>
+
+            {/* Vertical Divider */}
+            <View style={styles.matchupVerticalDivider} />
+
+            {/* Pitcher Column */}
+            <View style={styles.matchupColumn}>
+              <View style={styles.playerRoleRow}>
+                <Text style={styles.matchupRole}>PITCHER</Text>
+                {matchupInfo.pitcherMeta ? (
+                  <Text style={styles.playerMetaText} numberOfLines={1}>
+                    {matchupInfo.pitcherMeta}
+                  </Text>
+                ) : null}
+              </View>
+              <Text style={styles.matchupFullName} numberOfLines={1}>
+                {matchupInfo.pitcherName}
+              </Text>
+              <View style={styles.matchupStatRow}>
+                <MatchupStat label="CMD" value={matchupInfo.pitcherStats.cmd} />
+                <MatchupStat label="BRK" value={matchupInfo.pitcherStats.brk} />
+                <MatchupStat label="VEL" value={matchupInfo.pitcherStats.vel} />
+              </View>
+            </View>
           </View>
-          <View style={styles.matchupStatRow}>
-            <MatchupStat
-              label="CMD"
-              value={effectiveCommand != null ? Math.round(effectiveCommand) : currentPitcher?.control}
-            />
-            <MatchupStat
-              label="BRK"
-              value={
-                currentPitcher?.arsenal?.find(p => p.name === selectedPitchName)?.break_rating ??
-                currentPitcher?.break_rating
-              }
-            />
-            <MatchupStat
-              label="EFF"
-              value={activeEffectiveness != null ? Math.round(activeEffectiveness) : undefined}
-            />
-          </View>
-        </View>
-      </TouchableOpacity>
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -374,12 +375,20 @@ const styles = StyleSheet.create({
   scorebugWrap: {
     position: 'relative',
     flexDirection: 'row',
-    alignSelf: 'flex-start',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  scorebugCardWithToggle: {
+    position: 'relative',
+    width: 160,
+    height: 110,
+    marginRight: 6,
   },
   matchupToggle: {
     position: 'absolute',
     top: '50%',
-    left: 147,
+    right: -13,
     marginTop: -13,
     width: 26,
     height: 26,
@@ -412,17 +421,18 @@ const styles = StyleSheet.create({
     boxShadow: '0px 3px 5px rgba(0, 0, 0, 0.35)',
     elevation: 6,
   },
-  // ─── Compact Plate Matchup • Statcast Preview ───────────────────────────────
+  // ─── Side-by-Side Plate Matchup • Statcast Preview ─────────────────────────
   matchupPreview: {
-    marginLeft: 16,
-    width: 120,
+    marginLeft: 14,
+    minWidth: 280,
+    maxWidth: 360,
     height: 110,
     backgroundColor: TOKENS.upperBg,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: TOKENS.cardBorder,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     justifyContent: 'space-between',
     boxShadow: '0px 3px 5px rgba(0, 0, 0, 0.35)',
     elevation: 6,
@@ -432,72 +442,84 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 4,
+  },
+  matchupHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
   },
   matchupCardPill: {
+    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+    borderWidth: 0.5,
+    borderColor: 'rgba(59, 130, 246, 0.3)',
+  },
+  matchupCardPillText: {
     fontSize: 6.5,
     fontWeight: '900',
     color: '#60A5FA',
-    backgroundColor: 'rgba(37, 99, 235, 0.2)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
     letterSpacing: 0.3,
   },
   matchupLabel: {
     color: '#94A3B8',
-    fontSize: 8,
+    fontSize: 8.5,
     fontWeight: '900',
     letterSpacing: 0.6,
   },
   matchupSubLabel: {
     color: TOKENS.statsMuted,
-    fontSize: 7,
+    fontSize: 6.5,
     fontWeight: '700',
     letterSpacing: 0.4,
-    marginTop: -3,
   },
-  matchupSide: {
-    gap: 2,
-    marginTop: 4,
-  },
-  matchupPitHeader: {
+  matchupColumnsRow: {
     flexDirection: 'row',
+    alignItems: 'stretch',
+    flex: 1,
+    gap: 8,
+  },
+  matchupColumn: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
+  matchupVerticalDivider: {
+    width: 1,
+    backgroundColor: TOKENS.gridBorder,
+    marginVertical: 2,
+  },
+  playerRoleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 4,
-  },
-  matchupPitchName: {
-    color: TOKENS.upperText,
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    flexShrink: 1,
-  },
-  tierBadge: {
-    paddingHorizontal: 3,
-    paddingVertical: 0.5,
-    borderRadius: 3,
-    borderWidth: 0.5,
-  },
-  tierBadgeText: {
-    fontSize: 6,
-    fontWeight: '900',
-    letterSpacing: 0.3,
+    minHeight: 14,
   },
   matchupRole: {
     color: TOKENS.activeGold,
-    fontSize: 7,
+    fontSize: 7.5,
     fontWeight: '900',
     letterSpacing: 0.5,
   },
-  matchupName: {
+  playerMetaText: {
+    color: '#64748B',
+    fontSize: 7,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  matchupFullName: {
     color: TOKENS.upperText,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.2,
+    marginTop: 1,
+    marginBottom: 3,
   },
   matchupStatRow: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 3,
+    marginTop: 'auto',
   },
   matchupStat: {
     flex: 1,
@@ -508,7 +530,7 @@ const styles = StyleSheet.create({
   },
   matchupStatValue: {
     color: '#E2E8F0',
-    fontSize: 10,
+    fontSize: 9.5,
     fontWeight: '900',
     fontVariant: ['tabular-nums'],
     includeFontPadding: false,
@@ -518,11 +540,6 @@ const styles = StyleSheet.create({
     fontSize: 6,
     fontWeight: '800',
     letterSpacing: 0.3,
-  },
-  matchupDivider: {
-    height: 1,
-    backgroundColor: TOKENS.gridBorder,
-    marginVertical: 3,
   },
 
   // ─── Upper Block (72px) ────────────────────────────────────────────────────

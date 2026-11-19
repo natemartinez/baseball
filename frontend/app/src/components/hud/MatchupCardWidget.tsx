@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import type { BatterInfo, PitcherInfo } from '../../types/api';
 import { Colors } from '../../theme/colors';
 
@@ -22,8 +22,14 @@ export function MatchupCardWidget({
   return (
     <View style={styles.container}>
       <Text style={styles.sectionLabel}>PLATE MATCHUP • STATCAST PREVIEW</Text>
-      <BatterProfileCard batter={batter} />
-      <PitcherProfileCard pitcher={pitcher} />
+      <View style={styles.profilesRow}>
+        <View style={styles.profileColumn}>
+          <BatterProfileCard batter={batter} />
+        </View>
+        <View style={styles.profileColumn}>
+          <PitcherProfileCard pitcher={pitcher} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -46,7 +52,7 @@ function BatterProfileCard({ batter }: { batter: BatterInfo }) {
         </View>
         <View style={styles.statLineBadge}>
           <Text style={styles.statLineText}>
-            {batter.stats.hits}-{batter.stats.at_bats}, {batter.stats.home_runs} HR, {batter.stats.rbis} RBI
+            {batter.stats?.hits ?? 0}-{batter.stats?.at_bats ?? 0}, {batter.stats?.home_runs ?? 0} HR, {batter.stats?.rbis ?? 0} RBI
           </Text>
         </View>
       </View>
@@ -104,7 +110,7 @@ function PitcherProfileCard({ pitcher }: { pitcher: PitcherInfo }) {
         </View>
         <View style={styles.statLineBadge}>
           <Text style={[styles.statLineText, { color: Colors.blueLight }]}>
-            {pitcher.stats.pitches_thrown} Pitches • {pitcher.stats.strikeouts} K
+            {pitcher.stats?.pitches_thrown ?? 0} Pitches • {pitcher.stats?.strikeouts ?? 0} K
           </Text>
         </View>
       </View>
@@ -151,6 +157,15 @@ const styles = StyleSheet.create({
     boxShadow: '0px 2px 4px rgba(0, 0, 0, 0.3)',
   },
   sectionLabel: { fontSize: 9, fontWeight: '700', color: Colors.textSecondary, letterSpacing: 1.0, textTransform: 'uppercase' },
+  profilesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  profileColumn: {
+    flex: 1,
+    minWidth: 260,
+  },
   profileCard: {
     backgroundColor: Colors.bgCard,
     borderRadius: 10,
@@ -174,11 +189,4 @@ const styles = StyleSheet.create({
   traitsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   traitBadge: { borderRadius: 4, borderWidth: 1, paddingHorizontal: 6, paddingVertical: 2 },
   traitText: { fontSize: 10, fontWeight: '700' },
-  arsenalLabel: { fontSize: 9, fontWeight: '700', color: Colors.textMuted, letterSpacing: 0.5, textTransform: 'uppercase' },
-  arsenalRow: { gap: 6 },
-  arsenalChip: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 5 },
-  arsenalDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.blueDeep },
-  arsenalName: { fontSize: 11 },
-  arsenalVelo: { fontSize: 10, fontWeight: '600' },
-  arsenalSpin: { fontSize: 9.5, color: Colors.redMild, fontWeight: '700' },
 });

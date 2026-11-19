@@ -22,10 +22,6 @@ interface ScoreboardControlsWidgetProps {
   cameraMode?: GameCameraMode;
   onToggleCameraMode?: () => void;
   onOpenTeamSelection?: () => void;
-  selectedPitchName?: string;
-  effectiveCommand?: number;
-  pitcherAbilityTier?: string;
-  activeEffectiveness?: number;
   onOpenPlayerCard?: () => void;
 }
 
@@ -46,10 +42,6 @@ export function ScoreboardControlsWidget({
   cameraMode = 'PITCH',
   onToggleCameraMode,
   onOpenTeamSelection,
-  selectedPitchName,
-  effectiveCommand,
-  pitcherAbilityTier,
-  activeEffectiveness,
   onOpenPlayerCard,
 }: ScoreboardControlsWidgetProps) {
   const gameOver = gameState?.game_over ?? false;
@@ -132,10 +124,6 @@ export function ScoreboardControlsWidget({
       <ScorebugWidget
         gameState={gameState}
         lineups={lineups}
-        selectedPitchName={selectedPitchName}
-        effectiveCommand={effectiveCommand}
-        pitcherAbilityTier={pitcherAbilityTier}
-        activeEffectiveness={activeEffectiveness}
         onOpenPlayerCard={onOpenPlayerCard}
       />
 

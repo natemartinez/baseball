@@ -734,10 +734,6 @@ export function BaseballSimScreen() {
             gameState={gameState}
             lineups={lineups}
             latestPitch={resultVisible ? latestPitch : null}
-            selectedPitchName={selectedPitchName}
-            effectiveCommand={effectiveCommand}
-            pitcherAbilityTier={pitcherAbilityTier}
-            activeEffectiveness={activeEffectiveness}
             onOpenPlayerCard={() => togglePlayerCardModal(true)}
             onOpenSettings={() => toggleSettingsMenu(true)}
             onOpenTeamSelection={() => toggleTeamSelection(true)}
