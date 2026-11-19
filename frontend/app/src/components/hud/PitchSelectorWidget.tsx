@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -32,6 +32,21 @@ import {
   computeBaselineEffectiveness,
   calculateCombinedEffectiveCommand,
 } from '../../services/effectivenessModel';
+import {
+  resolveInitialWidgetViewMode,
+  resolveUpdatedWidgetViewMode,
+  canSwitchOrSelectPitch,
+  shouldResetToChipsOnPitchComplete,
+  type WidgetViewMode,
+} from './pitchSelectorState';
+
+export {
+  resolveInitialWidgetViewMode,
+  resolveUpdatedWidgetViewMode,
+  canSwitchOrSelectPitch,
+  shouldResetToChipsOnPitchComplete,
+  type WidgetViewMode,
+};
 
 
 interface PitchSelectorWidgetProps {
@@ -99,7 +114,12 @@ function PitcherMetersSection({
   return (
     <View style={isVertical ? styles.metersColumn : styles.metersRow}>
       {/* Stamina Meter */}
-      <View style={styles.meterContainer}>
+      <View
+        style={styles.meterContainer}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Pitcher stamina"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(clampedStamina) }}
+      >
         <View style={styles.meterLabelRow}>
           <Text style={styles.meterTitle}>STAMINA</Text>
           <Text style={[styles.meterValue, { color: staminaColor }]}>
@@ -117,7 +137,12 @@ function PitcherMetersSection({
       </View>
 
       {/* Confidence Meter (Mental) */}
-      <View style={styles.meterContainer}>
+      <View
+        style={styles.meterContainer}
+        accessibilityRole="progressbar"
+        accessibilityLabel="Pitcher confidence"
+        accessibilityValue={{ min: 0, max: 100, now: Math.round(clampedConfidence) }}
+      >
         <View style={styles.meterLabelRow}>
           <Text style={styles.meterTitle} numberOfLines={1}>
             CONFIDENCE
@@ -165,20 +190,93 @@ function PitchSelectorWidgetComponent({
 }: PitchSelectorWidgetProps) {
   const isVertical = layout === 'vertical';
 
-  const pressStartTimeRef = useRef<number | null>(null);
-  const rafIdRef = useRef<number | null>(null);
-  const isChargingRef = useRef(false);
-  const [isCharging, setIsCharging] = useState(false);
-  const [chargeRatio, setChargeRatio] = useState(0);
+  const pitchNames = useMemo(
+    () => (pitcher.arsenal ?? []).map((p) => p.name),
+    [pitcher.arsenal],
+  );
+  const [viewMode, setViewMode] = useState<WidgetViewMode>(() =>
+    resolveInitialWidgetViewMode(selectedPitchName, pitchNames)
+  );
+
+  const isMountedRef = useRef(true);
+  const isTransitioningRef = useRef(false);
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevActionPendingRef = useRef(isActionPending);
 
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
+      fadeAnim.stopAnimation();
       if (rafIdRef.current != null) {
         cancelAnimationFrame(rafIdRef.current);
       }
       isChargingRef.current = false;
     };
-  }, []);
+  }, [fadeAnim]);
+
+  useEffect(() => {
+    if (shouldResetToChipsOnPitchComplete(prevActionPendingRef.current, isActionPending)) {
+      setViewMode('chips');
+      fadeAnim.setValue(1);
+      isTransitioningRef.current = false;
+    }
+    prevActionPendingRef.current = isActionPending;
+  }, [isActionPending, fadeAnim]);
+
+  const switchView = useCallback(
+    (nextMode: WidgetViewMode) => {
+      if (viewMode === nextMode || isTransitioningRef.current || !isMountedRef.current) return;
+      isTransitioningRef.current = true;
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 90,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: USE_NATIVE_DRIVER,
+      }).start(({ finished }) => {
+        if (!isMountedRef.current) return;
+        if (finished) {
+          setViewMode(nextMode);
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 120,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: USE_NATIVE_DRIVER,
+          }).start(() => {
+            if (isMountedRef.current) {
+              isTransitioningRef.current = false;
+            }
+          });
+        } else {
+          fadeAnim.setValue(1);
+          isTransitioningRef.current = false;
+        }
+      });
+    },
+    [viewMode, fadeAnim],
+  );
+
+  useEffect(() => {
+    const nextMode = resolveUpdatedWidgetViewMode(viewMode, selectedPitchName, pitchNames);
+    if (nextMode !== viewMode) {
+      switchView(nextMode);
+    }
+  }, [selectedPitchName, pitchNames, viewMode, switchView]);
+
+  const handleSelectPitch = useCallback(
+    (name: string) => {
+      if (!canSwitchOrSelectPitch(disabled, isActionPending)) return;
+      onSelectPitchName(name);
+      switchView('throw');
+    },
+    [disabled, isActionPending, onSelectPitchName, switchView],
+  );
+
+  const pressStartTimeRef = useRef<number | null>(null);
+  const rafIdRef = useRef<number | null>(null);
+  const isChargingRef = useRef(false);
+  const [isCharging, setIsCharging] = useState(false);
+  const [chargeRatio, setChargeRatio] = useState(0);
 
   const handlePressIn = useCallback(() => {
     if (disabled || isActionPending || !selectedPitchName) return;
@@ -246,33 +344,79 @@ function PitchSelectorWidgetComponent({
     onThrowPitch(result.timingTier, result.timingLabel);
   }, [pitcher.arsenal, selectedPitchName, pitchEffectiveness, onChargingProgress, onThrowPitch]);
 
-  const pitcherControl = (pitcher as any)?.ratings?.control ?? pitcher.control ?? 75;
-  const chips = (pitcher.arsenal ?? []).map((item) => {
-    const itemEff =
-      pitchEffectiveness?.[item.name] ??
-      computeBaselineEffectiveness(
-        item.velocity_mph ?? 93,
-        item.break_rating ?? 75,
-        item.spin_rpm ?? 2400,
-        item.control_rating ?? 75,
+  const pitcherControl = pitcher.control ?? 75;
+
+  const chips = useMemo(() => {
+    return (pitcher.arsenal ?? []).map((item) => {
+      const itemEff =
+        pitchEffectiveness?.[item.name] ??
+        computeBaselineEffectiveness(
+          item.velocity_mph ?? 93,
+          item.break_rating ?? 75,
+          item.spin_rpm ?? 2400,
+          item.control_rating ?? 75,
+        );
+      return (
+        <ArsenalChip
+          key={item.name}
+          item={item}
+          layout={layout}
+          isSelected={item.name === selectedPitchName}
+          isRecommended={item.name === recommendedPitch}
+          disabled={isActionPending || disabled}
+          onSelect={() => handleSelectPitch(item.name)}
+          effectiveness={itemEff}
+          confidencePct={confidencePct}
+          pitcherControl={pitcherControl}
+        />
       );
-    return (
-      <ArsenalChip
-        key={item.name}
-        item={item}
-        layout={layout}
-        isSelected={item.name === selectedPitchName}
-        isRecommended={item.name === recommendedPitch}
-        disabled={isActionPending || disabled}
-        onSelect={() => onSelectPitchName(item.name)}
-        effectiveness={itemEff}
-        confidencePct={confidencePct}
-        pitcherControl={pitcherControl}
-      />
-    );
-  });
+    });
+  }, [
+    pitcher.arsenal,
+    pitchEffectiveness,
+    layout,
+    selectedPitchName,
+    recommendedPitch,
+    isActionPending,
+    disabled,
+    handleSelectPitch,
+    confidencePct,
+    pitcherControl,
+  ]);
 
   const buttonDisabled = disabled || isActionPending || !selectedPitchName;
+
+  const renderPitchNameHeader = (vertical: boolean) => (
+    <View style={[styles.pitchNameHeader, vertical && styles.pitchNameHeaderVertical]}>
+      <Text
+        style={styles.pitchNameText}
+        numberOfLines={1}
+        accessibilityRole="header"
+        accessibilityLabel={`Selected pitch: ${selectedPitchName || 'None'}`}
+      >
+        {selectedPitchName || 'PITCH'}
+      </Text>
+      <TouchableOpacity
+        onPress={() => switchView('chips')}
+        disabled={disabled || isActionPending}
+        style={[
+          styles.changePitchButton,
+          (disabled || isActionPending) && styles.changePitchButtonDisabled,
+        ]}
+        activeOpacity={0.75}
+        accessibilityRole="button"
+        accessibilityLabel="Change selected pitch"
+        accessibilityState={{ disabled: disabled || isActionPending }}
+      >
+        <Text style={styles.changePitchButtonText}>Change Pitch</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // During pitch execution (isActionPending is true), hide the widget completely.
+  if (isActionPending) {
+    return null;
+  }
 
   return (
     <View style={[styles.container, isVertical && styles.containerVertical]}>
@@ -284,43 +428,78 @@ function PitchSelectorWidgetComponent({
         layout={layout}
       />
 
-      {isVertical ? (
-        <View style={styles.arsenalColumn}>
-          {chips}
-          <ThrowButton
-            disabled={buttonDisabled}
-            isCharging={isCharging}
-            chargeRatio={chargeRatio}
-            onPressIn={handlePressIn}
-            onPressOut={handlePressOut}
-            layout="vertical"
-          />
-        </View>
-      ) : (
-        <View style={styles.horizontalSelectorRow}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.arsenalRow}
-          >
-            {chips}
-          </ScrollView>
-          <ThrowButton
-            disabled={buttonDisabled}
-            isCharging={isCharging}
-            chargeRatio={chargeRatio}
-            onPressIn={handlePressIn}
-            onPressOut={handlePressOut}
-            layout="horizontal"
-          />
-        </View>
-      )}
+      {/* Animated view switch container */}
+      <Animated.View
+        style={[
+          styles.viewTransitionContainer,
+          {
+            opacity: fadeAnim,
+            transform: [
+              {
+                scale: fadeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.98, 1],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        {viewMode === 'throw' ? (
+          isVertical ? (
+            <View style={styles.throwViewColumn}>
+              {renderPitchNameHeader(true)}
+              <ThrowButton
+                disabled={buttonDisabled}
+                isCharging={isCharging}
+                chargeRatio={chargeRatio}
+                onPressIn={handlePressIn}
+                onPressOut={handlePressOut}
+                layout="vertical"
+              />
+            </View>
+          ) : (
+            <View style={styles.throwViewRow}>
+              {renderPitchNameHeader(false)}
+              <View style={styles.throwButtonHorizontalWrapper}>
+                <ThrowButton
+                  disabled={buttonDisabled}
+                  isCharging={isCharging}
+                  chargeRatio={chargeRatio}
+                  onPressIn={handlePressIn}
+                  onPressOut={handlePressOut}
+                  layout="horizontal"
+                />
+              </View>
+            </View>
+          )
+        ) : (
+          isVertical ? (
+            <View style={styles.chipsViewColumn}>
+              <View style={styles.arsenalColumn}>
+                {chips}
+              </View>
+            </View>
+          ) : (
+            <View style={styles.chipsViewRow}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.arsenalRow}
+              >
+                {chips}
+              </ScrollView>
+            </View>
+          )
+        )}
+      </Animated.View>
 
       {/* Strategy summary: situation, recommended target, pitch percentages */}
       {strategyIntent && (
         <CollapsibleStrategySummary
           strategyIntent={strategyIntent}
-          onSelectPitchName={onSelectPitchName}
+          onSelectPitchName={handleSelectPitch}
+          disabled={disabled || isActionPending}
         />
       )}
     </View>
@@ -332,6 +511,7 @@ export const PitchSelectorWidget = React.memo(
   (prev, next) => {
     return (
       prev.pitcher?.id === next.pitcher?.id &&
+      prev.pitcher?.arsenal === next.pitcher?.arsenal &&
       prev.selectedPitchName === next.selectedPitchName &&
       prev.recommendedPitch === next.recommendedPitch &&
       prev.isActionPending === next.isActionPending &&
@@ -341,8 +521,10 @@ export const PitchSelectorWidget = React.memo(
       prev.staminaPct === next.staminaPct &&
       prev.confidencePct === next.confidencePct &&
       prev.pitchConfidences === next.pitchConfidences &&
+      prev.effectivenessPct === next.effectivenessPct &&
       prev.pitchEffectiveness === next.pitchEffectiveness &&
       prev.onChargingProgress === next.onChargingProgress &&
+      prev.onSelectPitchName === next.onSelectPitchName &&
       prev.onThrowPitch === next.onThrowPitch
     );
   },
@@ -353,22 +535,28 @@ export const PitchSelectorWidget = React.memo(
 function CollapsibleStrategySummary({
   strategyIntent,
   onSelectPitchName,
+  disabled = false,
 }: {
   strategyIntent: StrategyIntentDecision;
   onSelectPitchName: (name: string) => void;
+  disabled?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [contentHeight, setContentHeight] = useState(0);
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(progress, {
+    const anim = Animated.timing(progress, {
       toValue: expanded ? 1 : 0,
       duration: expanded ? 220 : 160,
       easing: Easing.out(Easing.cubic),
       // Height can't use the native driver.
       useNativeDriver: false,
-    }).start();
+    });
+    anim.start();
+    return () => {
+      anim.stop();
+    };
   }, [expanded, progress]);
 
   const height = progress.interpolate({
@@ -387,6 +575,7 @@ function CollapsibleStrategySummary({
           <StrategySummaryStrip
             strategyIntent={strategyIntent}
             onSelectPitchName={onSelectPitchName}
+            disabled={disabled}
           />
         </Animated.View>
       </Animated.View>
@@ -410,9 +599,11 @@ function CollapsibleStrategySummary({
 function StrategySummaryStrip({
   strategyIntent,
   onSelectPitchName,
+  disabled = false,
 }: {
   strategyIntent: StrategyIntentDecision;
   onSelectPitchName: (name: string) => void;
+  disabled?: boolean;
 }) {
   const {
     situation_tag,
@@ -430,7 +621,11 @@ function StrategySummaryStrip({
         <TouchableOpacity
           activeOpacity={0.75}
           onPress={() => onSelectPitchName(recommended_pitch)}
-          style={styles.recTargetPill}
+          disabled={disabled}
+          style={[styles.recTargetPill, disabled && styles.changePitchButtonDisabled]}
+          accessibilityRole="button"
+          accessibilityLabel={`Recommended pitch ${recommended_pitch}, target ${recommended_zone}`}
+          accessibilityState={{ disabled }}
         >
           <Text style={styles.recTargetLabel}>REC TARGET</Text>
           <Text style={styles.recTargetPitch}>{recommended_pitch}</Text>
@@ -523,6 +718,14 @@ function ThrowButton({
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={
+        isCharging
+          ? (chargeRatio >= 0.95 && chargeRatio <= 1.05 ? 'Release now' : 'Charging pitch')
+          : 'Throw pitch'
+      }
+      accessibilityHint="Press and hold to charge, release in the sweet spot"
+      accessibilityState={{ disabled, busy: isCharging }}
       style={[
         styles.throwButton,
         isVertical ? styles.throwButtonVertical : styles.throwButtonHorizontal,
@@ -606,6 +809,9 @@ const ArsenalChip = React.memo(function ArsenalChip({
       onPress={onSelect}
       disabled={disabled}
       activeOpacity={0.85}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}, ${formatVelocityRange(item)}, effectiveness ${Math.round(chipEffectiveness)} percent${isRecommended ? ', recommended' : ''}`}
+      accessibilityState={{ selected: isSelected, disabled }}
       style={[
         styles.arsenalChip,
         layout === 'vertical' && styles.arsenalChipVertical,
@@ -1057,5 +1263,76 @@ const styles = StyleSheet.create({
   },
   pctValuePrimary: {
     color: '#34D399',
+  },
+  // ─── View transition & state manager styles ─────────────────────────────
+  viewTransitionContainer: {
+    width: '100%',
+  },
+  throwViewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    width: '100%',
+  },
+  throwViewColumn: {
+    width: '100%',
+    gap: 6,
+  },
+  throwButtonHorizontalWrapper: {
+    flex: 1,
+  },
+  pitchNameHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    minWidth: 170,
+    gap: 12,
+  },
+  pitchNameHeaderVertical: {
+    minWidth: 0,
+    width: '100%',
+    marginBottom: 4,
+  },
+  pitchNameText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFF',
+    letterSpacing: 0.5,
+    flexShrink: 1,
+  },
+  changePitchButton: {
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  changePitchButtonDisabled: {
+    opacity: 0.45,
+  },
+  changePitchButtonText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#93C5FD',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  chipsViewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+  },
+  chipsViewColumn: {
+    width: '100%',
+    gap: 6,
   },
 });

@@ -521,6 +521,12 @@ export function BaseballSimScreen() {
     }
   }, [pitcherId]);
 
+  useEffect(() => {
+    if (pitchPhase === 'IDLE' && !isPitching) {
+      setPitchRadiusVisible(false);
+    }
+  }, [pitchPhase, isPitching]);
+
   const selectedPitchItem = useMemo(
     () => currentPitcher?.arsenal?.find((p) => p.name === selectedPitchName) ?? null,
     [currentPitcher?.arsenal, selectedPitchName],
@@ -598,6 +604,9 @@ export function BaseballSimScreen() {
       </View>
     );
   }
+
+  const isPitchExecutionActive =
+    isPitching || loadingState === 'loading' || pitchPhase !== 'IDLE' || Boolean(resultCameraHold);
 
   const commandRating = selectedPitchItem?.command ?? selectedPitchItem?.control_rating ?? currentPitcher?.control ?? 75;
   const defaultGlove = getZoneNominalTarget(selectedTargetZone || 'heart');
@@ -744,6 +753,7 @@ export function BaseballSimScreen() {
 
         {/* Pitch Selector — bottom fallback for narrow screens or when in bird's-eye view */}
         {currentPitcher &&
+          !isPitchExecutionActive &&
           (!showSidePitchSelector || cameraMode === 'BIRDSEYE') &&
           !isBattedBallCameraActive &&
           !battingMode && (
@@ -759,7 +769,7 @@ export function BaseballSimScreen() {
               onSelectPitchName={handleSelectPitchName}
               onThrowPitch={handleThrowPitch}
               onChargingProgress={handleChargingProgress}
-              isActionPending={isPitching || loadingState === 'loading'}
+              isActionPending={isPitchExecutionActive}
               staminaPct={staminaPct}
               confidencePct={holisticConfidence}
               pitchEffectiveness={currentPitcherEffMap}
@@ -820,6 +830,7 @@ export function BaseballSimScreen() {
 
       {/* Pitch Selector — stacked vertically beside the strike zone */}
       {currentPitcher &&
+        !isPitchExecutionActive &&
         showSidePitchSelector &&
         cameraMode === 'PITCH' &&
         !isBattedBallCameraActive &&
@@ -845,7 +856,7 @@ export function BaseballSimScreen() {
             onSelectPitchName={handleSelectPitchName}
             onThrowPitch={handleThrowPitch}
             onChargingProgress={handleChargingProgress}
-            isActionPending={isPitching || loadingState === 'loading'}
+            isActionPending={isPitchExecutionActive}
             staminaPct={staminaPct}
             confidencePct={holisticConfidence}
             pitchEffectiveness={currentPitcherEffMap}
