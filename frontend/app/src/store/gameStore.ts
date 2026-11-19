@@ -76,6 +76,7 @@ function seededGamePatch(
     battingDrill: null,
     isBattingDrillOpen: false,
     practiceSaved: null,
+    isPlayerCardModalOpen: false,
     selectedPitchName: previousPitchName || firstPitch || 'Four-Seam Fastball',
     selectedTargetZone: STRIKE_ZONES.HEART,
     isPitching: false,
@@ -168,6 +169,7 @@ export interface GameUiState {
   isRotationDialogOpen: boolean;
   isPitchFeedOpen: boolean;
   isTrajectoryOpen: boolean;
+  isPlayerCardModalOpen: boolean;
 
   // Loading / error
   loadingState: LoadingState;
@@ -241,6 +243,7 @@ export interface GameActions {
   toggleSettingsMenu(open?: boolean): void
   togglePitchFeed(open?: boolean): void
   toggleTrajectory(open?: boolean): void
+  togglePlayerCardModal(open?: boolean): void
 
   // UI mutations
   setSelectedPitchName(pitchName: string): void;
@@ -282,6 +285,7 @@ const initialState: GameUiState = {
   isRotationDialogOpen: false,
   isPitchFeedOpen: false,
   isTrajectoryOpen: false,
+  isPlayerCardModalOpen: false,
   activeDevTab: 'gameday',
   countFilter: 'ALL',
   situationFilter: 'ALL',
@@ -1097,6 +1101,23 @@ export const useGameStore = create<GameUiState & GameActions>((set, get) => ({
 
   toggleStrategyMenu(open?: boolean) {
     set((s) => ({ isStrategyMenuOpen: open !== undefined ? open : !s.isStrategyMenuOpen }));
+  },
+
+  togglePlayerCardModal(open?: boolean) {
+    set((s) => {
+      const targetState = open !== undefined ? open : !s.isPlayerCardModalOpen;
+      if (targetState) {
+        return {
+          isPlayerCardModalOpen: true,
+          isSettingsMenuOpen: false,
+          isStrategyMenuOpen: false,
+          isPitchFeedOpen: false,
+          isDevMenuOpen: false,
+          isTrajectoryOpen: false,
+        };
+      }
+      return { isPlayerCardModalOpen: false };
+    });
   },
 
   setCustomTarget(coords: { x: number; z: number } | null) {

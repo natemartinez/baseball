@@ -8,6 +8,8 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
+  Animated,
+  Platform,
   useWindowDimensions,
 } from 'react-native';
 import { useShallow } from 'zustand/react/shallow';
@@ -48,6 +50,7 @@ import { PitchFeedModal } from '../components/menus/PitchFeedModal';
 import { PitchTrajectoryModal } from '../components/menus/PitchTrajectoryModal';
 import { SettingsMenuModal } from '../components/menus/SettingsMenuModal';
 import { TeamSelectionModal } from '../components/menus/TeamSelectionModal';
+import { PlayerCardModal } from '../components/menus/PlayerCardModal';
 import { SwingMeterWidget } from '../components/hud/SwingMeterWidget';
 import { BattingDrillHud } from '../components/hud/BattingDrillHud';
 import { BattingDrillModal } from '../components/menus/BattingDrillModal';
@@ -118,6 +121,7 @@ export function BaseballSimScreen() {
     isPitchFeedOpen,
     isStrategyMenuOpen,
     isTrajectoryOpen,
+    isPlayerCardModalOpen,
     loadingState,
     isPitching,
     errorMessage,
@@ -150,6 +154,7 @@ export function BaseballSimScreen() {
       isPitchFeedOpen: s.isPitchFeedOpen,
       isStrategyMenuOpen: s.isStrategyMenuOpen,
       isTrajectoryOpen: s.isTrajectoryOpen,
+      isPlayerCardModalOpen: s.isPlayerCardModalOpen,
       loadingState: s.loadingState,
       isPitching: s.isPitching,
       errorMessage: s.errorMessage,
@@ -173,6 +178,7 @@ export function BaseballSimScreen() {
     swapRotation,
     toggleSettingsMenu,
     toggleTeamSelection,
+    togglePlayerCardModal,
     throwDrillPitch,
     setBattingDrillOpen,
     setSelectedPitchName,
@@ -194,6 +200,7 @@ export function BaseballSimScreen() {
       swapRotation: s.swapRotation,
       toggleSettingsMenu: s.toggleSettingsMenu,
       toggleTeamSelection: s.toggleTeamSelection,
+      togglePlayerCardModal: s.togglePlayerCardModal,
       throwDrillPitch: s.throwDrillPitch,
       setBattingDrillOpen: s.setBattingDrillOpen,
       setSelectedPitchName: s.setSelectedPitchName,
@@ -225,6 +232,24 @@ export function BaseballSimScreen() {
   const battingChargeRef = useRef(0);
   const [resultCameraHold, setResultCameraHold] = useState(false);
   const [manualCameraMode, setManualCameraMode] = useState<GameCameraMode>('PITCH');
+
+  const fieldHudAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (isPlayerCardModalOpen) {
+      Animated.timing(fieldHudAnim, {
+        toValue: 0,
+        duration: 100,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    } else {
+      Animated.timing(fieldHudAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: Platform.OS !== 'web',
+      }).start();
+    }
+  }, [isPlayerCardModalOpen, fieldHudAnim]);
 
   const [chargingProgress, setChargingProgress] = useState<number | null>(null);
   const [isCharging, setIsCharging] = useState(false);
@@ -262,7 +287,8 @@ export function BaseballSimScreen() {
     isStrategyMenuOpen ||
     isTrajectoryOpen ||
     isLineupDialogOpen ||
-    isRotationDialogOpen;
+    isRotationDialogOpen ||
+    isPlayerCardModalOpen;
   const battingInputEnabled =
     battingMode && cameraMode === 'PITCH' && !isBattedBallCameraActive && !battingModalOpen;
 
@@ -573,7 +599,7 @@ export function BaseballSimScreen() {
     );
   }
 
-  const commandRating = selectedPitchItem?.control_rating ?? currentPitcher?.control ?? 82;
+  const commandRating = selectedPitchItem?.command ?? selectedPitchItem?.control_rating ?? currentPitcher?.control ?? 75;
   const defaultGlove = getZoneNominalTarget(selectedTargetZone || 'heart');
   const packetAim = pendingThrow?.pitch_details.gameday_packet?.intent ?? latestPitch?.gameday_packet?.intent;
   const resolvedAim =
@@ -590,7 +616,8 @@ export function BaseballSimScreen() {
       ? pendingResolution?.pitch_details?.batter_decision ?? null
       : null;
 
-  const effectiveCommand = calculateCombinedEffectiveCommand(commandRating, holisticConfidence, activeEffectiveness);
+  const selectedPitchConfidence = currentPitcherConfMap[selectedPitchName] ?? holisticConfidence;
+  const effectiveCommand = calculateCombinedEffectiveCommand(commandRating, selectedPitchConfidence, activeEffectiveness);
   const pitcherAbilityTier = getAbilityTier(effectiveCommand);
 
   const battedBallTelemetry: BattedBallTelemetry | null =
@@ -698,6 +725,11 @@ export function BaseballSimScreen() {
             gameState={gameState}
             lineups={lineups}
             latestPitch={resultVisible ? latestPitch : null}
+            selectedPitchName={selectedPitchName}
+            effectiveCommand={effectiveCommand}
+            pitcherAbilityTier={pitcherAbilityTier}
+            activeEffectiveness={activeEffectiveness}
+            onOpenPlayerCard={() => togglePlayerCardModal(true)}
             onOpenSettings={() => toggleSettingsMenu(true)}
             onOpenTeamSelection={() => toggleTeamSelection(true)}
             activeSeed={activeSeed}
@@ -715,7 +747,10 @@ export function BaseballSimScreen() {
           (!showSidePitchSelector || cameraMode === 'BIRDSEYE') &&
           !isBattedBallCameraActive &&
           !battingMode && (
-          <View style={styles.pitchFooter}>
+          <Animated.View
+            style={[styles.pitchFooter, { opacity: fieldHudAnim }]}
+            pointerEvents={isPlayerCardModalOpen ? 'none' : 'auto'}
+          >
             <PitchSelectorWidget
               pitcher={currentPitcher}
               selectedPitchName={selectedPitchName}
@@ -729,13 +764,19 @@ export function BaseballSimScreen() {
               confidencePct={holisticConfidence}
               pitchEffectiveness={currentPitcherEffMap}
             />
-          </View>
+          </Animated.View>
         )}
       </SafeAreaView>
 
       {/* Strike Zone — pinned just above the plate in the GameField scene */}
       {currentBatter && cameraMode === 'PITCH' && !isBattedBallCameraActive && (
-        <View style={[styles.strikeZoneOverlay, { top: strikeZoneTop }]}>
+        <Animated.View
+          style={[
+            styles.strikeZoneOverlay,
+            { top: strikeZoneTop, opacity: fieldHudAnim },
+          ]}
+          pointerEvents={isPlayerCardModalOpen ? 'none' : 'auto'}
+        >
           <View
             style={[
               styles.strikeZoneScaleBox,
@@ -774,7 +815,7 @@ export function BaseballSimScreen() {
               />
             </View>
           </View>
-        </View>
+        </Animated.View>
       )}
 
       {/* Pitch Selector — stacked vertically beside the strike zone */}
@@ -783,15 +824,17 @@ export function BaseballSimScreen() {
         cameraMode === 'PITCH' &&
         !isBattedBallCameraActive &&
         !battingMode && (
-        <View
+        <Animated.View
           style={[
             styles.pitchSelectorSide,
             {
               top: sidePitchSelectorTop,
               left: strikeZoneRight + 12,
               width: sidePitchSelectorWidth,
+              opacity: fieldHudAnim,
             },
           ]}
+          pointerEvents={isPlayerCardModalOpen ? 'none' : 'auto'}
         >
           <PitchSelectorWidget
             layout="vertical"
@@ -807,7 +850,7 @@ export function BaseballSimScreen() {
             confidencePct={holisticConfidence}
             pitchEffectiveness={currentPitcherEffMap}
           />
-        </View>
+        </Animated.View>
       )}
 
       <BattingDrillHud />
@@ -843,6 +886,9 @@ export function BaseballSimScreen() {
 
       {/* Team & Matchup Selection Dialog */}
       <TeamSelectionModal />
+
+      {/* Center-Screen Player Card Modal */}
+      <PlayerCardModal />
 
       {/* Batting Practice drill playlist setup */}
       <BattingDrillModal />

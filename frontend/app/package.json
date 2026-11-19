@@ -8,7 +8,7 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "build": "tsc",
-    "test": "node --test"
+    "test": "node --experimental-transform-types --loader ./scripts/test-loader.mjs --test"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.19.2",

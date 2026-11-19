@@ -229,7 +229,7 @@ function PitchSelectorWidgetComponent({
     pressStartTimeRef.current = null;
     onChargingProgress?.(null);
 
-    const selectedPitchItem = pitcher.arsenal.find((p) => p.name === selectedPitchName);
+    const selectedPitchItem = (pitcher.arsenal ?? []).find((p) => p.name === selectedPitchName);
     const selectedPitchEff =
       (selectedPitchName && pitchEffectiveness?.[selectedPitchName] != null)
         ? pitchEffectiveness[selectedPitchName]
@@ -247,7 +247,7 @@ function PitchSelectorWidgetComponent({
   }, [pitcher.arsenal, selectedPitchName, pitchEffectiveness, onChargingProgress, onThrowPitch]);
 
   const pitcherControl = (pitcher as any)?.ratings?.control ?? pitcher.control ?? 75;
-  const chips = pitcher.arsenal.map((item) => {
+  const chips = (pitcher.arsenal ?? []).map((item) => {
     const itemEff =
       pitchEffectiveness?.[item.name] ??
       computeBaselineEffectiveness(
@@ -616,30 +616,18 @@ const ArsenalChip = React.memo(function ArsenalChip({
             ? Colors.blue
             : isRecommended
               ? 'rgba(16, 185, 129, 0.6)'
-              : Colors.borderSecondary,
+              : `${tierColor}55`,
         },
       ]}
     >
+      {/* Tier Color Left Accent Bar */}
+      <View style={[styles.chipTierAccent, { backgroundColor: tierColor }]} />
+
       {isRecommended && (
         <View style={styles.recBadge}>
           <Text style={styles.recBadgeText}>★ PRIMARY</Text>
         </View>
       )}
-
-      {/* Grade Banner */}
-      <View
-        style={[
-          styles.gradeBanner,
-          {
-            backgroundColor: `${tierColor}20`,
-            borderColor: `${tierColor}77`,
-          },
-        ]}
-      >
-        <Text style={[styles.gradeBannerText, { color: tierColor }]}>
-          {`${abilityTier} • ${Math.round(effCmd)} CMD`}
-        </Text>
-      </View>
 
       {/* Side-by-side Pitch Name and Velocity Range */}
       <View style={styles.chipNameVeloRow}>
@@ -878,16 +866,27 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderRadius: 8,
     borderWidth: 1,
-    paddingHorizontal: 12,
+    paddingLeft: 14,
+    paddingRight: 10,
     paddingVertical: 8,
     alignItems: 'center',
     minWidth: 140,
     gap: 3,
   },
+  chipTierAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+    borderTopLeftRadius: 7,
+    borderBottomLeftRadius: 7,
+  },
   arsenalChipVertical: {
     width: '100%',
     minWidth: 0,
-    paddingHorizontal: 10,
+    paddingLeft: 12,
+    paddingRight: 10,
     paddingVertical: 6,
   },
   arsenalChipDisabled: { opacity: 0.45 },

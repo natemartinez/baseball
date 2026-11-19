@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Svg, { Polygon } from 'react-native-svg';
 import type { GameState, TeamLineup } from '../../types/api';
+import { getAbilityTierColor } from '../../services/gamedayMath';
 
 // ─── Design Tokens ────────────────────────────────────────────────────────────
 
@@ -21,6 +22,11 @@ const TOKENS = {
 interface ScorebugWidgetProps {
   gameState: GameState | null;
   lineups?: TeamLineup[];
+  selectedPitchName?: string;
+  effectiveCommand?: number;
+  pitcherAbilityTier?: string;
+  activeEffectiveness?: number;
+  onOpenPlayerCard?: () => void;
 }
 
 function getTeamMonogram(teamName: string): { code: string; badgeBg: string } {
@@ -61,7 +67,15 @@ function extractSurname(name?: string, fallback = 'PLAYER'): string {
  *   - Pitcher Strip (~20px, #E2E8F0): Pitcher surname + Pitch count (P: XX)
  *   - Batter Strip (~18px, #FFFFFF): Order + Batter surname + PA stat/split
  */
-export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps) {
+export function ScorebugWidget({
+  gameState,
+  lineups = [],
+  selectedPitchName,
+  effectiveCommand,
+  pitcherAbilityTier,
+  activeEffectiveness,
+  onOpenPlayerCard,
+}: ScorebugWidgetProps) {
   const [matchupExpanded, setMatchupExpanded] = useState(true);
 
   // ─── Extract Game State Data with Safe Fallbacks ────────────────────────────
@@ -268,8 +282,16 @@ export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps)
 
       {/* ── Compact Plate Matchup • Statcast Preview (right of scorebug) ──── */}
       {matchupExpanded && (
-      <View style={styles.matchupPreview}>
-        <Text style={styles.matchupLabel}>PLATE MATCHUP</Text>
+      <TouchableOpacity
+        style={styles.matchupPreview}
+        activeOpacity={0.8}
+        onPress={onOpenPlayerCard}
+        accessibilityLabel="Open player card modal"
+      >
+        <View style={styles.matchupHeaderRow}>
+          <Text style={styles.matchupLabel}>PLATE MATCHUP</Text>
+          <Text style={styles.matchupCardPill}>CARD ↗</Text>
+        </View>
         <Text style={styles.matchupSubLabel}>STATCAST PREVIEW</Text>
 
         <View style={styles.matchupSide}>
@@ -287,17 +309,51 @@ export function ScorebugWidget({ gameState, lineups = [] }: ScorebugWidgetProps)
         <View style={styles.matchupDivider} />
 
         <View style={styles.matchupSide}>
-          <Text style={styles.matchupRole}>PIT</Text>
-          <Text style={styles.matchupName} numberOfLines={1}>
-            {extractSurname(currentPitcher?.name, 'PITCHER')}
-          </Text>
+          <View style={styles.matchupPitHeader}>
+            <Text style={styles.matchupRole}>PIT</Text>
+            <Text style={styles.matchupPitchName} numberOfLines={1}>
+              {selectedPitchName ? selectedPitchName.toUpperCase() : extractSurname(currentPitcher?.name, 'PITCHER')}
+            </Text>
+            {pitcherAbilityTier && (
+              <View
+                style={[
+                  styles.tierBadge,
+                  {
+                    backgroundColor: `${getAbilityTierColor(pitcherAbilityTier as any)}20`,
+                    borderColor: getAbilityTierColor(pitcherAbilityTier as any),
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tierBadgeText,
+                    { color: getAbilityTierColor(pitcherAbilityTier as any) },
+                  ]}
+                >
+                  {pitcherAbilityTier}
+                </Text>
+              </View>
+            )}
+          </View>
           <View style={styles.matchupStatRow}>
-            <MatchupStat label="VEL" value={currentPitcher?.velocity_rating} />
-            <MatchupStat label="BRK" value={currentPitcher?.break_rating} />
-            <MatchupStat label="CTL" value={currentPitcher?.control} />
+            <MatchupStat
+              label="CMD"
+              value={effectiveCommand != null ? Math.round(effectiveCommand) : currentPitcher?.control}
+            />
+            <MatchupStat
+              label="BRK"
+              value={
+                currentPitcher?.arsenal?.find(p => p.name === selectedPitchName)?.break_rating ??
+                currentPitcher?.break_rating
+              }
+            />
+            <MatchupStat
+              label="EFF"
+              value={activeEffectiveness != null ? Math.round(activeEffectiveness) : undefined}
+            />
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
       )}
     </View>
   );
@@ -317,11 +373,13 @@ function MatchupStat({ label, value }: { label: string; value?: number }) {
 const styles = StyleSheet.create({
   scorebugWrap: {
     position: 'relative',
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
   },
   matchupToggle: {
     position: 'absolute',
     top: '50%',
-    right: -13,
+    left: 147,
     marginTop: -13,
     width: 26,
     height: 26,
@@ -356,10 +414,8 @@ const styles = StyleSheet.create({
   },
   // ─── Compact Plate Matchup • Statcast Preview ───────────────────────────────
   matchupPreview: {
-    position: 'absolute',
-    left: 176, // scoreboard width (160) + 16px gap
-    top: 0,
-    width: 112,
+    marginLeft: 16,
+    width: 120,
     height: 110,
     backgroundColor: TOKENS.upperBg,
     borderRadius: 8,
@@ -371,6 +427,21 @@ const styles = StyleSheet.create({
     boxShadow: '0px 3px 5px rgba(0, 0, 0, 0.35)',
     elevation: 6,
     overflow: 'hidden',
+  },
+  matchupHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  matchupCardPill: {
+    fontSize: 6.5,
+    fontWeight: '900',
+    color: '#60A5FA',
+    backgroundColor: 'rgba(37, 99, 235, 0.2)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    letterSpacing: 0.3,
   },
   matchupLabel: {
     color: '#94A3B8',
@@ -388,6 +459,29 @@ const styles = StyleSheet.create({
   matchupSide: {
     gap: 2,
     marginTop: 4,
+  },
+  matchupPitHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  matchupPitchName: {
+    color: TOKENS.upperText,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    flexShrink: 1,
+  },
+  tierBadge: {
+    paddingHorizontal: 3,
+    paddingVertical: 0.5,
+    borderRadius: 3,
+    borderWidth: 0.5,
+  },
+  tierBadgeText: {
+    fontSize: 6,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   matchupRole: {
     color: TOKENS.activeGold,
