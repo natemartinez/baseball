@@ -10,9 +10,9 @@ the actual landing point against each fielder's baseline reach radius.
 import random
 from typing import Any, Dict, Optional
 
-from .batters import InGameBatterRatings
+from ..batter_info import InGameBatterRatings
 from .contact_outcome import resolve_contact_outcome
-from ..pitching_engine.pitch_execution.pitch_shape import (
+from ...pitching_engine.pitch_execution.pitch_shape import (
     PitchShape,
     air_launch_parameters,
     build_pitch_shape,
@@ -22,7 +22,7 @@ from ..pitching_engine.pitch_execution.pitch_shape import (
     ground_launch_parameters,
     whiff_shape_adjustment,
 )
-from ..pitching_engine.pitcher_info.pitch_effectiveness import (
+from ...pitching_engine.pitcher_info.pitch_effectiveness import (
     apply_effectiveness_to_whiff_rate,
     apply_effectiveness_to_exit_velocity,
 )
@@ -250,7 +250,7 @@ class ContactResolver:
         )
         if outcome is None:
             # Defensive fallback: valid clamped inputs should always resolve.
-            from ..game_engine.ball_flight import compute_batted_ball_trace
+            from ...game_engine.physics.ball_flight import compute_batted_ball_trace
             trace = compute_batted_ball_trace(exit_velocity, launch_angle, spray_angle)
             call = 'FOUL' if force_foul or abs(spray_angle) > 45.0 else 'SINGLE'
             return {

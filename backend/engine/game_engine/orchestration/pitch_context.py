@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from ...pitching_engine.pitcher_info.adjusted_ratings import (
         InGamePitcherRatings,
     )
-    from ...batting_engine.batters import (
+    from ...batting_engine.batter_info import (
         InGameBatterRatings,
     )
 
@@ -157,7 +157,7 @@ class PitchContext:
         )
 
         from ...pitching_engine.pitcher_info.adjusted_ratings import PitcherInstanceManager
-        from ...batting_engine.batters import BatterInstanceManager
+        from ...batting_engine.batter_info import BatterInstanceManager
 
         pitcher_ratings = PitcherInstanceManager.get_adjusted_ratings(
             pitcher=pitcher_obj,

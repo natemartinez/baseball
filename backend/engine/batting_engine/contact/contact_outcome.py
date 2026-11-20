@@ -19,7 +19,7 @@ grounders in front of the plate are infield hits rather than automatic outs.
 import math
 from typing import Any, Dict, Optional, Tuple
 
-from ..game_engine.ball_flight import (
+from ...game_engine.physics.ball_flight import (
     compute_batted_ball_geometry,
     compute_batted_ball_trace,
     ground_transit_time,

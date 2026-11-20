@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from backend.api.app import create_app
-from backend.engine.batting_engine.contact_outcome import (
+from backend.engine.batting_engine.contact import (
     fielder_for_landing,
     resolve_contact_outcome,
 )
