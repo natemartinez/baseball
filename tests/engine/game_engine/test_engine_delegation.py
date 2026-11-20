@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from backend.engine.game_engine.engine import GameEngine
-from test_ball_flight import _game
+from tests.conftest import _game
 
 
 def test_engine_has_no_build_gameday_packet():
