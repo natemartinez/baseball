@@ -56,8 +56,33 @@ def test_canonical_imports_resolve():
     # Importing the seeder must not raise (do not execute it: it mutates SQLite).
     import backend.database.seed  # noqa: F401
 
-    # New pitching subpackages are regular packages, not implicit namespaces.
-    import backend.engine.pitching_engine.pitch_selection  # noqa: F401
+    # Pitching subpackages are regular packages
+    import backend.engine.pitching_engine.pitcher_info as pe_info
+    import backend.engine.pitching_engine.pitch_selection as pe_sel
+    import backend.engine.pitching_engine.pitch_execution as pe_exec
+    assert pe_info.ActivePitcherState is not None
+    assert pe_sel.PitchStrategy is not None
+    assert pe_exec.calculate_pitch_delivery is not None
+
+    # Batting subpackages are regular packages
+    import backend.engine.batting_engine.batter_info as be_info
+    import backend.engine.batting_engine.swing_decision as be_swing
+    import backend.engine.batting_engine.contact as be_contact
+    assert be_info.BatterInstanceManager is not None
+    assert be_swing.BatterStrategy is not None
+    assert be_contact.ContactResolver is not None
+
+    # Game engine subpackages are regular packages
+    import backend.engine.game_engine.physics as ge_phys
+    import backend.engine.game_engine.geometry as ge_geom
+    import backend.engine.game_engine.game_logic as ge_logic
+    import backend.engine.game_engine.orchestration as ge_orch
+    import backend.engine.game_engine.serialization as ge_ser
+    assert ge_phys.compute_batted_ball_trace is not None
+    assert ge_geom.StrikeZone is not None
+    assert ge_logic.count_after_pitch is not None
+    assert ge_orch.PitchFlowOrchestrator is not None
+    assert ge_ser.build_state_payload is not None
 
 
 def test_flask_endpoints_smoke():

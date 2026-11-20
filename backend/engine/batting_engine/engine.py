@@ -11,11 +11,10 @@ import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 
-from .batters import BatterInstanceManager
-from .contact import ContactResolver
-from .contact_outcome import resolve_contact_outcome
+from .batter_info import BatterInstanceManager
+from .contact import ContactResolver, resolve_contact_outcome
 
-from ..game_engine.ball_flight import compute_batted_ball_trace
+from ..game_engine.physics.ball_flight import compute_batted_ball_trace
 
 if TYPE_CHECKING:  # pragma: no cover - avoids a runtime import cycle
     from ..game_engine.orchestration.controllers import BatterReaction
