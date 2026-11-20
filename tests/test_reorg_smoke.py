@@ -140,3 +140,11 @@ def test_flask_endpoints_smoke():
     assert reset_data['game']
     assert reset_data['lineups']
     assert reset_data['rotations']
+
+
+def test_conftest_fixtures_available():
+    from tests.conftest import _game
+    game = _game(seed=99)
+    assert game is not None
+    assert game.seed == 99
+
