@@ -148,3 +148,20 @@ def test_conftest_fixtures_available():
     assert game is not None
     assert game.seed == 99
 
+
+def test_test_folder_structure_is_modular():
+    test_root = ROOT_DIR / 'tests'
+    expected_dirs = ['api', 'database', 'engine', 'e2e_pitching_pipeline']
+    for d in expected_dirs:
+        assert (test_root / d).is_dir(), f"Expected directory tests/{d} to exist"
+
+    engine_dirs = ['batting_engine', 'pitching_engine', 'game_engine', 'game_logic', 'game_modes', 'serialization']
+    for ed in engine_dirs:
+        assert (test_root / 'engine' / ed).is_dir(), f"Expected directory tests/engine/{ed} to exist"
+
+    # Verify no stray test files at root
+    root_test_files = list(test_root.glob('test_*.py'))
+    assert len(root_test_files) == 1
+    assert root_test_files[0].name == 'test_reorg_smoke.py'
+
+

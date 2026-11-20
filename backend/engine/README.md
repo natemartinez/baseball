@@ -69,3 +69,26 @@ When fixing a bug or altering baseball behavior, use this quick-reference table 
 2. **Pure Calculation Engines:** `PitchingEngine` and `BattingEngine` are pure functional coordinators; they accept pre-pitch context and return outcomes without modifying global game state.
 3. **Backward Compatibility:** Root modules (`batters.py`, `batter_strategy.py`, `ball_flight.py`, `strike_zone.py`, `gameday_math.py`) maintain lightweight backward-compatibility shims using in-place module aliasing (`sys.modules[__name__] = _canonical`), while contact resolution and outcomes live cleanly under `batting_engine/contact/`.
 
+---
+
+## Test Suite Architecture & Directory Map
+
+The test suite directly mirrors the functional backend layout:
+
+```
+tests/
+├── conftest.py                      # Global test fixtures, sys.path configuration, _game() factory
+├── test_reorg_smoke.py              # Root integration & directory organization smoke tests
+├── api/                             # REST/WebSocket routes, state payloads, and RosterStore tests
+├── database/                        # SQLite schema validation, O(1) retrieval, and performance tests
+├── e2e_pitching_pipeline/           # Authoritative E2E contract test suites (Tiers 1-4)
+└── engine/
+    ├── pitching_engine/             # Pitcher ratings, confidence, effectiveness, selection, targeting
+    ├── batting_engine/              # Batter info, plate discipline, swing decisions, contact outcomes
+    ├── game_engine/                 # Ball flight, ground physics, turn orchestration, half-inning switch
+    ├── game_logic/                  # Count, outs, base running, inning turnover, stats tracking
+    ├── game_modes/                  # Practice mode and game mode controller
+    └── serialization/               # State and arsenal payload formatting
+```
+
+
