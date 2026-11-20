@@ -12,9 +12,7 @@ from pathlib import Path
 import sys
 import pytest
 
-ROOT_DIR = Path(__file__).resolve().parent.parent
-if str(ROOT_DIR) not in sys.path:
-    sys.path.insert(0, str(ROOT_DIR))
+from tests.conftest import ROOT_DIR
 
 from backend.database.db import get_player, get_team_roster, init_db
 from backend.engine.models.player import Player

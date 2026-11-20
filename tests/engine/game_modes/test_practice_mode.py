@@ -6,7 +6,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 
 from backend.api.app import create_app
-from test_ball_flight import _game
+from tests.conftest import _game
 
 
 EXACT_TARGET = {'x': 0.0, 'z': 2.5}

@@ -10,7 +10,7 @@ from backend.engine.batting_engine.contact import (
     fielder_for_landing,
     resolve_contact_outcome,
 )
-from test_ball_flight import _game
+from tests.conftest import _game
 
 
 def test_contact_outcome_maps_landing_to_result():
