@@ -70,6 +70,47 @@ describe('Hit Presets for Debug Launcher', () => {
     assert.equal(data.samples.length, 20);
   });
 
+  it('equips all presets with authentic fielding metadata', () => {
+    const ssChopper = HIT_PRESETS.find((p) => p.id === 'ss_chopper');
+    assert.ok(ssChopper);
+    assert.equal(ssChopper.fielded, true);
+    assert.equal(ssChopper.fielderId, 'SS');
+    assert.equal(ssChopper.fieldingType, 'GROUND_SCOOP');
+    assert.ok(Array.isArray(ssChopper.fielderStart));
+    assert.ok(Array.isArray(ssChopper.interceptPoint));
+
+    const grounder1B = HIT_PRESETS.find((p) => p.id === '1b_grounder');
+    assert.ok(grounder1B);
+    assert.equal(grounder1B.fielded, true);
+    assert.equal(grounder1B.fielderId, '1B');
+    assert.equal(grounder1B.fieldingType, 'BACKHAND_PICK');
+
+    const gapDouble = HIT_PRESETS.find((p) => p.id === 'line_drive_gap');
+    assert.ok(gapDouble);
+    assert.equal(gapDouble.fielded, true);
+    assert.equal(gapDouble.fielderId, 'LF');
+    assert.equal(gapDouble.fieldingType, 'GROUND_SCOOP');
+
+    const flyBallRF = HIT_PRESETS.find((p) => p.id === 'fly_ball_rf');
+    assert.ok(flyBallRF);
+    assert.equal(flyBallRF.fielded, true);
+    assert.equal(flyBallRF.fielderId, 'RF');
+    assert.equal(flyBallRF.fieldingType, 'ROUTINE_FLY_CATCH');
+
+    const moonshot = HIT_PRESETS.find((p) => p.id === 'moonshot_hr');
+    assert.ok(moonshot);
+    assert.equal(moonshot.fielded, false);
+    assert.equal(moonshot.fieldingType, 'HOME_RUN');
+
+    // Also check buildActiveBattedBallFromPreset passes through fielding metadata
+    const activeChopper = buildActiveBattedBallFromPreset(ssChopper, 1);
+    assert.equal(activeChopper.fielded, true);
+    assert.equal(activeChopper.fielderId, 'SS');
+    assert.equal(activeChopper.fieldingType, 'GROUND_SCOOP');
+    assert.deepEqual(activeChopper.fielderStart, ssChopper.fielderStart);
+    assert.deepEqual(activeChopper.interceptPoint, ssChopper.interceptPoint);
+  });
+
   describe('generateKinematicGrounder kinematics', () => {
     it('calculates natural shallow outfield rollout for 88 mph chopper', () => {
       const motion = generateKinematicGrounder(88, -5, -21.4);

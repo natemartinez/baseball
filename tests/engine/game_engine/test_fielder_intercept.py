@@ -86,3 +86,4 @@ def test_bounded_samples_are_strictly_monotonic():
         dist_prev = samples[i - 1][0] ** 2 + samples[i - 1][1] ** 2
         dist_curr = samples[i][0] ** 2 + samples[i][1] ** 2
         assert dist_curr >= dist_prev - 1e-3
+

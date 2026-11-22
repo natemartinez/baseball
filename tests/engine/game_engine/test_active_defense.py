@@ -62,3 +62,4 @@ def test_positioning_rating_applies_depth_shading():
 
     assert cf_deep_state.y > STANDARD_FIELDER_COORDINATES["CF"][1]
     assert cf_shallow_state.y < STANDARD_FIELDER_COORDINATES["CF"][1]
+

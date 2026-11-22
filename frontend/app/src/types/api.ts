@@ -289,6 +289,12 @@ export interface BattedBallTelemetry {
   landing_y_ft: number;
   sample_count: number;
   samples: BattedBallSample[];
+  fielded?: boolean;
+  fielder_id?: string | null;
+  fielder_name?: string | null;
+  fielding_type?: string | null;
+  fielder_start?: [number, number] | null;
+  intercept_point?: [number, number, number] | null;
   model_version: string;
 }
 

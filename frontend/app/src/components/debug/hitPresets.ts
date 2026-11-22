@@ -13,6 +13,11 @@ export interface HitPreset {
   apexHeight: number;
   distance: number;
   samples: [number, number, number, number][];
+  fielded?: boolean;
+  fielderId?: string | null;
+  fieldingType?: string | null;
+  fielderStart?: [number, number] | null;
+  interceptPoint?: [number, number, number] | null;
 }
 
 export const G = 32.174;
@@ -533,6 +538,11 @@ export const HIT_PRESETS: HitPreset[] = [
     apexHeight: ssChopperTraj.apexHeight,
     distance: ssChopperTraj.distance,
     samples: ssChopperTraj.samples,
+    fielded: true,
+    fielderId: 'SS',
+    fieldingType: 'GROUND_SCOOP',
+    fielderStart: [-45.0, 115.0],
+    interceptPoint: [-38.2, 108.5, 0.0],
   },
   {
     id: '1b_grounder',
@@ -547,6 +557,11 @@ export const HIT_PRESETS: HitPreset[] = [
     apexHeight: oneBGrounderTraj.apexHeight,
     distance: oneBGrounderTraj.distance,
     samples: oneBGrounderTraj.samples,
+    fielded: true,
+    fielderId: '1B',
+    fieldingType: 'BACKHAND_PICK',
+    fielderStart: [63.6, 63.6],
+    interceptPoint: [58.4, 60.1, 0.0],
   },
   {
     id: 'line_drive_gap',
@@ -561,6 +576,11 @@ export const HIT_PRESETS: HitPreset[] = [
     apexHeight: lineDriveGapTraj.apexHeight,
     distance: lineDriveGapTraj.distance,
     samples: lineDriveGapTraj.samples,
+    fielded: true,
+    fielderId: 'LF',
+    fieldingType: 'GROUND_SCOOP',
+    fielderStart: [-115.0, 255.0],
+    interceptPoint: [-75.0, 260.0, 0.0],
   },
   {
     id: 'fly_ball_rf',
@@ -575,6 +595,11 @@ export const HIT_PRESETS: HitPreset[] = [
     apexHeight: flyBallRfTraj.apexHeight,
     distance: flyBallRfTraj.distance,
     samples: flyBallRfTraj.samples,
+    fielded: true,
+    fielderId: 'RF',
+    fieldingType: 'ROUTINE_FLY_CATCH',
+    fielderStart: [115.0, 255.0],
+    interceptPoint: [102.5, 272.0, 4.5],
   },
   {
     id: 'moonshot_hr',
@@ -589,6 +614,11 @@ export const HIT_PRESETS: HitPreset[] = [
     apexHeight: moonshotTraj.apexHeight,
     distance: moonshotTraj.distance,
     samples: moonshotTraj.samples,
+    fielded: false,
+    fielderId: null,
+    fieldingType: 'HOME_RUN',
+    fielderStart: null,
+    interceptPoint: null,
   },
 ];
 
@@ -632,5 +662,10 @@ export function buildActiveBattedBallFromPreset(
     launchAngle: preset.launchAngle,
     apexHeight: preset.apexHeight,
     distance: preset.distance,
+    fielded: preset.fielded,
+    fielderId: preset.fielderId,
+    fieldingType: preset.fieldingType,
+    fielderStart: preset.fielderStart,
+    interceptPoint: preset.interceptPoint,
   };
 }

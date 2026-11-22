@@ -30,6 +30,12 @@ export interface ActiveBattedBallData {
   launchAngle?: number;
   apexHeight?: number;
   distance?: number;
+  fielded?: boolean;
+  fielderId?: string | null;
+  fielderName?: string | null;
+  fieldingType?: string | null;
+  fielderStart?: [number, number] | null;
+  interceptPoint?: [number, number, number] | null;
 }
 
 export interface BattingLayerProps {

@@ -263,7 +263,7 @@ export function FieldScene({
       {/* Outfield foul poles with fair-territory screen wings */}
       <FoulPoles />
 
-      <FielderLayer />
+      <FielderLayer activeBattedBall={activeBattedBall} />
 
       {isBatting ? (
         <BattingLayer

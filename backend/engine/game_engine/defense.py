@@ -130,3 +130,4 @@ class ActiveDefense:
             )
 
         return cls(fielders=fielders)
+

@@ -434,6 +434,12 @@ export function BaseballSimScreen() {
       launchAngle: trace.launch_angle_deg,
       apexHeight: trace.apex_height_ft,
       distance: trace.distance_ft,
+      fielded: trace.fielded,
+      fielderId: trace.fielder_id,
+      fielderName: trace.fielder_name,
+      fieldingType: trace.fielding_type,
+      fielderStart: trace.fielder_start,
+      interceptPoint: trace.intercept_point,
     });
 
     const timeoutMs = Math.min(
