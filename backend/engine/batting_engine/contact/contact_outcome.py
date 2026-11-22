@@ -31,6 +31,16 @@ from ...game_engine.physics.fielder_intercept import (
     solve_continuous_ball_flight,
     solve_defense_intercept,
 )
+from ...game_engine.physics.fielder_throw import (
+    BASE_COORDINATES,
+    ThrowResult,
+    solve_fielder_throw,
+)
+from ...game_engine.physics.runner_timing import (
+    BasePlayResult,
+    calculate_home_to_first_time,
+    resolve_play_at_base,
+)
 
 
 PARK_FENCE_CENTER_FT = 400.0
@@ -266,6 +276,7 @@ def resolve_contact_outcome(
                 'fielding_type': 'FOUL',
                 'fielder_start': None,
                 'intercept_point': None,
+                'throw': None,
                 'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
             }
 
@@ -309,6 +320,7 @@ def resolve_contact_outcome(
                 'fielding_type': 'HOME_RUN',
                 'fielder_start': None,
                 'intercept_point': None,
+                'throw': None,
                 'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
             }
         return {
@@ -335,11 +347,55 @@ def resolve_contact_outcome(
         and intercept.fielding_type in ('ROUTINE_FLY_CATCH', 'RUNNING_CATCH', 'SLIDING_CATCH', 'WALL_LEAP')
     )
 
+    throw_data = None
+    custom_description = None
     if is_airborne_catch:
         call = 'IN_PLAY_OUT'
     elif intercept.fielded and intercept.s_intercept <= 165.0:
-        # Infield ground out
-        call = 'IN_PLAY_OUT'
+        # Infield ground out vs. infield single via throw kinematics & runner clock
+        fielder_state = active_defense.get_fielder(intercept.fielder_id)
+        fielder_player = fielder_state.player if fielder_state else None
+
+        throw_res = solve_fielder_throw(
+            fielder_id=intercept.fielder_id,
+            intercept_x=intercept.intercept_x,
+            intercept_y=intercept.intercept_y,
+            intercept_z=intercept.intercept_z,
+            t_intercept=intercept.t_intercept,
+            fielding_type=intercept.fielding_type,
+            fielder=fielder_player,
+            target_base="1B",
+        )
+        runner_t = calculate_home_to_first_time(
+            speed_rating=speed,
+            exit_velocity_mph=ev,
+        )
+        base_play = resolve_play_at_base(throw_res, runner_t)
+
+        if base_play.is_out:
+            call = 'IN_PLAY_OUT'
+        else:
+            call = 'SINGLE'
+            custom_description = f"Infield single to {intercept.fielder_id}. {base_play.description}"
+
+        throw_data = {
+            'thrower_id': throw_res.thrower_id,
+            'target_base': throw_res.target_base,
+            'transfer_time_s': throw_res.transfer_time_s,
+            'throw_flight_time_s': throw_res.throw_flight_time_s,
+            'throw_start_time_s': throw_res.throw_start_time_s,
+            'ball_arrival_time_s': throw_res.ball_arrival_time_s,
+            'runner_arrival_time_s': base_play.runner_arrival_time_s,
+            'margin_s': base_play.margin_s,
+            'throw_distance_ft': throw_res.throw_distance_ft,
+            'throw_velocity_mph': throw_res.throw_velocity_mph,
+            'offline_distance_ft': throw_res.offline_distance_ft,
+            'is_unassisted': throw_res.is_unassisted,
+            'is_out': base_play.is_out,
+            'is_close_play': base_play.is_close_play,
+            'sample_count': len(throw_res.samples),
+            'samples': throw_res.samples,
+        }
     else:
         # Base hit (ground ball through infield or ball landed untouched)
         if launch < 10.0:
@@ -399,13 +455,18 @@ def resolve_contact_outcome(
                 round(intercept.intercept_y, 2),
                 round(intercept.intercept_z, 2),
             ] if intercept.fielded else None,
+            'throw': throw_data,
             'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
         }
+
+    final_description = custom_description if custom_description is not None else _describe(
+        call, ev, launch, spray, intercept.s_intercept, fielder_dict
+    )
 
     return {
         'call': call,
         'is_in_play': True,
-        'description': _describe(call, ev, launch, spray, intercept.s_intercept, fielder_dict),
+        'description': final_description,
         'contact_quality': _contact_quality(ev, launch),
         'batted_ball': batted_ball_trace,
         'exit_velocity_mph': round(ev, 1),
