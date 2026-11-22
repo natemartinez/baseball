@@ -9,7 +9,7 @@ This directory houses the authoritative backend simulation engines. All subpacka
 ```
 backend/engine/
 ├── game_engine/          # Central simulation highway, game state, and field mechanics
-│   ├── engine.py         # Authoritative GameEngine coordinator (state mutator highway)
+│   ├── main.py           # Authoritative GameEngine coordinator (state mutator highway)
 │   ├── game_logic/       # Pure rulebook logic: count, outs, base running, inning turnovers, stats
 │   ├── orchestration/    # Pitch-by-pitch flow state machine, AI/human controllers, telemetry packets
 │   ├── serialization/    # Payload builders for REST and WebSocket state diffs

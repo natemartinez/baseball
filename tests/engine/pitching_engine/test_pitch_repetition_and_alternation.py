@@ -175,7 +175,7 @@ def test_select_pitch_wires_pitch_sequence_and_alternates_location():
 def test_game_engine_location_alternation_on_consecutive_same_pitches():
     """Verify that GameEngine passes pitch_sequence through and alternates target zones when repeating a pitch."""
     from backend.database.db import get_player
-    from backend.engine.game_engine.engine import GameEngine
+    from backend.engine.game_engine.main import GameEngine
 
     pitcher = get_player(1)
     batter = get_player(2)
@@ -275,7 +275,7 @@ def test_two_two_count_tactical_setup():
 def test_judge_mclean_at_bat_prevents_four_consecutive_sweepers():
     """Verify that in an at-bat against Aaron Judge, GameEngine recommendations dynamically adapt and prevent repeating sweepers."""
     from backend.database.db import get_player
-    from backend.engine.game_engine.engine import GameEngine
+    from backend.engine.game_engine.main import GameEngine
 
     pitcher = get_player(1)  # Nolan McLean
     batter = get_player(2)   # Aaron Judge

@@ -12,8 +12,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.api.app import create_app
 from backend.database.db import get_player
-from backend.engine.game_engine import ball_flight
-from backend.engine.game_engine.ball_flight import compute_batted_ball_trace
+from backend.engine.game_engine.physics import ball_flight
+from backend.engine.game_engine.physics.ball_flight import compute_batted_ball_trace
 from backend.engine.game_engine import GameEngine
 
 

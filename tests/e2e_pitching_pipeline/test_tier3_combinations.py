@@ -16,7 +16,7 @@ from tests.e2e_pitching_pipeline.conftest import (
     calculate_reticle_geometry,
     calculate_miss_vector,
 )
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     get_max_error_radius_inches,
     classify_gameday_zone,
 )

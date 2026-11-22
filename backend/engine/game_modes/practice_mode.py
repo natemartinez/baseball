@@ -8,7 +8,7 @@ Encapsulates all practice drill functionality:
 """
 
 from typing import Any, Dict, Optional
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     classify_gameday_zone,
     is_rulebook_strike,
 )

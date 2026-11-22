@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 if TYPE_CHECKING:
     from ...batting_engine.engine import BatterActivity
 from ...batting_engine.batters import BatterInstanceManager, InGameBatterRatings
-from ..gameday_math import nearest_zone_name
+from ..geometry import nearest_zone_name
 from .pitch_context import PitchContext, CountSnapshot, PitchInput
 from .packet_builder import build_gameday_packet, build_pitch_details
 

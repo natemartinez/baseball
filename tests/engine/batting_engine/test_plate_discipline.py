@@ -415,7 +415,7 @@ def test_at_bat_sequence_is_tracked_and_cleared_after_the_pa():
 
 
 def test_debug_swing_telemetry_is_optional(monkeypatch):
-    import backend.engine.game_engine.engine as engine_module
+    import backend.engine.game_engine.main as engine_module
 
     monkeypatch.setattr(engine_module, 'SWING_DECISION_TELEMETRY', False)
     game = _seeded_game(99)

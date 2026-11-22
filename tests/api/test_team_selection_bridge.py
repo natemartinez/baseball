@@ -3,7 +3,7 @@ Tests verifying the team selection bridge in routes.py and GameEngine decoupling
 """
 
 from backend.api.app import create_app
-from backend.engine.game_engine.engine import GameEngine
+from backend.engine.game_engine.main import GameEngine
 
 
 def test_game_engine_decoupled_team_names():

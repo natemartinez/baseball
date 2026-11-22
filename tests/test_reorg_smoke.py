@@ -17,9 +17,9 @@ if str(ROOT_DIR) not in sys.path:
 
 from backend.api.app import create_app
 from backend.engine.game_engine import GameEngine, PitchFlowError
-from backend.engine.game_engine.ball_flight import compute_batted_ball_trace
-from backend.engine.game_engine.gameday_math import classify_gameday_zone
-from backend.engine.game_engine.strike_zone import StrikeZone
+from backend.engine.game_engine.physics.ball_flight import compute_batted_ball_trace
+from backend.engine.game_engine.geometry.gameday_math import classify_gameday_zone
+from backend.engine.game_engine.geometry.strike_zone import StrikeZone
 from backend.engine.pitching_engine import (
     PITCH_CATEGORIES,
     PitchArsenal,

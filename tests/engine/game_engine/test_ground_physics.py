@@ -1,6 +1,6 @@
 import math
 import pytest
-from backend.engine.game_engine.ball_flight import (
+from backend.engine.game_engine.physics.ball_flight import (
     compute_batted_ball_geometry,
     compute_batted_ball_trace,
     solve_ground_motion,
@@ -109,7 +109,7 @@ def test_ground_ball_trajectory_samples_structure():
 
 
 def test_ground_kinematic_transit_time_is_realistic():
-    from backend.engine.game_engine.ball_flight import (
+    from backend.engine.game_engine.physics.ball_flight import (
         solve_ground_motion,
         ground_transit_time,
     )

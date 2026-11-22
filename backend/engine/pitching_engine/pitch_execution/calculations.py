@@ -8,7 +8,7 @@ import math
 import random
 from typing import Dict, Tuple, Any, Optional
 
-from ...game_engine.gameday_math import (
+from ...game_engine.geometry.gameday_math import (
     is_rulebook_strike,
     classify_gameday_zone,
     get_zone_nominal_target,

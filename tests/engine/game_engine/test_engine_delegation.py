@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / 'tests'))
 
-from backend.engine.game_engine.engine import GameEngine
+from backend.engine.game_engine.main import GameEngine
 from tests.conftest import _game
 
 

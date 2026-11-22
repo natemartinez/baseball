@@ -5,7 +5,7 @@ import random
 import pytest
 
 from backend.api.app import create_app
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     CHASE_BORDER_FT,
     ZONE_TARGET_BOUNDS,
     classify_gameday_zone,

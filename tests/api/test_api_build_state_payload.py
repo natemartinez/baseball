@@ -6,7 +6,7 @@ or perform unnecessary full-database team/roster lookups during game state queri
 from unittest.mock import patch
 from backend.api.app import create_app
 from backend.api.routes import _build_state_payload, load_team_roster
-from backend.engine.game_engine.engine import GameEngine
+from backend.engine.game_engine.main import GameEngine
 
 
 def test_build_state_payload_never_calls_get_all_teams():

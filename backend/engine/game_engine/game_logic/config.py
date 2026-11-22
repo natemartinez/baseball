@@ -14,7 +14,7 @@ def swing_decision_telemetry_enabled() -> bool:
         return env_val.strip().lower() in ('1', 'true', 'on', 'yes')
 
     try:
-        import backend.engine.game_engine.engine as engine_module
+        import backend.engine.game_engine.main as engine_module
         if hasattr(engine_module, 'SWING_DECISION_TELEMETRY') and engine_module.SWING_DECISION_TELEMETRY is not None:
             return bool(engine_module.SWING_DECISION_TELEMETRY)
     except (ImportError, AttributeError):

@@ -7,7 +7,7 @@ sys.path.insert(0, str(ROOT / 'tests'))
 
 from backend.api.app import create_app
 from backend.engine.game_modes.mode_controller import ModeController, GameMode
-from backend.engine.game_engine.engine import GameEngine
+from backend.engine.game_engine.main import GameEngine
 
 
 def test_initial_mode_is_normal():

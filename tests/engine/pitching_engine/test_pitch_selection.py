@@ -20,7 +20,7 @@ if str(ROOT_DIR) not in sys.path:
 from backend.api.app import create_app
 from backend.database.db import get_player
 from backend.engine.game_engine import GameEngine
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     CHASE_BORDER_FT,
     ZONE_X_MAX,
     ZONE_X_MIN,

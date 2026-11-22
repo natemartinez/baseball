@@ -86,7 +86,7 @@ def test_statcast_multi_pitch_simulation():
             shadow_hits += 1
 
         miss_radii.append(pkt['execution']['radialMissInches'])
-        from backend.engine.game_engine.gameday_math import get_max_error_radius_inches
+        from backend.engine.game_engine.geometry.gameday_math import get_max_error_radius_inches
         max_radius_seen = max(
             max_radius_seen,
             pkt['execution'].get(
@@ -116,7 +116,7 @@ def test_statcast_sim_at_bat():
 
 
 def test_game_engine_exposes_last_pitch_context_black_box():
-    from backend.engine.game_engine.engine import GameEngine
+    from backend.engine.game_engine.main import GameEngine
     from backend.api.routes import load_team_roster
 
     home_roster = load_team_roster(1)

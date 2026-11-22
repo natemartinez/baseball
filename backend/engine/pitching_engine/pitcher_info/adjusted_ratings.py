@@ -319,7 +319,7 @@ class PitcherInstanceManager:
           - Calculates exact max radius (inches), execution sigma, baseline effectiveness,
             and ability_tier.
         """
-        from ...game_engine.gameday_math import (
+        from ...game_engine.geometry.gameday_math import (
             get_max_error_radius_inches,
             calculate_execution_sigma,
         )

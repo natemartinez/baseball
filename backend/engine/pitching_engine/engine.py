@@ -17,7 +17,7 @@ from .pitcher_info.adjusted_ratings import (
 from .pitcher_info.active_pitcher import ActivePitcherState
 from .pitch_execution.calculations import calculate_pitch_delivery
 
-from ..game_engine.gameday_math import (
+from ..game_engine.geometry.gameday_math import (
     determine_situation_category,
     is_rulebook_strike,
 )
@@ -216,7 +216,7 @@ class PitchingEngine:
                 effective_pitch_command = max(30.0, min(99.0, effective_pitch_command + cmd_adj))
 
         if pitch_effectiveness is not None:
-            from ..game_engine.gameday_math import calculate_execution_sigma, get_max_error_radius_inches
+            from ..game_engine.geometry.gameday_math import calculate_execution_sigma, get_max_error_radius_inches
             precomputed_sigma = calculate_execution_sigma(effective_pitch_command)
             precomputed_max_radius = get_max_error_radius_inches(effective_pitch_command)
         else:

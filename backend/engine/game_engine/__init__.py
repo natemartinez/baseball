@@ -6,7 +6,7 @@ outs, and score, while the nested pitch-flow orchestration drives delivery,
 reaction, and contact resolution without touching game state.
 """
 
-from .engine import GameEngine
+from .main import GameEngine
 from .orchestration import (
     AIBatterController,
     BatterController,

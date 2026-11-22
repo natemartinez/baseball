@@ -23,7 +23,7 @@ from backend.engine.pitching_engine.pitcher_info.adjusted_ratings import (
     PitcherInstanceManager,
     compute_effective_command,
 )
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     get_max_error_radius_inches,
     calculate_execution_sigma,
 )

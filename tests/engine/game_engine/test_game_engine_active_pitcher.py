@@ -1,5 +1,5 @@
 from backend.database.db import get_player
-from backend.engine.game_engine.engine import GameEngine
+from backend.engine.game_engine.main import GameEngine
 from backend.engine.pitching_engine.pitcher_info import ActivePitcherState
 from backend.engine.models.player import Player
 

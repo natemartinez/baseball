@@ -15,7 +15,7 @@ from tests.e2e_pitching_pipeline.conftest import (
     evaluate_charging_timing,
     calculate_reticle_geometry,
 )
-from backend.engine.game_engine.gameday_math import (
+from backend.engine.game_engine.geometry.gameday_math import (
     get_max_error_radius_inches,
 )
 

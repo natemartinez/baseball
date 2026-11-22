@@ -380,7 +380,7 @@ def test_all_pitchers_tunneling_pairs(pitcher_name, pitch_a_id, pitch_b_id):
 def test_default_engine_fallback_arsenal_standardization():
     """Verifies that the engine's fallback arsenal carries all pre-computed schema constants."""
     from backend.engine.pitching_engine.pitch_execution.pitch_objects import DEFAULT_ARSENAL
-    from backend.engine.game_engine.engine import _DEFAULT_ARSENAL_PAYLOAD
+    from backend.engine.game_engine.main import _DEFAULT_ARSENAL_PAYLOAD
 
     for source, label in [(DEFAULT_ARSENAL, "DEFAULT_ARSENAL"), (_DEFAULT_ARSENAL_PAYLOAD, "_DEFAULT_ARSENAL_PAYLOAD")]:
         assert len(source) >= 4, f"{label} has fewer than 4 pitches"

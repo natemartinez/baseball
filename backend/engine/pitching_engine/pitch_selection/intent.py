@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Callable, Dict, Optional, Tuple
 
 from ..pitcher_info.pitch_objects import PITCH_CATEGORIES
-from ...game_engine.gameday_math import (
+from ...game_engine.geometry.gameday_math import (
     CHASE_BORDER_FT,
     ZONE_TARGET_BOUNDS,
     ZONE_X_MAX,
