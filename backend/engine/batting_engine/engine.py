@@ -99,6 +99,7 @@ class BattingEngine:
         pitcher_hand: str = 'R',
         reaction: Optional['BatterReaction'] = None,
         contact: Optional[Dict[str, Any]] = None,
+        defense: Optional[Any] = None,
     ) -> BatterActivity:
         """Resolves the batter's activity for the pitch in flight."""
         ratings = BatterInstanceManager.get_adjusted_ratings(
@@ -120,6 +121,7 @@ class BattingEngine:
                 actual_zone_name=actual_zone_name,
                 zone_category=zone_category,
                 is_strike=is_strike,
+                defense=defense,
             )
 
         if reaction is None:
@@ -175,6 +177,7 @@ class BattingEngine:
             balls=balls,
             strikes=strikes,
             approach_mode=approach,
+            defense=defense,
         )
 
         batted_ball = contact.get('batted_ball')
@@ -212,6 +215,7 @@ class BattingEngine:
         actual_zone_name: str,
         zone_category: str,
         is_strike: bool,
+        defense: Optional[Any] = None,
     ) -> BatterActivity:
         """Builds a player-contact activity from a Rapier contact report."""
         base = {
@@ -242,6 +246,7 @@ class BattingEngine:
             contact.get('launch_angle_deg'),
             contact.get('spray_angle_deg'),
             batter_speed=float(getattr(ratings, 'speed', 75.0) or 75.0),
+            defense=defense,
         )
         if outcome is None:
             return BatterActivity(

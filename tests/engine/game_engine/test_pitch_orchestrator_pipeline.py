@@ -90,3 +90,34 @@ def test_orchestrator_accepts_precomputed_delivery_without_pitching_engine():
     assert orchestrator.context.delivery["selected_pitch"] == "Changeup"
     assert orchestrator.context.delivery["velocity_mph"] == 85.0
 
+
+def test_pitch_orchestration_uses_defending_team_active_defense():
+    from backend.engine.game_engine.defense import ActiveDefense
+    from tests.conftest import _game
+
+    game = _game(seed=2026, batter_id=4)
+    # Ensure home/away defending lineup is turned into an ActiveDefense instance
+    defense = game.get_active_defense()
+    assert isinstance(defense, ActiveDefense)
+    assert len(defense.fielders) == 8
+
+    # Throw and resolve pitch with contact to center field
+    game.throw_pitch(pitch_intent="STRIKE", target_zone="heart")
+    res = game.resolve_pitch(
+        contact={
+            "contacted": True,
+            "exit_velocity_mph": 95.0,
+            "launch_angle_deg": 25.0,
+            "spray_angle_deg": 0.0,
+        }
+    )
+    details = res["pitch_details"]
+    assert details["pitch_result"] == "IN_PLAY_OUT"
+    trace = details["batted_ball"]
+    assert trace is not None
+    assert trace["fielded"] is True
+    assert trace["fielder_id"] == "CF"
+    assert "fielding_type" in trace
+    assert trace["samples"][-1][3] == pytest.approx(trace["hang_time_s"], abs=0.05)
+
+

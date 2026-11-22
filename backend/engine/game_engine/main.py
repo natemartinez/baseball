@@ -205,6 +205,13 @@ class GameEngine:
                 self.away_pitcher_state.prebake_lineup_game_plan(opp_lineup)
             return self.away_pitcher_state
 
+    def get_active_defense(self) -> Any:
+        """Returns the ActiveDefense spatial alignment for the currently defending team."""
+        from .defense import ActiveDefense
+        defending_lineup = self.home_lineup if self.top_bottom == 'TOP' else self.away_lineup
+        pitcher = self.current_pitcher_obj()
+        return ActiveDefense.from_lineup(defending_lineup=defending_lineup, pitcher=pitcher)
+
     def build_pitcher_arsenal_payload(self) -> List[Dict[str, Any]]:
         """Builds client pitch arsenal payload using cached metrics from active pitcher state."""
         cur_p = self.current_pitcher_obj()
@@ -491,10 +498,12 @@ class GameEngine:
             return {'status': 'error', 'message': 'No pitch in flight to resolve'}
 
         try:
+            defense = self.get_active_defense()
             outcome = self.orchestrator.resolve_pitch(
                 batter_decision=batter_decision,
                 batter_approach=batter_approach,
                 contact=contact,
+                defense=defense,
             )
         except PitchFlowError as error:
             return {'status': 'error', 'message': str(error)}

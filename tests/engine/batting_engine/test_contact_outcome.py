@@ -1,3 +1,4 @@
+import pytest
 import sys
 from pathlib import Path
 
@@ -124,16 +125,13 @@ def test_all_ai_in_play_results_follow_fielder_reach_rule():
 
         trace = details.get('batted_ball')
         assert trace is not None
-        fielder = fielder_for_landing(
-            trace['landing_x_ft'], trace['landing_y_ft']
-        )
 
         if call == 'IN_PLAY_OUT':
-            assert fielder is not None, (
+            assert trace.get('fielded') is True, (
                 f'Unfielded out at ({trace["landing_x_ft"]}, '
                 f'{trace["landing_y_ft"]})'
             )
-            outs.append((fielder['id'], trace['landing_y_ft']))
+            outs.append((trace.get('fielder_id'), trace['landing_y_ft']))
         else:
             # Home runs clear the fence even if their landing point is within
             # a deep outfielder's circle; airborne hits must land outside reach.
@@ -141,8 +139,8 @@ def test_all_ai_in_play_results_follow_fielder_reach_rule():
             # to a stop in an outfielder's territory.
             launch_deg = details.get('launch_angle_deg')
             if call != 'HOME_RUN' and (launch_deg is None or launch_deg >= 10.0):
-                assert fielder is None, (
-                    f'{call} landed inside {fielder["label"]}\'s radius'
+                assert trace.get('fielding_type') not in ('ROUTINE_FLY_CATCH', 'RUNNING_CATCH'), (
+                    f'{call} was caught airborne'
                 )
             hits += 1
 
@@ -245,3 +243,40 @@ def test_api_invalid_contact_degrades_to_swing_miss():
     assert response.status_code == 200
     body = response.get_json()
     assert body['pitch_details']['pitch_result'] == 'SWINGING_STRIKE'
+
+
+def test_resolve_contact_outcome_emits_enriched_fielding_telemetry():
+    res = resolve_contact_outcome(95.0, 20.0, 0.0)
+    assert res is not None
+    assert "batted_ball" in res
+    trace = res["batted_ball"]
+    assert "fielded" in trace
+    assert "fielder_id" in trace
+    assert "fielding_type" in trace
+    assert "fielder_start" in trace
+    assert "intercept_point" in trace
+    assert len(trace["samples"]) == 20
+    assert trace["samples"][-1][3] == pytest.approx(trace["hang_time_s"], abs=0.02)
+
+
+def test_home_run_prescreening_bypasses_fielding():
+    # 110 mph at 30 deg to center field clears the fence on the fly
+    res = resolve_contact_outcome(110.0, 30.0, 0.0)
+    assert res["call"] == "HOME_RUN"
+    trace = res["batted_ball"]
+    assert trace["fielded"] is False
+    assert trace["fielding_type"] == "HOME_RUN"
+
+
+def test_infield_grounder_out_vs_outfield_base_hit():
+    # Routine grounder straight to SS (-18 deg)
+    ground_out = resolve_contact_outcome(92.0, 2.0, -18.0)
+    assert ground_out["call"] == "IN_PLAY_OUT"
+    assert ground_out["batted_ball"]["fielded"] is True
+    assert ground_out["batted_ball"]["fielder_id"] == "SS"
+    assert ground_out["batted_ball"]["fielding_type"] in ("GROUND_SCOOP", "BACKHAND_PICK")
+
+    # Rocket grounder through the gap (105 mph, -33.6 deg) reaches outfield grass
+    gap_hit = resolve_contact_outcome(105.0, 0.0, -33.6)
+    assert gap_hit["call"] in ("SINGLE", "DOUBLE")
+

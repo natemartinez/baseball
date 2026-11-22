@@ -19,11 +19,17 @@ grounders in front of the plate are infield hits rather than automatic outs.
 import math
 from typing import Any, Dict, Optional, Tuple
 
+from ...game_engine.defense import ActiveDefense
 from ...game_engine.physics.ball_flight import (
     compute_batted_ball_geometry,
     compute_batted_ball_trace,
     ground_transit_time,
     solve_ground_motion,
+)
+from ...game_engine.physics.fielder_intercept import (
+    generate_bounded_samples,
+    solve_continuous_ball_flight,
+    solve_defense_intercept,
 )
 
 
@@ -206,6 +212,7 @@ def resolve_contact_outcome(
     launch_angle_deg: Any,
     spray_angle_deg: Any,
     batter_speed: float = 75.0,
+    defense: Optional[ActiveDefense] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Classify a player-contact batted ball from its actual landing point.
@@ -234,13 +241,40 @@ def resolve_contact_outcome(
     distance = float(geometry['distance_ft'])
     fair = landing_y > 0.0 and abs(landing_x) <= landing_y
 
+    active_defense = defense or ActiveDefense.default()
+    motion = solve_continuous_ball_flight(ev, launch, spray)
+
     if not fair:
+        foul_trace = None
+        if trace is not None:
+            t_stop = motion["t_total"]
+            foul_samples = generate_bounded_samples(motion, spray, t_stop, 20)
+            foul_trace = {
+                'exit_velocity_mph': round(ev, 1),
+                'launch_angle_deg': round(launch, 1),
+                'spray_angle_deg': round(spray, 1),
+                'hang_time_s': round(motion["t_hang"], 3),
+                'apex_height_ft': geometry.get('apex_height_ft', 3.0),
+                'distance_ft': round(motion["landing_distance_ft"], 1),
+                'landing_x_ft': landing_x,
+                'landing_y_ft': landing_y,
+                'sample_count': len(foul_samples),
+                'samples': foul_samples,
+                'fielded': False,
+                'fielder_id': None,
+                'fielder_name': None,
+                'fielding_type': 'FOUL',
+                'fielder_start': None,
+                'intercept_point': None,
+                'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
+            }
+
         return {
             'call': 'FOUL',
             'is_in_play': False,
             'description': _describe('FOUL', ev, launch, spray, distance),
             'contact_quality': _contact_quality(ev, launch),
-            'batted_ball': trace,
+            'batted_ball': foul_trace,
             'exit_velocity_mph': round(ev, 1),
             'launch_angle_deg': round(launch, 1),
             'spray_angle_deg': round(spray, 1),
@@ -249,62 +283,135 @@ def resolve_contact_outcome(
             'fielder_radius_ft': None,
         }
 
-    if launch < 10.0:
-        ground_fielder = fielder_for_ground_path(spray, distance)
-        if ground_fielder is not None:
-            call = 'IN_PLAY_OUT'
-            fielder = ground_fielder
-            s_field = ground_fielder['s_fielded']
-            landing_x = round(s_field * math.sin(math.radians(spray)), 1)
-            landing_y = round(s_field * math.cos(math.radians(spray)), 1)
-            distance = round(s_field, 1)
-            if trace is not None:
-                motion = solve_ground_motion(ev, launch)
-                trace['hang_time_s'] = round(ground_transit_time(motion, distance), 3)
-                trace['landing_x_ft'] = landing_x
-                trace['landing_y_ft'] = landing_y
-                trace['distance_ft'] = distance
-                target_count = len(trace.get('samples', [])) or 20
-                trace['samples'] = _clamp_samples_to_distance(
-                    trace['samples'],
-                    distance,
-                    math.sin(math.radians(spray)),
-                    math.cos(math.radians(spray)),
-                    target_count=target_count,
-                )
-                trace['sample_count'] = len(trace['samples'])
-        else:
-            if distance >= 250.0 and abs(spray) >= 25.0 and speed >= 78.0:
+    fence = _fence_distance(spray)
+    d_landing = motion["landing_distance_ft"]
+
+    # 1. Home Run Pre-Screening: fair ball clears fence on the fly
+    if launch >= 10.0 and d_landing >= fence + 3.0:
+        call = 'HOME_RUN'
+        hr_trace = None
+        if trace is not None:
+            hr_samples = generate_bounded_samples(motion, spray, motion['t_hang'], 20)
+            hr_trace = {
+                'exit_velocity_mph': round(ev, 1),
+                'launch_angle_deg': round(launch, 1),
+                'spray_angle_deg': round(spray, 1),
+                'hang_time_s': round(motion['t_hang'], 3),
+                'apex_height_ft': geometry.get('apex_height_ft', 3.0),
+                'distance_ft': round(d_landing, 1),
+                'landing_x_ft': round(d_landing * math.sin(math.radians(spray)), 1),
+                'landing_y_ft': round(d_landing * math.cos(math.radians(spray)), 1),
+                'sample_count': len(hr_samples),
+                'samples': hr_samples,
+                'fielded': False,
+                'fielder_id': None,
+                'fielder_name': None,
+                'fielding_type': 'HOME_RUN',
+                'fielder_start': None,
+                'intercept_point': None,
+                'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
+            }
+        return {
+            'call': 'HOME_RUN',
+            'is_in_play': True,
+            'description': _describe('HOME_RUN', ev, launch, spray, d_landing),
+            'contact_quality': _contact_quality(ev, launch),
+            'batted_ball': hr_trace,
+            'exit_velocity_mph': round(ev, 1),
+            'launch_angle_deg': round(launch, 1),
+            'spray_angle_deg': round(spray, 1),
+            'fielder_name': None,
+            'fielder_distance_ft': None,
+            'fielder_radius_ft': None,
+        }
+
+    # 2. In-play defensive pursuit & intercept resolution
+    intercept = solve_defense_intercept(motion, spray, active_defense)
+
+    is_airborne_catch = (
+        launch >= 10.0
+        and intercept.fielded
+        and intercept.t_intercept <= motion['t_hang'] + 0.05
+        and intercept.fielding_type in ('ROUTINE_FLY_CATCH', 'RUNNING_CATCH', 'SLIDING_CATCH', 'WALL_LEAP')
+    )
+
+    if is_airborne_catch:
+        call = 'IN_PLAY_OUT'
+    elif intercept.fielded and intercept.s_intercept <= 165.0:
+        # Infield ground out
+        call = 'IN_PLAY_OUT'
+    else:
+        # Base hit (ground ball through infield or ball landed untouched)
+        if launch < 10.0:
+            if intercept.s_intercept >= 250.0 and abs(spray) >= 25.0 and speed >= 78.0:
                 call = 'DOUBLE'
             else:
                 call = 'SINGLE'
-            fielder = None
-    else:
-        fielder = fielder_for_landing(landing_x, landing_y)
-        fence = _fence_distance(spray)
-
-        if distance >= fence + 3.0:
-            call = 'HOME_RUN'
-            fielder = None
-        elif fielder is not None:
-            call = 'IN_PLAY_OUT'
-        elif distance >= 320.0 and abs(spray) >= 25.0 and speed >= 78.0:
-            call = 'TRIPLE'
-        elif distance >= 300.0 or (distance >= 250.0 and 8.0 <= launch <= 32.0):
-            call = 'DOUBLE'
         else:
-            call = 'SINGLE'
+            if intercept.s_intercept >= 320.0 and abs(spray) >= 25.0 and speed >= 78.0:
+                call = 'TRIPLE'
+            elif intercept.s_intercept >= 300.0 or (intercept.s_intercept >= 250.0 and 8.0 <= launch <= 32.0):
+                call = 'DOUBLE'
+            else:
+                call = 'SINGLE'
+
+    # Populate backward-compatible fielder info
+    fielder_dict = None
+    if call == 'IN_PLAY_OUT' and intercept.fielded:
+        dist_ran = math.hypot(
+            intercept.intercept_x - intercept.fielder_start[0],
+            intercept.intercept_y - intercept.fielder_start[1],
+        ) if intercept.fielder_start else 0.0
+        fielder_dict = {
+            'id': intercept.fielder_id,
+            'label': intercept.fielder_id,
+            'distance': round(dist_ran, 1),
+            'radius': max(60.0, round(dist_ran + 10.0, 1)),
+        }
+
+    batted_ball_trace = None
+    if trace is not None:
+        if launch < 10.0 or call == 'IN_PLAY_OUT':
+            landing_pt_x = round(intercept.intercept_x, 1)
+            landing_pt_y = round(intercept.intercept_y, 1)
+        else:
+            landing_pt_x = round(d_landing * math.sin(math.radians(spray)), 1)
+            landing_pt_y = round(d_landing * math.cos(math.radians(spray)), 1)
+
+        batted_ball_trace = {
+            'exit_velocity_mph': round(ev, 1),
+            'launch_angle_deg': round(launch, 1),
+            'spray_angle_deg': round(spray, 1),
+            'hang_time_s': round(intercept.t_intercept, 3),
+            'apex_height_ft': geometry.get('apex_height_ft', 3.0),
+            'distance_ft': round(intercept.s_intercept, 1),
+            'landing_x_ft': landing_pt_x,
+            'landing_y_ft': landing_pt_y,
+            'sample_count': len(intercept.samples),
+            'samples': intercept.samples,
+            'fielded': intercept.fielded,
+            'fielder_id': intercept.fielder_id,
+            'fielder_name': intercept.fielder_name,
+            'fielding_type': intercept.fielding_type,
+            'fielder_start': list(intercept.fielder_start) if intercept.fielder_start else None,
+            'intercept_point': [
+                round(intercept.intercept_x, 2),
+                round(intercept.intercept_y, 2),
+                round(intercept.intercept_z, 2),
+            ] if intercept.fielded else None,
+            'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
+        }
 
     return {
         'call': call,
         'is_in_play': True,
-        'description': _describe(call, ev, launch, spray, distance, fielder),
+        'description': _describe(call, ev, launch, spray, intercept.s_intercept, fielder_dict),
         'contact_quality': _contact_quality(ev, launch),
-        'batted_ball': trace,
+        'batted_ball': batted_ball_trace,
         'exit_velocity_mph': round(ev, 1),
         'launch_angle_deg': round(launch, 1),
         'spray_angle_deg': round(spray, 1),
-        'fielder_name': fielder['label'] if fielder is not None else None,
-        'fielder_distance_ft': round(fielder['distance'], 1) if fielder is not None else None,
-        'fielder_radius_ft': fielder['radius'] if fielder is not None else None,
+        'fielder_name': fielder_dict['label'] if fielder_dict is not None else None,
+        'fielder_distance_ft': fielder_dict['distance'] if fielder_dict is not None else None,
+        'fielder_radius_ft': fielder_dict['radius'] if fielder_dict is not None else None,
     }

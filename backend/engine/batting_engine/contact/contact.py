@@ -42,6 +42,7 @@ class ContactResolver:
         balls: int = 0,
         strikes: int = 0,
         approach_mode: str = 'AUTO',
+        defense: Optional[Any] = None,
     ) -> Dict[str, Any]:
         zone_category = str(delivery.get('realized_zone_cat', 'SHADOW')).upper()
         is_strike = bool(delivery.get('is_strike', False))
@@ -92,6 +93,7 @@ class ContactResolver:
                 pitch_effectiveness=pitch_effectiveness,
                 shape=shape,
                 force_foul=True,
+                defense=defense,
             )
 
         return self._resolve_batted_ball(
@@ -103,6 +105,7 @@ class ContactResolver:
             realized_z=realized_z,
             pitch_effectiveness=pitch_effectiveness,
             shape=shape,
+            defense=defense,
         )
 
     def _whiff_probability(
@@ -183,6 +186,7 @@ class ContactResolver:
         pitch_effectiveness: float = 80.0,
         shape: Optional[PitchShape] = None,
         force_foul: bool = False,
+        defense: Optional[Any] = None,
     ) -> Dict[str, Any]:
         slugging = self.ratings.hot_zones.get(actual_zone_name, 0.400)
 
@@ -247,6 +251,7 @@ class ContactResolver:
             launch_angle,
             spray_angle,
             batter_speed=self.ratings.speed,
+            defense=defense,
         )
         if outcome is None:
             # Defensive fallback: valid clamped inputs should always resolve.

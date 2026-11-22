@@ -25,6 +25,16 @@ TURF_FRICTION_COEFF = 0.48
 HOP_CUTOFF_APEX_FT = 0.20
 MAX_GROUND_DISTANCE_FT = 340.0
 
+PARK_FENCE_CENTER_FT = 400.0
+PARK_FENCE_LINE_FT = 330.0
+FOUL_LINE_DEG = 45.0
+
+
+def fence_distance_for_spray(spray_angle_deg: float) -> float:
+    fraction = min(abs(spray_angle_deg), FOUL_LINE_DEG) / FOUL_LINE_DEG
+    return PARK_FENCE_CENTER_FT - (PARK_FENCE_CENTER_FT - PARK_FENCE_LINE_FT) * fraction
+
+
 BALL_FLIGHT_TRACE_ENABLED = os.environ.get(
     'BALL_FLIGHT_TRACE_ENABLED', '1'
 ).strip().lower() not in ('0', 'false', 'off', 'no')
@@ -58,6 +68,8 @@ def solve_ground_motion(
     exit_velocity_mph: float,
     launch_angle_deg: float,
     contact_height_ft: float = CONTACT_HEIGHT_FT,
+    v_xy: Optional[float] = None,
+    v_z: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Kinematic ground motion solver based on Dr. Alan Nathan's equations:
@@ -65,16 +77,24 @@ def solve_ground_motion(
     - Phase 2: Multi-hop skip bounces using vertical and horizontal COR.
     - Phase 3: Coulomb turf friction rolling deceleration.
     """
-    theta = math.radians(launch_angle_deg)
-    v0 = exit_velocity_mph * MPH_TO_FPS
-    v0z = v0 * math.sin(theta)
-    v0xy = v0 * math.cos(theta) * AIR_DRAG_GROUND_FACTOR
+    if v_xy is not None and v_z is not None:
+        v0xy = float(v_xy)
+        v0z = float(v_z)
+        t_descent = 0.0
+        d_descent = 0.0
+        vz_impact = abs(v0z)
+        vxy_current = v0xy
+    else:
+        theta = math.radians(launch_angle_deg)
+        v0 = exit_velocity_mph * MPH_TO_FPS
+        v0z = v0 * math.sin(theta)
+        v0xy = v0 * math.cos(theta) * AIR_DRAG_GROUND_FACTOR
 
-    discriminant = v0z * v0z + 2.0 * G * contact_height_ft
-    t_descent = (v0z + math.sqrt(max(0.0, discriminant))) / G
-    d_descent = v0xy * t_descent
-    vz_impact = -(v0z - G * t_descent)
-    vxy_current = v0xy
+        discriminant = v0z * v0z + 2.0 * G * contact_height_ft
+        t_descent = (v0z + math.sqrt(max(0.0, discriminant))) / G
+        d_descent = v0xy * t_descent
+        vz_impact = -(v0z - G * t_descent)
+        vxy_current = v0xy
 
     cor_v = COR_VERTICAL_DIRT if launch_angle_deg < 0.0 else COR_VERTICAL_GRASS
     cor_h = COR_HORIZONTAL_DIRT if launch_angle_deg < 0.0 else COR_HORIZONTAL_GRASS
@@ -127,9 +147,9 @@ def solve_ground_motion(
 def ground_transit_time(motion: Dict[str, Any], distance_ft: float) -> float:
     """
     Computes exact kinematic time to reach target distance across the 3 phases:
-    - Phase 1: Descent
-    - Phase 2: Multi-hop skips
-    - Phase 3: Coulomb turf friction roll
+    - Phase 1: Airborne Descent - t_descent, d_descent
+    - Phase 2: Multi-hop skips - motion[hops]
+    - Phase 3: Turf roll - v_roll0, a_roll
     """
     target_d = max(0.0, float(distance_ft))
     v0xy = max(1e-3, motion['v0xy'])
@@ -269,6 +289,16 @@ def _generate_ground_samples(
             ])
 
     return samples
+
+'''
+The primary inputs to compute_batted_ball_geometry() and compute_batted_ball_trace() are:
+
+- exit_velocity_mph
+- launch_angle_deg
+- spray_angle_deg
+- contact_height_ft (optional, defaults to 3.0 ft)
+
+'''
 
 
 def compute_batted_ball_geometry(

@@ -316,6 +316,7 @@ class PitchFlowOrchestrator:
         batter_decision: Optional[str] = None,
         batter_approach: str = 'AUTO',
         contact: Optional[Dict[str, Any]] = None,
+        defense: Optional[Any] = None,
     ) -> Dict[str, Any]:
         self._require(PitchPhase.THROWN)
         pending = self._pending
@@ -362,7 +363,7 @@ class PitchFlowOrchestrator:
             self._phase = PitchPhase.THROWN
             raise
         self._phase = PitchPhase.REACTION_LOCKED
-        return self._resolve_contact(pending, reaction, contact=contact)
+        return self._resolve_contact(pending, reaction, contact=contact, defense=defense)
 
     def submit_reaction(
         self, decision: str, approach: str = 'AUTO'
@@ -384,6 +385,7 @@ class PitchFlowOrchestrator:
         pending: PendingPitch,
         reaction: BatterReaction,
         contact: Optional[Dict[str, Any]] = None,
+        defense: Optional[Any] = None,
     ) -> Dict[str, Any]:
         try:
             from ...batting_engine.engine import BattingEngine
@@ -401,6 +403,7 @@ class PitchFlowOrchestrator:
                 pitcher_hand=pending.pitcher_hand,
                 reaction=reaction,
                 contact=contact,
+                defense=defense,
             )
         except Exception:
             self.reset()
