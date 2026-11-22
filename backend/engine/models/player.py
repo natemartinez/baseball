@@ -1,4 +1,99 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+DEFENSIVE_RATING_KEYS: Tuple[str, ...] = (
+    "reaction",
+    "route_efficiency",
+    "range",
+    "fielding",
+    "transfer_speed",
+    "arm_strength",
+    "arm_accuracy",
+    "body_control",
+    "positioning",
+    "baseball_iq",
+)
+
+DEFAULT_DEFENSIVE_RATINGS: Dict[str, float] = {
+    "reaction": 65.0,
+    "route_efficiency": 65.0,
+    "range": 65.0,
+    "fielding": 65.0,
+    "transfer_speed": 65.0,
+    "arm_strength": 65.0,
+    "arm_accuracy": 65.0,
+    "body_control": 65.0,
+    "positioning": 65.0,
+    "baseball_iq": 65.0,
+}
+
+POSITION_WEIGHTS: Dict[str, Dict[str, float]] = {
+    "SS": {
+        "range": 0.35,
+        "reaction": 0.20,
+        "arm_strength": 0.20,
+        "transfer_speed": 0.10,
+        "fielding": 0.10,
+        "arm_accuracy": 0.05,
+    },
+    "2B": {
+        "range": 0.35,
+        "reaction": 0.20,
+        "transfer_speed": 0.25,
+        "fielding": 0.10,
+        "arm_strength": 0.05,
+        "arm_accuracy": 0.05,
+    },
+    "3B": {
+        "arm_strength": 0.30,
+        "reaction": 0.25,
+        "fielding": 0.20,
+        "range": 0.15,
+        "transfer_speed": 0.05,
+        "arm_accuracy": 0.05,
+    },
+    "1B": {
+        "fielding": 0.50,
+        "reaction": 0.20,
+        "range": 0.10,
+        "arm_accuracy": 0.10,
+        "arm_strength": 0.05,
+        "transfer_speed": 0.05,
+    },
+    "CF": {
+        "range": 0.40,
+        "reaction": 0.25,
+        "route_efficiency": 0.20,
+        "arm_strength": 0.10,
+        "arm_accuracy": 0.03,
+        "fielding": 0.02,
+    },
+    "RF": {
+        "arm_strength": 0.30,
+        "range": 0.25,
+        "reaction": 0.20,
+        "route_efficiency": 0.15,
+        "arm_accuracy": 0.07,
+        "fielding": 0.03,
+    },
+    "LF": {
+        "range": 0.30,
+        "reaction": 0.25,
+        "route_efficiency": 0.20,
+        "arm_strength": 0.10,
+        "fielding": 0.10,
+        "arm_accuracy": 0.05,
+    },
+}
+
+POSITION_GATES: Dict[str, List[Tuple[str, float, float]]] = {
+    "SS": [("range", 60.0, 15.0), ("arm_strength", 55.0, 15.0)],
+    "2B": [("range", 50.0, 10.0)],
+    "3B": [("arm_strength", 60.0, 15.0)],
+    "1B": [],  # Handled via custom height/fielding check
+    "CF": [("range", 65.0, 20.0)],
+    "RF": [("arm_strength", 55.0, 10.0)],
+    "LF": [],
+}
 
 
 class Player:
@@ -131,6 +226,10 @@ class Player:
         self.release_consistency: float = self.consistency
         if self.is_pitcher and "consistency" not in self.ratings:
             self.ratings["consistency"] = self.consistency
+        elif not self.is_pitcher:
+            for k in DEFENSIVE_RATING_KEYS:
+                if k not in self.ratings:
+                    self.ratings[k] = float(DEFAULT_DEFENSIVE_RATINGS[k])
 
         self._rebuild_pitch_cache()
 
@@ -393,6 +492,107 @@ class Player:
                 return float(v)
 
         return float(default)
+
+    def get_defensive_rating(self, key: str) -> float:
+        """
+        Safely fetch a defensive attribute rating (0-99).
+        Falls back to DEFAULT_DEFENSIVE_RATINGS[key] (65.0) if unseeded.
+        """
+        default = DEFAULT_DEFENSIVE_RATINGS.get(key, 65.0)
+        return self.get_rating(key, default)
+
+    def get_reaction_time_s(self) -> float:
+        """Translates 0-99 reaction rating to start delay: [0.15s, 0.45s]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("reaction")))
+        return 0.45 - (rating / 100.0) * 0.25
+
+    def get_sprint_speed_fps(self) -> float:
+        """Translates 0-99 range rating to top sprint speed: [22.0, 30.5 ft/s]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("range")))
+        return 22.0 + (rating / 100.0) * 8.5
+
+    def get_route_efficiency(self) -> float:
+        """Translates 0-99 route_efficiency rating to path linearity: [0.85, 1.00]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("route_efficiency")))
+        return 0.85 + (rating / 100.0) * 0.15
+
+    def get_glove_radius_ft(self) -> float:
+        """Translates 0-99 fielding rating to catch window reach: [3.2, 5.5 ft]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("fielding")))
+        return 3.2 + (rating / 100.0) * 2.3
+
+    def get_transfer_time_s(self) -> float:
+        """Translates 0-99 transfer_speed rating to glove-to-hand time: [0.45s, 0.85s]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("transfer_speed")))
+        return 0.85 - (rating / 100.0) * 0.40
+
+    def get_throw_speed_mph(self) -> float:
+        """Translates 0-99 arm_strength rating to max throwing velocity: [70, 102 mph]."""
+        rating = max(0.0, min(99.0, self.get_defensive_rating("arm_strength")))
+        return 70.0 + (rating / 100.0) * 32.0
+
+    def get_height_inches(self) -> Optional[int]:
+        """Parses player height in inches from vitals (e.g. 6'2\", 6-2, or integer)."""
+        raw = self.vitals.get("height") if self.vitals else None
+        if raw is None:
+            return None
+        if isinstance(raw, (int, float)):
+            return int(raw)
+        s = str(raw).strip().replace('"', '').replace("''", '')
+        if s.isdigit():
+            return int(s)
+        import re
+        match = re.match(r"^(\d+)['\-](\d+)$", s)
+        if match:
+            feet = int(match.group(1))
+            inches = int(match.group(2))
+            return feet * 12 + inches
+        return None
+
+    def check_position_gates(self, position: str) -> Tuple[bool, float, List[str]]:
+        """
+        Evaluates minimum gate thresholds for a defensive position.
+        Returns: (passed: bool, penalty: float, reasons: List[str])
+        """
+        pos = position.upper().strip()
+        penalty = 0.0
+        reasons: List[str] = []
+
+        if pos == "1B":
+            height = self.get_height_inches()
+            fielding = self.get_defensive_rating("fielding")
+            # Gate: Height >= 6'2" (74 inches) OR Fielding >= 65
+            if not ((height is not None and height >= 74) or fielding >= 65.0):
+                penalty += 10.0
+                reasons.append("1B requires height >= 6'2\" or fielding >= 65.0")
+            return (len(reasons) == 0, penalty, reasons)
+
+        gates = POSITION_GATES.get(pos, [])
+        for attr, min_val, pen in gates:
+            val = self.get_defensive_rating(attr)
+            if val < min_val:
+                penalty += pen
+                reasons.append(f"{pos} requires {attr} >= {min_val} (actual: {val:.1f})")
+
+        return (len(reasons) == 0, penalty, reasons)
+
+    def calculate_position_rating(self, position: str, games_at_position: int = 200) -> float:
+        """
+        Calculates composite positional defense rating (0-99) factoring in
+        position weights, minimum gate penalties, and games-played experience.
+        """
+        pos = position.upper().strip()
+        weights = POSITION_WEIGHTS.get(pos)
+        if not weights:
+            return max(1.0, min(99.0, self.get_defensive_rating("fielding")))
+
+        composite = sum(self.get_defensive_rating(attr) * weight for attr, weight in weights.items())
+        _, penalty, _ = self.check_position_gates(pos)
+        post_penalty = composite - penalty
+
+        experience_factor = 0.65 + 0.35 * min(1.0, max(0.0, float(games_at_position)) / 200.0)
+        curr_rating = post_penalty * experience_factor
+        return round(max(1.0, min(99.0, curr_rating)), 1)
 
     def has_trait(self, trait_name: str) -> bool:
         """Check if a player possesses a specific badge or trait."""

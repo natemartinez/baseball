@@ -17,7 +17,10 @@ from backend.database.db import (
     get_all_teams as db_get_all_teams,
     get_team_roster_players as db_get_team_roster_players,
 )
-from backend.engine.models.player import Player
+from backend.engine.models.player import (
+    DEFAULT_DEFENSIVE_RATINGS,
+    Player,
+)
 
 
 class RosterStore:
@@ -208,6 +211,7 @@ class RosterStore:
                         contact = min(99.0, max(60.0, avg * 300.0))
                         power = min(99.0, max(50.0, slg * 180.0))
                         ratings = {
+                            **DEFAULT_DEFENSIVE_RATINGS,
                             "contact": round(contact, 1),
                             "power": round(power, 1),
                             "speed": 75.0,
