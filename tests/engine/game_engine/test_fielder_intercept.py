@@ -149,3 +149,23 @@ def test_ratings_driven_gap_hit_drops_for_low_iq_outfielder():
     assert res_slow.fielding_type in ("GROUND_SCOOP", "UNFIELDED")
 
 
+def test_pitcher_mound_reach_and_middle_infield_coverage():
+    # 90 mph grounder at -5 deg spray: passes 5.2 ft to the left of the rubber
+    # Pitcher cannot reach it; SS fields it up the middle
+    motion_neg5 = solve_continuous_ball_flight(90.0, -2.0, -5.0)
+    defense = ActiveDefense.default()
+    res_neg5 = solve_defense_intercept(motion_neg5, spray_deg=-5.0, defense=defense)
+    assert res_neg5.fielded is True
+    assert res_neg5.fielder_id == "SS"  # NOT P!
+    assert res_neg5.t_intercept > 1.0   # Fielded at depth, not 0.5s off the rubber
+
+    # 90 mph grounder at -8 deg spray: passes 29 ft from SS
+    # SS dynamically sprints and fields it, rather than rolling 230 ft to LF
+    motion_neg8 = solve_continuous_ball_flight(90.0, -2.0, -8.0)
+    res_neg8 = solve_defense_intercept(motion_neg8, spray_deg=-8.0, defense=defense)
+    assert res_neg8.fielded is True
+    assert res_neg8.fielder_id == "SS"
+    assert res_neg8.s_intercept <= 165.0  # Infield pickup!
+
+
+

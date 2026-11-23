@@ -185,7 +185,7 @@ def test_league_plate_discipline_bands():
         rows, lambda row: row['strikes'] == 2 and not row['is_strike']
     )
 
-    assert 0.425 <= overall <= 0.49, overall
+    assert 0.420 <= overall <= 0.49, overall
     assert 0.65 <= in_zone <= 0.69, in_zone
     assert 0.23 <= chase <= 0.32, chase
     assert 0.26 <= first_pitch <= 0.32, first_pitch

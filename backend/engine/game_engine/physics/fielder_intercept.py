@@ -254,6 +254,7 @@ def solve_defense_intercept(
 
     # 1. Infield Ground Ball Interception
     if is_ground_ball:
+        ev = ball_flight.get("exit_velocity_mph", 90.0)
         candidates = []
         for fd in fielders_data:
             pos_id = fd["pos"]
@@ -266,20 +267,47 @@ def solve_defense_intercept(
             if s_closest < 10.0 or s_closest > d_total + 5.0 or s_closest > 165.0:
                 continue
             d_perp = abs(fd["x0"] * cos_phi - fd["y0"] * sin_phi)
+
             if pos_id == "P":
-                r_ground = 6.0 + (fd["r_range"] / 100.0) * 3.0
+                # Comebacker clamp: on hard hits (>= 75 mph), pitcher cannot dive/sprint laterally
+                # reach is strictly limited to immediate area around rubber (<= 3.0 ft).
+                if ev >= 75.0:
+                    r_ground = 2.0 + (fd["r_range"] / 100.0) * 1.0
+                else:
+                    r_ground = 5.0 + (fd["r_range"] / 100.0) * 3.0
             elif pos_id in ("1B", "3B"):
+                # Corner infielders have hot-corner dive/step reach
                 r_ground = 10.0 + (fd["r_range"] / 100.0) * 4.0
             else:
-                r_ground = 12.0 + (fd["r_range"] / 100.0) * 4.0
+                # Middle infielders (SS, 2B):
+                # Toward the middle (second base, -15 to +15 deg): dynamic lateral pursuit up to 36 ft
+                # Toward the hole: standard lateral dive reach (<= 16 ft)
+                moving_towards_middle = (pos_id == "SS" and spray_deg >= -15.0) or (pos_id == "2B" and spray_deg <= 15.0)
+                if moving_towards_middle:
+                    # Binary search for transit time at s_closest
+                    lo, hi = 0.0, t_total
+                    for _ in range(12):
+                        mid = (lo + hi) / 2.0
+                        if pos_fn(mid)[0] < s_closest:
+                            lo = mid
+                        else:
+                            hi = mid
+                    t_transit = lo
+                    dt_sprint = max(0.0, t_transit - fd["t_react"])
+                    r_dive = 4.5
+                    r_dynamic = fd["v_sprint"] * dt_sprint * fd["eta"] + fd["r_glove"] + r_dive
+                    r_ground = min(36.0, r_dynamic)
+                else:
+                    r_ground = 12.0 + (fd["r_range"] / 100.0) * 4.0
 
             if d_perp <= r_ground:
                 dist = math.hypot(fd["x0"] - s_closest * sin_phi, fd["y0"] - s_closest * cos_phi)
-                candidates.append((dist, s_closest, fd, d_perp))
+                candidates.append((s_closest, dist, fd, d_perp))
 
         if candidates:
-            candidates.sort(key=lambda c: c[0])
-            best_dist, s_field, winner, d_perp = candidates[0]
+            # Earliest transit depth first (e.g. pitcher if reachable, else infielders at depth)
+            candidates.sort(key=lambda c: (c[0], c[1]))
+            s_field, best_dist, winner, d_perp = candidates[0]
             # Binary search for transit time t at s_field
             lo, hi = 0.0, t_total
             for _ in range(15):
@@ -310,146 +338,146 @@ def solve_defense_intercept(
             )
 
     # 2. Airborne Flight Interception (t <= t_hang)
-    # Determine flight apex (peak height timestamp)
-    t_apex = 0.0
-    z_peak = 0.0
-    apex_steps = 40
-    for i in range(apex_steps + 1):
-        t_probe = min(t_hang, i * (t_hang / max(1, apex_steps)))
-        _, z_probe = pos_fn(t_probe)
-        if z_probe > z_peak:
-            z_peak = z_probe
-            t_apex = t_probe
-
     dt = 0.02
     steps = int(math.ceil(t_hang / dt))
-    for step in range(steps + 1):
-        t = min(t_hang, step * dt)
-        s, z = pos_fn(t)
-        if s >= fence_dist:
-            break
+    if not is_ground_ball:
+        # Determine flight apex (peak height timestamp)
+        t_apex = 0.0
+        z_peak = 0.0
+        apex_steps = 40
+        for i in range(apex_steps + 1):
+            t_probe = min(t_hang, i * (t_hang / max(1, apex_steps)))
+            _, z_probe = pos_fn(t_probe)
+            if z_probe > z_peak:
+                z_peak = z_probe
+                t_apex = t_probe
+        for step in range(steps + 1):
+            t = min(t_hang, step * dt)
+            s, z = pos_fn(t)
+            if s >= fence_dist:
+                break
 
-        is_descending = t >= t_apex
-        x = s * sin_phi
-        y = s * cos_phi
+            is_descending = t >= t_apex
+            x = s * sin_phi
+            y = s * cos_phi
 
-        candidates = []
-        for fd in fielders_data:
-            pos_id = fd["pos"]
-            is_infield = pos_id in ("P", "1B", "2B", "3B", "SS")
+            candidates = []
+            for fd in fielders_data:
+                pos_id = fd["pos"]
+                is_infield = pos_id in ("P", "1B", "2B", "3B", "SS")
 
-            # Infielders do not chase deep into the outfield; outfielders do not play in shallow dirt
-            if is_infield and y > 185.0:
-                continue
-            if not is_infield and y < 125.0:
-                continue
-
-            dist_from_start = math.hypot(x - fd["x0"], y - fd["y0"])
-
-            # 3D Glove Range and Vertical Catch Ceiling
-            at_wall = s >= fence_dist - 5.0
-            infield_leap = is_infield and dist_from_start <= (fd["r_glove"] + 3.0)
-
-            if at_wall:
-                max_catch_z = min(10.5, fd["z_vert_reach"] + 1.0)
-            elif infield_leap:
-                max_catch_z = fd["z_vert_reach"]
-            elif is_descending:
-                # Descending fly balls in open field are caught at chest level or below
-                max_catch_z = 5.5
-            else:
-                # On ascending arc, balls can only be caught if within immediate reach and below vertical reach
-                if dist_from_start > fd["r_glove"]:
+                # Infielders do not chase deep into the outfield; outfielders do not play in shallow dirt
+                if is_infield and y > 185.0:
                     continue
-                max_catch_z = fd["z_vert_reach"]
-
-            # If ball elevation exceeds fielder's reach envelope, it is out of glove range (sails overhead)
-            if z > max_catch_z:
-                continue
-
-            # Fielder kinematic pursuit
-            t_react = fd["t_react"]
-            is_gap = (8.0 <= abs(spray_deg) <= 20.0) or (abs(spray_deg) >= 28.0)
-            is_blooper = 18.0 <= launch <= 25.0
-            is_gap_or_slice = is_gap or is_blooper
-            if not is_infield and is_gap_or_slice:
-                dt_read = (1.0 - fd["iq"] / 100.0) * 0.45 + (1.0 - fd["reaction"] / 100.0) * 0.25
-                route_mult = 0.80 + (fd["iq"] / 100.0) * 0.20
-            else:
-                dt_read = 0.0
-                route_mult = 1.0
-
-            # Retreating turn delay and speed penalty if ball is behind outfielder
-            is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
-            if is_retreating:
-                dt_turn = 0.25 + (1.0 - fd["route_rating"] / 100.0) * 0.20
-                speed_mult = 0.88
-            else:
-                dt_turn = 0.0
-                speed_mult = 1.0
-
-            t_delay = t_react + dt_read + dt_turn
-            if t <= t_delay:
-                r_reach = fd["r_glove"]
-                eff_speed = fd["v_sprint"]
-            else:
-                dt_sprint = t - t_delay
-                r_max = (56.0 if is_infield else 76.0) + (fd["r_range"] / 100.0) * 8.0
-                eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
-                r_reach = min(r_max, eff_speed * dt_sprint) + fd["r_glove"]
-
-            if dist_from_start <= r_reach:
-                margin = (r_reach - dist_from_start) / eff_speed if eff_speed > 0 else 0.0
-                # If a ball traveled deeper than the fielder while elevated above their vertical reach,
-                # it sailed over their head. Chasing a ball from behind requires getting underneath
-                # it with sufficient tracking margin (>= 0.20s); otherwise it drops as an uncaught batted ball.
-                ball_went_over_head = is_retreating and (z_peak > fd["z_vert_reach"])
-                if ball_went_over_head and (not at_wall) and margin < 0.20:
+                if not is_infield and y < 125.0:
                     continue
 
-                candidates.append((dist_from_start, margin, fd, at_wall))
+                dist_from_start = math.hypot(x - fd["x0"], y - fd["y0"])
 
-        if candidates:
-            candidates.sort(key=lambda c: c[0])
-            best_dist, best_margin, winner, was_at_wall = candidates[0]
+                # 3D Glove Range and Vertical Catch Ceiling
+                at_wall = s >= fence_dist - 5.0
+                infield_leap = is_infield and dist_from_start <= (fd["r_glove"] + 3.0)
 
-            is_routine_trajectory = launch >= 22.0 or t_hang >= 3.8
+                if at_wall:
+                    max_catch_z = min(10.5, fd["z_vert_reach"] + 1.0)
+                elif infield_leap:
+                    max_catch_z = fd["z_vert_reach"]
+                elif is_descending:
+                    # Descending fly balls in open field are caught at chest level or below
+                    max_catch_z = 5.5
+                else:
+                    # On ascending arc, balls can only be caught if within immediate reach and below vertical reach
+                    if dist_from_start > fd["r_glove"]:
+                        continue
+                    max_catch_z = fd["z_vert_reach"]
 
-            # Classification & Catch Height Snapping
-            if was_at_wall and z >= 6.5:
-                fielding_type = "WALL_LEAP"
-                intercept_z = z
-            elif is_descending and is_routine_trajectory and best_margin >= 0.35 and 4.0 <= z <= 5.5:
-                # Camped Under It: Snaps to standing chest/eye level
-                fielding_type = "ROUTINE_FLY_CATCH"
-                intercept_z = 5.0
-            elif z >= 2.0:
-                fielding_type = "ROUTINE_FLY_CATCH" if (is_routine_trajectory and best_margin >= 0.35) else "RUNNING_CATCH"
-                intercept_z = 5.0 if (is_routine_trajectory and best_margin >= 0.35) else z
-            elif 0.3 <= z < 2.0:
-                fielding_type = "SLIDING_CATCH"
-                intercept_z = z
-            else:
-                fielding_type = "GROUND_SCOOP"
-                intercept_z = 0.0
+                # If ball elevation exceeds fielder's reach envelope, it is out of glove range (sails overhead)
+                if z > max_catch_z:
+                    continue
 
-            samples = generate_bounded_samples(ball_flight, spray_deg, t, 20)
-            if fielding_type == "ROUTINE_FLY_CATCH" and samples:
-                samples[-1][2] = round(intercept_z, 2)
+                # Fielder kinematic pursuit
+                t_react = fd["t_react"]
+                is_gap = (8.0 <= abs(spray_deg) <= 20.0) or (abs(spray_deg) >= 28.0)
+                is_blooper = 18.0 <= launch <= 25.0
+                is_gap_or_slice = is_gap or is_blooper
+                if not is_infield and is_gap_or_slice:
+                    dt_read = (1.0 - fd["iq"] / 100.0) * 0.45 + (1.0 - fd["reaction"] / 100.0) * 0.25
+                    route_mult = 0.80 + (fd["iq"] / 100.0) * 0.20
+                else:
+                    dt_read = 0.0
+                    route_mult = 1.0
 
-            return InterceptResult(
-                fielded=True,
-                fielder_id=winner["pos"],
-                fielder_name=winner["name"],
-                fielding_type=fielding_type,
-                s_intercept=round(s, 1),
-                t_intercept=round(t, 3),
-                intercept_x=round(x, 2),
-                intercept_y=round(y, 2),
-                intercept_z=round(intercept_z, 2),
-                fielder_start=(winner["x0"], winner["y0"]),
-                samples=samples,
-            )
+                # Retreating turn delay and speed penalty if ball is behind outfielder
+                is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
+                if is_retreating:
+                    dt_turn = 0.25 + (1.0 - fd["route_rating"] / 100.0) * 0.20
+                    speed_mult = 0.88
+                else:
+                    dt_turn = 0.0
+                    speed_mult = 1.0
+
+                t_delay = t_react + dt_read + dt_turn
+                if t <= t_delay:
+                    r_reach = fd["r_glove"]
+                    eff_speed = fd["v_sprint"]
+                else:
+                    dt_sprint = t - t_delay
+                    r_max = (56.0 if is_infield else 76.0) + (fd["r_range"] / 100.0) * 8.0
+                    eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
+                    r_reach = min(r_max, eff_speed * dt_sprint) + fd["r_glove"]
+
+                if dist_from_start <= r_reach:
+                    margin = (r_reach - dist_from_start) / eff_speed if eff_speed > 0 else 0.0
+                    # If a ball traveled deeper than the fielder while elevated above their vertical reach,
+                    # it sailed over their head. Chasing a ball from behind requires getting underneath
+                    # it with sufficient tracking margin (>= 0.20s); otherwise it drops as an uncaught batted ball.
+                    ball_went_over_head = is_retreating and (z_peak > fd["z_vert_reach"])
+                    if ball_went_over_head and (not at_wall) and margin < 0.20:
+                        continue
+
+                    candidates.append((dist_from_start, margin, fd, at_wall))
+
+            if candidates:
+                candidates.sort(key=lambda c: c[0])
+                best_dist, best_margin, winner, was_at_wall = candidates[0]
+
+                is_routine_trajectory = launch >= 22.0 or t_hang >= 3.8
+
+                # Classification & Catch Height Snapping
+                if was_at_wall and z >= 6.5:
+                    fielding_type = "WALL_LEAP"
+                    intercept_z = z
+                elif is_descending and is_routine_trajectory and best_margin >= 0.35 and 4.0 <= z <= 5.5:
+                    # Camped Under It: Snaps to standing chest/eye level
+                    fielding_type = "ROUTINE_FLY_CATCH"
+                    intercept_z = 5.0
+                elif z >= 2.0:
+                    fielding_type = "ROUTINE_FLY_CATCH" if (is_routine_trajectory and best_margin >= 0.35) else "RUNNING_CATCH"
+                    intercept_z = 5.0 if (is_routine_trajectory and best_margin >= 0.35) else z
+                elif 0.3 <= z < 2.0:
+                    fielding_type = "SLIDING_CATCH"
+                    intercept_z = z
+                else:
+                    fielding_type = "GROUND_SCOOP"
+                    intercept_z = 0.0
+
+                samples = generate_bounded_samples(ball_flight, spray_deg, t, 20)
+                if fielding_type == "ROUTINE_FLY_CATCH" and samples:
+                    samples[-1][2] = round(intercept_z, 2)
+
+                return InterceptResult(
+                    fielded=True,
+                    fielder_id=winner["pos"],
+                    fielder_name=winner["name"],
+                    fielding_type=fielding_type,
+                    s_intercept=round(s, 1),
+                    t_intercept=round(t, 3),
+                    intercept_x=round(x, 2),
+                    intercept_y=round(y, 2),
+                    intercept_z=round(intercept_z, 2),
+                    fielder_start=(winner["x0"], winner["y0"]),
+                    samples=samples,
+                )
 
     # 3. Ball Lands Uncaught: Outfielders Retrieve Rolling Ball
     steps_total = int(math.ceil(t_total / dt))
