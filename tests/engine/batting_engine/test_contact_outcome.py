@@ -280,3 +280,21 @@ def test_infield_grounder_out_vs_outfield_base_hit():
     gap_hit = resolve_contact_outcome(105.0, 0.0, -33.6)
     assert gap_hit["call"] in ("SINGLE", "DOUBLE")
 
+
+def test_outfield_ball_touching_turf_is_clean_hit_with_retrieval_metadata():
+    # 104 mph line drive into left-center gap (16 deg launch, -15 spray)
+    # Drops onto outfield grass at ~304 ft, then fielded by LF on the bounce
+    res = resolve_contact_outcome(104.0, 16.0, -15.0)
+    assert res is not None
+    assert res["call"] in ("DOUBLE", "SINGLE")
+    batted = res["batted_ball"]
+    assert batted["fielded"] is True
+    assert batted["fielding_type"] == "GROUND_SCOOP"
+    assert batted["is_clean_hit"] is True
+
+    # And check that an airborne catch has is_clean_hit is False
+    caught = resolve_contact_outcome(95.0, 25.0, 0.0)
+    assert caught["call"] == "IN_PLAY_OUT"
+    assert caught["batted_ball"]["is_clean_hit"] is False
+
+

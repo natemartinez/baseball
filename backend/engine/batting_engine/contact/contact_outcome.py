@@ -277,6 +277,7 @@ def resolve_contact_outcome(
                 'fielder_start': None,
                 'intercept_point': None,
                 'throw': None,
+                'is_clean_hit': False,
                 'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
             }
 
@@ -321,6 +322,7 @@ def resolve_contact_outcome(
                 'fielder_start': None,
                 'intercept_point': None,
                 'throw': None,
+                'is_clean_hit': True,
                 'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
             }
         return {
@@ -349,9 +351,12 @@ def resolve_contact_outcome(
 
     throw_data = None
     custom_description = None
+    is_clean_hit = False
     if is_airborne_catch:
         call = 'IN_PLAY_OUT'
+        is_clean_hit = False
     elif intercept.fielded and intercept.s_intercept <= 165.0:
+        is_clean_hit = False
         # Infield ground out vs. infield single via throw kinematics & runner clock
         fielder_state = active_defense.get_fielder(intercept.fielder_id)
         fielder_player = fielder_state.player if fielder_state else None
@@ -397,7 +402,8 @@ def resolve_contact_outcome(
             'samples': throw_res.samples,
         }
     else:
-        # Base hit (ground ball through infield or ball landed untouched)
+        # Base hit (ground ball through infield or ball reached outfield grass / landed untouched)
+        is_clean_hit = True
         if launch < 10.0:
             if intercept.s_intercept >= 250.0 and abs(spray) >= 25.0 and speed >= 78.0:
                 call = 'DOUBLE'
@@ -456,6 +462,7 @@ def resolve_contact_outcome(
                 round(intercept.intercept_z, 2),
             ] if intercept.fielded else None,
             'throw': throw_data,
+            'is_clean_hit': is_clean_hit,
             'model_version': geometry.get('model_version', 'calibrated-projectile-v1'),
         }
 
