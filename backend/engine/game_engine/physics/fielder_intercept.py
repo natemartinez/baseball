@@ -369,12 +369,15 @@ def solve_defense_intercept(
 
             # Fielder kinematic pursuit
             t_react = fd["t_react"]
-            is_gap_or_slice = abs(spray_deg) >= 18.0
+            is_gap = (8.0 <= abs(spray_deg) <= 20.0) or (abs(spray_deg) >= 28.0)
             is_blooper = 18.0 <= launch <= 25.0
-            if not is_infield and (is_gap_or_slice or is_blooper):
-                dt_read = (1.0 - fd["iq"] / 100.0) * 0.35 + (1.0 - fd["reaction"] / 100.0) * 0.15
+            is_gap_or_slice = is_gap or is_blooper
+            if not is_infield and is_gap_or_slice:
+                dt_read = (1.0 - fd["iq"] / 100.0) * 0.45 + (1.0 - fd["reaction"] / 100.0) * 0.25
+                route_mult = 0.80 + (fd["iq"] / 100.0) * 0.20
             else:
                 dt_read = 0.0
+                route_mult = 1.0
 
             # Retreating turn delay and speed penalty if ball is behind outfielder
             is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
@@ -392,7 +395,7 @@ def solve_defense_intercept(
             else:
                 dt_sprint = t - t_delay
                 r_max = (56.0 if is_infield else 76.0) + (fd["r_range"] / 100.0) * 8.0
-                eff_speed = fd["v_sprint"] * fd["eta"] * speed_mult
+                eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
                 r_reach = min(r_max, eff_speed * dt_sprint) + fd["r_glove"]
 
             if dist_from_start <= r_reach:
@@ -403,6 +406,7 @@ def solve_defense_intercept(
                 ball_went_over_head = is_retreating and (z_peak > fd["z_vert_reach"])
                 if ball_went_over_head and (not at_wall) and margin < 0.20:
                     continue
+
                 candidates.append((dist_from_start, margin, fd, at_wall))
 
         if candidates:

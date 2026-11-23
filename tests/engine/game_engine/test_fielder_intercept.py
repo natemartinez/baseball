@@ -116,3 +116,36 @@ def test_ball_sailing_overhead_out_of_glove_range_becomes_uncaught_batted_ball()
         assert res.intercept_z == 0.0 or res.t_intercept >= motion["t_hang"]
         assert res.fielding_type in ("GROUND_SCOOP", "UNFIELDED")
 
+
+def test_ratings_driven_gap_hit_drops_for_low_iq_outfielder():
+    # Slicing line drive in right-center gap alley: 98 mph, 16 deg launch, 14 deg spray
+    motion = solve_continuous_ball_flight(98.0, 16.0, 14.0)
+
+    # 1. Elite CF/RF (IQ 99, Route 99, Range 95, Reaction 95): reads slice instantly and makes running catch
+    elite_defense = ActiveDefense.default()
+    for pos in ("CF", "RF"):
+        elite_defense.fielders[pos].player.ratings["baseball_iq"] = 99.0
+        elite_defense.fielders[pos].player.ratings["reaction"] = 95.0
+        elite_defense.fielders[pos].player.ratings["route_efficiency"] = 99.0
+        elite_defense.fielders[pos].player.ratings["range"] = 95.0
+
+    res_elite = solve_defense_intercept(motion, spray_deg=14.0, defense=elite_defense)
+    assert res_elite.fielded is True
+    assert res_elite.fielder_id in ("CF", "RF")
+    assert res_elite.fielding_type in ("RUNNING_CATCH", "SLIDING_CATCH")
+    assert res_elite.intercept_z >= 1.0
+
+    # 2. Below-average outfield (IQ 45, Reaction 45, Route 50, Range 55): hesitates on jump, ball lands on grass
+    slow_defense = ActiveDefense.default()
+    for pos in ("CF", "RF"):
+        slow_defense.fielders[pos].player.ratings["baseball_iq"] = 45.0
+        slow_defense.fielders[pos].player.ratings["reaction"] = 45.0
+        slow_defense.fielders[pos].player.ratings["route_efficiency"] = 50.0
+        slow_defense.fielders[pos].player.ratings["range"] = 55.0
+
+    res_slow = solve_defense_intercept(motion, spray_deg=14.0, defense=slow_defense)
+    # Ball drops untouched in the grass! Fielded on the bounce/roll
+    assert res_slow.intercept_z == 0.0 or res_slow.t_intercept >= motion["t_hang"]
+    assert res_slow.fielding_type in ("GROUND_SCOOP", "UNFIELDED")
+
+
