@@ -51,7 +51,7 @@ describe('HitTestLauncher Component Logic & Choreography', () => {
       assert.equal(CONTACT_DELAY_MS, 160);
       // Total duration strictly exceeds flight time
       assert.ok(totalLifecycleMs > flightDurationMs);
-      assert.ok(totalLifecycleMs >= 2900); // Smallest total cycle (1.6s grounder) >= 2.96s
+      assert.ok(totalLifecycleMs >= 2000); // Smallest total cycle (0.66s grounder to 1B) >= 2.0s
     }
   });
 

@@ -59,6 +59,24 @@ describe('Hit Presets for Debug Launcher', () => {
     assert.ok(moonshot.distance >= 400);
   });
 
+  it('calibrates ss_chopper and 1b_grounder samples to terminate at intercept point', () => {
+    const ss = HIT_PRESETS.find((p) => p.id === 'ss_chopper')!;
+    assert.ok(ss.hangTime <= 1.8, `Expected ss.hangTime <= 1.8, got ${ss.hangTime}`);
+    assert.ok(ss.distance < 140, `Expected ss.distance < 140, got ${ss.distance}`);
+    const lastSample = ss.samples[ss.samples.length - 1];
+    assert.ok(Math.abs(lastSample[0] - (-38.2)) < 1.0, `Expected x near -38.2, got ${lastSample[0]}`);
+    assert.ok(Math.abs(lastSample[1] - 108.5) < 1.0, `Expected y near 108.5, got ${lastSample[1]}`);
+    assert.equal(lastSample[2], 0);
+
+    const b1 = HIT_PRESETS.find((p) => p.id === '1b_grounder')!;
+    assert.ok(b1.hangTime <= 1.5, `Expected b1.hangTime <= 1.5, got ${b1.hangTime}`);
+    assert.ok(b1.distance < 100, `Expected b1.distance < 100, got ${b1.distance}`);
+    const lastB1 = b1.samples[b1.samples.length - 1];
+    assert.ok(Math.abs(lastB1[0] - 58.4) < 1.0, `Expected x near 58.4, got ${lastB1[0]}`);
+    assert.ok(Math.abs(lastB1[1] - 60.1) < 1.0, `Expected y near 60.1, got ${lastB1[1]}`);
+    assert.equal(lastB1[2], 0);
+  });
+
   it('builds a valid ActiveBattedBallData object with unique id', () => {
     const preset = HIT_PRESETS[0];
     const data = buildActiveBattedBallFromPreset(preset, 42);
@@ -213,12 +231,12 @@ describe('Hit Presets for Debug Launcher', () => {
       );
     });
 
-    it('verifies both grounder presets roll into shallow outfield (> 200 ft)', () => {
+    it('verifies both grounder presets terminate at infield fielder intercepts (< 140 ft)', () => {
       const chopper = HIT_PRESETS.find((p) => p.id === 'ss_chopper')!;
       const grounder = HIT_PRESETS.find((p) => p.id === '1b_grounder')!;
 
-      assert.ok(chopper.distance > 200, `ss_chopper distance ${chopper.distance} should exceed 200 ft`);
-      assert.ok(grounder.distance > 200, `1b_grounder distance ${grounder.distance} should exceed 200 ft`);
+      assert.ok(chopper.distance < 140, `ss_chopper distance ${chopper.distance} should be < 140 ft`);
+      assert.ok(grounder.distance < 100, `1b_grounder distance ${grounder.distance} should be < 100 ft`);
     });
 
     it('verifies 104 mph line drive missile transit speed and initial exit velocity', () => {
@@ -264,16 +282,16 @@ describe('Hit Presets for Debug Launcher', () => {
   describe('Parity with Canonical ball_flight.py Physics Engine', () => {
     it('matches exact canonical values for all 5 presets', () => {
       const chopper = HIT_PRESETS.find((p) => p.id === 'ss_chopper')!;
-      assert.equal(chopper.hangTime, 5.23);
+      assert.equal(chopper.hangTime, 1.32);
       assert.equal(chopper.apexHeight, 3.0);
-      assert.equal(chopper.distance, 233.1);
-      assert.deepEqual(chopper.landingPos, [-85.0, 0, -217.0]);
+      assert.equal(chopper.distance, 115.0);
+      assert.deepEqual(chopper.landingPos, [-38.2, 0, -108.5]);
 
       const grounder = HIT_PRESETS.find((p) => p.id === '1b_grounder')!;
-      assert.equal(grounder.hangTime, 6.158);
+      assert.equal(grounder.hangTime, 0.664);
       assert.equal(grounder.apexHeight, 3.0);
-      assert.equal(grounder.distance, 319.7);
-      assert.deepEqual(grounder.landingPos, [169.4, 0, -271.1]);
+      assert.equal(grounder.distance, 83.8);
+      assert.deepEqual(grounder.landingPos, [58.4, 0, -60.1]);
 
       const lineDrive = HIT_PRESETS.find((p) => p.id === 'line_drive_gap')!;
       assert.equal(lineDrive.hangTime, 2.683);

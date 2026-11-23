@@ -518,8 +518,54 @@ export function generateKinematicGrounder(
   };
 }
 
-const ssChopperTraj = computeBattedBallTrajectory(88.0, -5.0, -21.4);
-const oneBGrounderTraj = computeBattedBallTrajectory(95.0, 2.0, 32.0);
+function computeBoundedGrounderTrajectory(
+  ev: number,
+  launch: number,
+  spray: number,
+  interceptPt: [number, number, number],
+  contactHeightFt: number = CONTACT_HEIGHT_FT,
+  count: number = TRACE_SAMPLE_COUNT,
+): BattedBallTrajectory {
+  const phi = (spray * Math.PI) / 180.0;
+  const sinPhi = Math.sin(phi);
+  const cosPhi = Math.cos(phi);
+  const distance = Math.hypot(interceptPt[0], interceptPt[1]);
+  const motion = solveGroundMotion(ev, launch, contactHeightFt);
+  const tHang = groundTransitTime(motion, distance);
+  let apexHeight = contactHeightFt;
+  if (motion.hops.length > 0) {
+    apexHeight = Math.max(apexHeight, ...motion.hops.map((h) => h.apexFt));
+  }
+  const samples = generateGroundSamples(
+    motion,
+    contactHeightFt,
+    sinPhi,
+    cosPhi,
+    count,
+    distance,
+    tHang,
+  );
+  samples[count - 1] = [
+    roundTo(interceptPt[0], 2),
+    roundTo(interceptPt[1], 2),
+    roundTo(interceptPt[2], 2),
+    roundTo(tHang, 3),
+  ];
+
+  return {
+    exitVelocityMph: roundTo(ev, 1),
+    launchAngleDeg: roundTo(launch, 1),
+    sprayAngleDeg: roundTo(spray, 1),
+    hangTime: roundTo(tHang, 3),
+    apexHeight: roundTo(apexHeight, 1),
+    distance: roundTo(distance, 1),
+    landingPos: [roundTo(interceptPt[0], 1), 0, roundTo(-interceptPt[1], 1)],
+    samples,
+  };
+}
+
+const ssChopperTraj = computeBoundedGrounderTrajectory(88.0, -5.0, -19.4, [-38.2, 108.5, 0.0]);
+const oneBGrounderTraj = computeBoundedGrounderTrajectory(95.0, 2.0, 44.2, [58.4, 60.1, 0.0]);
 const lineDriveGapTraj = computeBattedBallTrajectory(104.0, 16.0, -16.0);
 const flyBallRfTraj = computeBattedBallTrajectory(90.0, 32.0, 24.0);
 const moonshotTraj = computeBattedBallTrajectory(106.0, 32.0, 0.0);
