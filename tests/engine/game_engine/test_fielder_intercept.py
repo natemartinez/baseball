@@ -151,21 +151,33 @@ def test_ratings_driven_gap_hit_drops_for_low_iq_outfielder():
 
 def test_pitcher_mound_reach_and_middle_infield_coverage():
     # 90 mph grounder at -5 deg spray: passes 5.2 ft to the left of the rubber
-    # Pitcher cannot reach it; SS fields it up the middle
+    # Pitcher cannot reach it; ball rolls past mound into CF at depth (NOT vacuumed 0.5s off the rubber)
     motion_neg5 = solve_continuous_ball_flight(90.0, -2.0, -5.0)
     defense = ActiveDefense.default()
     res_neg5 = solve_defense_intercept(motion_neg5, spray_deg=-5.0, defense=defense)
     assert res_neg5.fielded is True
-    assert res_neg5.fielder_id == "SS"  # NOT P!
+    assert res_neg5.fielder_id != "P"  # NOT P! Pitcher does not vacuum comebacker
     assert res_neg5.t_intercept > 1.0   # Fielded at depth, not 0.5s off the rubber
 
-    # 90 mph grounder at -8 deg spray: passes 29 ft from SS
-    # SS dynamically sprints and fields it, rather than rolling 230 ft to LF
-    motion_neg8 = solve_continuous_ball_flight(90.0, -2.0, -8.0)
-    res_neg8 = solve_defense_intercept(motion_neg8, spray_deg=-8.0, defense=defense)
-    assert res_neg8.fielded is True
-    assert res_neg8.fielder_id == "SS"
-    assert res_neg8.s_intercept <= 165.0  # Infield pickup!
+    # 90 mph grounder at -18 deg spray: passes right in front of SS (7.3 ft away)
+    # SS cleanly fields it with normal athletic movement (within 10 ft)
+    motion_neg18 = solve_continuous_ball_flight(90.0, -2.0, -18.0)
+    res_neg18 = solve_defense_intercept(motion_neg18, spray_deg=-18.0, defense=defense)
+    assert res_neg18.fielded is True
+    assert res_neg18.fielder_id == "SS"
+    dist_ss = ((res_neg18.intercept_x - res_neg18.fielder_start[0])**2 + (res_neg18.intercept_y - res_neg18.fielder_start[1])**2)**0.5
+    assert dist_ss <= 10.0  # Normal athletic reach, not 35 ft superhuman sprint!
+    assert res_neg18.s_intercept <= 165.0  # Infield pickup!
+
+    # 90 mph grounder at -15 deg spray: 13.7 ft to the left of SS
+    # SS fields with lateral diving reach (<= 16 ft)
+    motion_neg15 = solve_continuous_ball_flight(90.0, -2.0, -15.0)
+    res_neg15 = solve_defense_intercept(motion_neg15, spray_deg=-15.0, defense=defense)
+    assert res_neg15.fielded is True
+    assert res_neg15.fielder_id == "SS"
+    dist_dive = ((res_neg15.intercept_x - res_neg15.fielder_start[0])**2 + (res_neg15.intercept_y - res_neg15.fielder_start[1])**2)**0.5
+    assert dist_dive <= 16.0
+    assert res_neg15.s_intercept <= 165.0
 
 
 

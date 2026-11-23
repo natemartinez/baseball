@@ -269,36 +269,41 @@ def solve_defense_intercept(
             d_perp = abs(fd["x0"] * cos_phi - fd["y0"] * sin_phi)
 
             if pos_id == "P":
-                # Comebacker clamp: on hard hits (>= 75 mph), pitcher cannot dive/sprint laterally
-                # reach is strictly limited to immediate area around rubber (<= 3.0 ft).
-                if ev >= 75.0:
-                    r_ground = 2.0 + (fd["r_range"] / 100.0) * 1.0
+                # Comebacker clamp: on hard hits (>= 82 mph), pitcher cannot dive/sprint laterally
+                # reach is strictly limited to immediate area around rubber (3.5 to 5.5 ft).
+                # on softer hits, pitcher can reach 6.0 to 9.0 ft.
+                if ev >= 82.0:
+                    r_ground = 3.5 + (fd["r_range"] / 100.0) * 2.0
                 else:
-                    r_ground = 5.0 + (fd["r_range"] / 100.0) * 3.0
+                    r_ground = 6.0 + (fd["r_range"] / 100.0) * 3.0
             elif pos_id in ("1B", "3B"):
-                # Corner infielders have hot-corner dive/step reach
-                r_ground = 10.0 + (fd["r_range"] / 100.0) * 4.0
+                # Corner infielders have hot-corner dive/step reach (11.0 to 15.0 ft)
+                r_ground = 11.0 + (fd["r_range"] / 100.0) * 4.0
             else:
                 # Middle infielders (SS, 2B):
-                # Toward the middle (second base, -15 to +15 deg): dynamic lateral pursuit up to 36 ft
-                # Toward the hole: standard lateral dive reach (<= 16 ft)
-                moving_towards_middle = (pos_id == "SS" and spray_deg >= -15.0) or (pos_id == "2B" and spray_deg <= 15.0)
-                if moving_towards_middle:
-                    # Binary search for transit time at s_closest
-                    lo, hi = 0.0, t_total
-                    for _ in range(12):
-                        mid = (lo + hi) / 2.0
-                        if pos_fn(mid)[0] < s_closest:
-                            lo = mid
-                        else:
-                            hi = mid
-                    t_transit = lo
-                    dt_sprint = max(0.0, t_transit - fd["t_react"])
-                    r_dive = 4.5
-                    r_dynamic = fd["v_sprint"] * dt_sprint * fd["eta"] + fd["r_glove"] + r_dive
-                    r_ground = min(36.0, r_dynamic)
-                else:
-                    r_ground = 12.0 + (fd["r_range"] / 100.0) * 4.0
+                # Calculate transit time at fielder depth
+                lo, hi = 0.0, t_total
+                for _ in range(12):
+                    mid = (lo + hi) / 2.0
+                    if pos_fn(mid)[0] < s_closest:
+                        lo = mid
+                    else:
+                        hi = mid
+                t_transit = lo
+                dt_sprint = max(0.0, t_transit - fd["t_react"])
+                # Keller athletic acceleration model: smooth acceleration from rest (tau in [0.50, 0.65]s)
+                tau = 0.65 - (fd["r_range"] / 100.0) * 0.15
+                d_sprint = (
+                    fd["v_sprint"] * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
+                    if dt_sprint > 0.0
+                    else 0.0
+                )
+                # Crossover step and horizontal diving extension (6.0 to 8.0 ft)
+                r_dive = 6.0 + (fd["r_range"] / 100.0) * 2.0
+                r_dynamic = d_sprint * fd["eta"] + fd["r_glove"] + r_dive
+                # Realistic physical maximum lateral reach: diving stop up to 26.0 to 30.0 ft
+                r_max_infield = 25.0 + (fd["r_range"] / 100.0) * 5.0
+                r_ground = min(r_max_infield, r_dynamic)
 
             if d_perp <= r_ground:
                 dist = math.hypot(fd["x0"] - s_closest * sin_phi, fd["y0"] - s_closest * cos_phi)
@@ -397,12 +402,12 @@ def solve_defense_intercept(
 
                 # Fielder kinematic pursuit
                 t_react = fd["t_react"]
-                is_gap = (8.0 <= abs(spray_deg) <= 20.0) or (abs(spray_deg) >= 28.0)
-                is_blooper = 18.0 <= launch <= 25.0
+                is_gap = (11.0 <= abs(spray_deg) <= 17.0) or (abs(spray_deg) >= 36.0)
+                is_blooper = 18.0 <= launch <= 25.0 and d_total <= 260.0
                 is_gap_or_slice = is_gap or is_blooper
                 if not is_infield and is_gap_or_slice:
-                    dt_read = (1.0 - fd["iq"] / 100.0) * 0.45 + (1.0 - fd["reaction"] / 100.0) * 0.25
-                    route_mult = 0.80 + (fd["iq"] / 100.0) * 0.20
+                    dt_read = (1.0 - fd["iq"] / 100.0) * 0.35 + (1.0 - fd["reaction"] / 100.0) * 0.20
+                    route_mult = 0.85 + (fd["iq"] / 100.0) * 0.15
                 else:
                     dt_read = 0.0
                     route_mult = 1.0
@@ -410,8 +415,8 @@ def solve_defense_intercept(
                 # Retreating turn delay and speed penalty if ball is behind outfielder
                 is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
                 if is_retreating:
-                    dt_turn = 0.25 + (1.0 - fd["route_rating"] / 100.0) * 0.20
-                    speed_mult = 0.88
+                    dt_turn = 0.20 + (1.0 - fd["route_rating"] / 100.0) * 0.15
+                    speed_mult = 0.92
                 else:
                     dt_turn = 0.0
                     speed_mult = 1.0
@@ -422,9 +427,15 @@ def solve_defense_intercept(
                     eff_speed = fd["v_sprint"]
                 else:
                     dt_sprint = t - t_delay
-                    r_max = (56.0 if is_infield else 76.0) + (fd["r_range"] / 100.0) * 8.0
                     eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
-                    r_reach = min(r_max, eff_speed * dt_sprint) + fd["r_glove"]
+                    tau = 0.75 - (fd["r_range"] / 100.0) * 0.20
+                    d_sprint = (
+                        eff_speed * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
+                        if dt_sprint > 0.0
+                        else 0.0
+                    )
+                    r_max = (45.0 if is_infield else 115.0) + (fd["r_range"] / 100.0) * 10.0
+                    r_reach = min(r_max, d_sprint) + fd["r_glove"]
 
                 if dist_from_start <= r_reach:
                     margin = (r_reach - dist_from_start) / eff_speed if eff_speed > 0 else 0.0
@@ -495,7 +506,14 @@ def solve_defense_intercept(
                 continue
             dist = math.hypot(x - fd["x0"], y - fd["y0"])
             dt_sprint = max(0.0, t - fd["t_react"])
-            r_reach = fd["v_sprint"] * dt_sprint * fd["eta"] + fd["r_glove"]
+            tau = 0.65 - (fd["r_range"] / 100.0) * 0.15
+            d_sprint = (
+                fd["v_sprint"] * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
+                if dt_sprint > 0.0
+                else 0.0
+            )
+            r_dive = 3.5
+            r_reach = d_sprint * fd["eta"] + fd["r_glove"] + r_dive
             if dist <= r_reach:
                 candidates.append((dist, fd))
         if candidates:

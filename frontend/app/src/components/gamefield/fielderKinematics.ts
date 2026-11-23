@@ -99,7 +99,10 @@ export function computeFielderPursuit(params: FielderPursuitParams): FielderPurs
     hasBroken = true;
     isArrived = false;
     const sprintDuration = Math.max(0.05, effDuration - effReaction);
-    progress = Math.min(1.0, Math.max(0.0, (elapsedTime - effReaction) / sprintDuration));
+    const u = Math.min(1.0, Math.max(0.0, (elapsedTime - effReaction) / sprintDuration));
+    // Athletic smoothstep easing: starts smoothly from rest, accelerates, and gathers at intercept
+    const smoothProgress = u * u * (3.0 - 2.0 * u);
+    progress = smoothProgress;
     currentX = startX + (targetX - startX) * progress;
     currentY = startY + (targetY - startY) * progress;
   }
@@ -263,14 +266,17 @@ export function computeAllFielderPositions(
           const unitY = dy / dist;
 
           const isOutfielder = fielder.id === 'LF' || fielder.id === 'CF' || fielder.id === 'RF';
-          const maxShade = isOutfielder ? 12.0 : (fielder.id === 'P' ? 4.0 : 6.0);
+          // Subtle, realistic anticipation steps (max 1.5 - 3.5 ft), not a 12-ft sprint!
+          const maxShade = isOutfielder ? 3.5 : (fielder.id === 'P' ? 1.0 : 2.0);
 
           const effDuration = Math.max(0.05, totalDuration);
-          const effReaction = Math.min(reactionDelay, effDuration * 0.5);
-          const beta = Math.min(1.0, Math.max(0.0, (elapsedTime - effReaction) / effDuration));
+          const effReaction = Math.min(reactionDelay, effDuration * 0.4);
+          // Rate-limit shading speed to natural walking/anticipating pace (<= 3.5 ft/s)
+          const dtShade = Math.max(0.0, elapsedTime - effReaction);
+          const currentShade = Math.min(maxShade, 3.5 * dtShade);
 
-          const shadedX = fielder.x + maxShade * beta * unitX;
-          const shadedY = fielder.y + maxShade * beta * unitY;
+          const shadedX = fielder.x + currentShade * unitX;
+          const shadedY = fielder.y + currentShade * unitY;
 
           const deltaSceneX = unitX;
           const deltaSceneZ = -unitY;
