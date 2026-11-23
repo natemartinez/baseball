@@ -146,7 +146,7 @@ export const FielderLayer = React.memo(function FielderLayer({
             rotation={[-Math.PI / 2, 0, 0]}
             renderOrder={1}
           >
-            <ringGeometry args={[fielder.radius - 0.6, fielder.radius, 48]} />
+            <ringGeometry args={[fielder.responsibility_radius - 0.6, fielder.responsibility_radius, 48]} />
             <meshBasicMaterial
               color="#67E8F9"
               transparent
