@@ -403,19 +403,9 @@ def resolve_contact_outcome(
         }
     else:
         # Base hit (ground ball through infield or ball reached outfield grass / landed untouched)
+        # All batted ball base hits are scored as SINGLE until full baserunner kinetics & 2B throws are implemented.
         is_clean_hit = True
-        if launch < 10.0:
-            if intercept.s_intercept >= 250.0 and abs(spray) >= 25.0 and speed >= 78.0:
-                call = 'DOUBLE'
-            else:
-                call = 'SINGLE'
-        else:
-            if intercept.s_intercept >= 320.0 and abs(spray) >= 25.0 and speed >= 78.0:
-                call = 'TRIPLE'
-            elif intercept.s_intercept >= 300.0 or (intercept.s_intercept >= 250.0 and 8.0 <= launch <= 32.0):
-                call = 'DOUBLE'
-            else:
-                call = 'SINGLE'
+        call = 'SINGLE'
 
     # Populate backward-compatible fielder info
     fielder_dict = None

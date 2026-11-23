@@ -28,7 +28,7 @@ def test_contact_outcome_maps_landing_to_result():
 
     # 297 ft into the right-field gap lands outside all fielder radii.
     gap = resolve_contact_outcome(95, 20, 40)
-    assert gap['call'] == 'DOUBLE'
+    assert gap['call'] == 'SINGLE'
     assert gap['fielder_name'] is None
 
     weak = resolve_contact_outcome(119.3, -25.0, -33.6)
@@ -296,5 +296,28 @@ def test_outfield_ball_touching_turf_is_clean_hit_with_retrieval_metadata():
     caught = resolve_contact_outcome(95.0, 25.0, 0.0)
     assert caught["call"] == "IN_PLAY_OUT"
     assert caught["batted_ball"]["is_clean_hit"] is False
+
+
+def test_all_batted_ball_base_hits_are_called_singles_pending_baserunners():
+    # Gap hit (95 mph, 20 deg launch, 40 deg spray) lands in RF gap -> SINGLE
+    gap = resolve_contact_outcome(95.0, 20.0, 40.0)
+    assert gap['call'] == 'SINGLE'
+    assert gap['batted_ball']['is_clean_hit'] is True
+
+    # Deep gap hit (104 mph, 16 deg, -15 spray) lands in left-center at 304 ft -> SINGLE
+    deep_gap = resolve_contact_outcome(104.0, 16.0, -15.0)
+    assert deep_gap['call'] == 'SINGLE'
+    assert deep_gap['batted_ball']['is_clean_hit'] is True
+
+    # Deep line drive into left-center gap (105 mph, 18 deg, -20 spray, 333 ft) -> SINGLE
+    wall = resolve_contact_outcome(105.0, 18.0, -20.0)
+    assert wall['call'] == 'SINGLE'
+    assert wall['batted_ball']['is_clean_hit'] is True
+
+    # Clean grounder through the 5.5 hole (-33.6 deg, 105 mph) -> SINGLE
+    grounder = resolve_contact_outcome(105.0, 0.0, -33.6)
+    assert grounder['call'] == 'SINGLE'
+    assert grounder['batted_ball']['is_clean_hit'] is True
+
 
 
