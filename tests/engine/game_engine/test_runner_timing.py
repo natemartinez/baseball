@@ -65,3 +65,4 @@ def test_calculate_home_to_first_ingests_player_object():
     )
     t_carroll = calculate_home_to_first_time(batter=speedster)
     assert t_carroll < 4.00
+

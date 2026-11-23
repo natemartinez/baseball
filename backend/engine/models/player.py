@@ -521,6 +521,30 @@ class Player:
         rating = max(0.0, min(99.0, self.get_defensive_rating("fielding")))
         return 3.2 + (rating / 100.0) * 2.3
 
+    def get_glove_range_ft(self) -> float:
+        """Fielder object property: lateral catch window radius in feet."""
+        return self.get_glove_radius_ft()
+
+    @property
+    def glove_range(self) -> float:
+        """Property alias for glove reach radius in feet."""
+        return self.get_glove_range_ft()
+
+    def get_max_vertical_reach_ft(self) -> float:
+        """
+        Calculates maximum vertical leaping reach envelope (feet).
+        Combines standing overhead reach (derived from height) with
+        vertical leap potential (derived from athleticism/range rating).
+        """
+        height_in = self.get_height_inches()
+        h_ft = (height_in / 12.0) if height_in is not None else 6.0
+        # Standing two-arm overhead reach is approximately 1.33x body height
+        standing_reach_ft = h_ft * 1.33
+        # Vertical leaping reach: [1.0 ft, 2.5 ft] based on range/athleticism
+        range_rating = max(0.0, min(99.0, self.get_defensive_rating("range")))
+        vertical_leap_ft = 1.0 + (range_rating / 100.0) * 1.5
+        return round(standing_reach_ft + vertical_leap_ft, 2)
+
     def get_transfer_time_s(self) -> float:
         """Translates 0-99 transfer_speed rating to glove-to-hand time: [0.45s, 0.85s]."""
         rating = max(0.0, min(99.0, self.get_defensive_rating("transfer_speed")))

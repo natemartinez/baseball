@@ -109,3 +109,4 @@ def test_solve_fielder_throw_ingests_player_object_seamlessly():
     )
     assert res.throw_velocity_mph == pytest.approx(70.0 + 0.99 * 32.0, abs=0.1)
     assert res.transfer_time_s < 0.55
+

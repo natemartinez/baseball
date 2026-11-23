@@ -60,6 +60,29 @@ def test_kinematic_conversion_helpers():
     assert poor.get_throw_speed_mph() == pytest.approx(70.0, abs=1e-3)
 
 
+def test_player_glove_range_and_max_vertical_reach():
+    # Elite fielder (height 6'4", fielding 95, range 95)
+    tall_elite = Player(
+        name="Tall Elite",
+        vitals={"height": "6'4\""},
+        ratings={"fielding": 95.0, "range": 95.0},
+    )
+    # glove_range matches get_glove_range_ft() and get_glove_radius_ft()
+    assert tall_elite.glove_range == pytest.approx(3.2 + (95.0 / 100.0) * 2.3, abs=1e-3)
+    assert tall_elite.get_glove_range_ft() == tall_elite.glove_range
+    # Max vertical reach: standing reach (6.33 * 1.33 = ~8.44 ft) + leap (~2.4 ft) ~ 10.8 ft
+    assert 10.0 <= tall_elite.get_max_vertical_reach_ft() <= 11.0
+
+    # Short average fielder (height 5'9", fielding 50, range 50)
+    short_avg = Player(
+        name="Short Avg",
+        vitals={"height": "5'9\""},
+        ratings={"fielding": 50.0, "range": 50.0},
+    )
+    assert short_avg.glove_range == pytest.approx(3.2 + (50.0 / 100.0) * 2.3, abs=1e-3)
+    assert 8.5 <= short_avg.get_max_vertical_reach_ft() <= 9.8
+
+
 def test_position_weights_sum_to_one():
     for pos, weights in POSITION_WEIGHTS.items():
         assert sum(weights.values()) == pytest.approx(1.0, abs=1e-4), f"{pos} weights do not sum to 1.0"

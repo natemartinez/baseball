@@ -87,3 +87,32 @@ def test_bounded_samples_are_strictly_monotonic():
         dist_curr = samples[i][0] ** 2 + samples[i][1] ** 2
         assert dist_curr >= dist_prev - 1e-3
 
+
+def test_routine_fly_ball_caught_at_chest_height():
+    # 92 mph, 32 deg launch, 0 spray to CF (hang time ~4.6s)
+    # CF arrives well in advance (~2.5s) and camps under it.
+    motion = solve_continuous_ball_flight(92.0, 32.0, 0.0)
+    defense = ActiveDefense.default()
+    res = solve_defense_intercept(motion, spray_deg=0.0, defense=defense)
+    assert res.fielded is True
+    assert res.fielder_id == "CF"
+    assert res.fielding_type == "ROUTINE_FLY_CATCH"
+    # Must be caught at standing eye/chest level, NOT near the floor
+    assert 4.5 <= res.intercept_z <= 5.5
+    assert res.samples[-1][2] == pytest.approx(res.intercept_z, abs=0.1)
+
+
+def test_ball_sailing_overhead_out_of_glove_range_becomes_uncaught_batted_ball():
+    # Hard line drive: 106 mph, 17 deg launch, spray -30 (toward LF/CF alley)
+    # The ball sails over the shortstop's head at 12 ft elevation, way above SS vertical reach.
+    # The LF starts at (-115, 255) and cannot get underneath the ball by landing time (~3.6s, landing at 340 ft).
+    # Ball lands on grass uncaught as a clean batted ball, fielded on ground rollout or unfielded.
+    motion = solve_continuous_ball_flight(106.0, 17.0, -30.0)
+    defense = ActiveDefense.default()
+    res = solve_defense_intercept(motion, spray_deg=-30.0, defense=defense)
+    # Must NOT be caught in mid-air above reach!
+    if res.fielded:
+        # If fielded, it must be on the bounce/roll on the ground
+        assert res.intercept_z == 0.0 or res.t_intercept >= motion["t_hang"]
+        assert res.fielding_type in ("GROUND_SCOOP", "UNFIELDED")
+

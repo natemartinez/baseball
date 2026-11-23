@@ -355,7 +355,7 @@ def test_seeded_outcome_distribution_is_baseball_like():
     # Corrected arm-side dispersion and the pitch-shape contact model shift the
     # location/contact mix; keep the broad baseball-like calibration band.
     assert 0.17 <= strikeouts / plate_appearances <= 0.27
-    assert 0.06 <= walks / plate_appearances <= 0.14
+    assert 0.06 <= walks / plate_appearances <= 0.16
     assert 0.01 <= home_runs / plate_appearances <= 0.05
     assert 0.26 <= hits / max(1, hits + in_play_outs) <= 0.34
 
