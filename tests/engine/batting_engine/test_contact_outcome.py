@@ -82,7 +82,8 @@ def test_fly_ball_inside_a_fielder_radius_is_an_out():
     assert center_fly['call'] == 'IN_PLAY_OUT'
     assert center_fly['fielder_name'] == 'CF'
     assert center_fly['fielder_distance_ft'] is not None
-    assert center_fly['fielder_distance_ft'] <= center_fly['fielder_radius_ft']
+    assert center_fly['fielder_distance_ft'] <= center_fly['fielder_responsibility_radius_ft']
+    assert center_fly.get('fielder_responsibility_radius_ft') is not None
 
 
 def test_contact_outcome_foul_has_trace():

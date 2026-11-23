@@ -52,14 +52,14 @@ FOUL_LINE_DEG = 45.0
 # is intentionally larger than the fielder model. Values are in feet and are
 # mirrored in frontend/app/src/services/fielders.ts.
 FIELDERS: Tuple[Dict[str, Any], ...] = (
-    {'id': 'P', 'label': 'P', 'name': 'pitcher', 'x': 0.0, 'y': 60.5, 'radius': 34.0, 'ground_radius': 8.0, 'is_infield': True},
-    {'id': '1B', 'label': '1B', 'name': 'first base', 'x': 63.6, 'y': 63.6, 'radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
-    {'id': '2B', 'label': '2B', 'name': 'second base', 'x': 45.0, 'y': 115.0, 'radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
-    {'id': 'SS', 'label': 'SS', 'name': 'shortstop', 'x': -45.0, 'y': 115.0, 'radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
-    {'id': '3B', 'label': '3B', 'name': 'third base', 'x': -63.6, 'y': 63.6, 'radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
-    {'id': 'LF', 'label': 'LF', 'name': 'left field', 'x': -115.0, 'y': 255.0, 'radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
-    {'id': 'CF', 'label': 'CF', 'name': 'center field', 'x': 0.0, 'y': 330.0, 'radius': 80.0, 'ground_radius': 0.0, 'is_infield': False},
-    {'id': 'RF', 'label': 'RF', 'name': 'right field', 'x': 115.0, 'y': 255.0, 'radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'P', 'label': 'P', 'name': 'pitcher', 'x': 0.0, 'y': 60.5, 'responsibility_radius': 34.0, 'ground_radius': 8.0, 'is_infield': True},
+    {'id': '1B', 'label': '1B', 'name': 'first base', 'x': 63.6, 'y': 63.6, 'responsibility_radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
+    {'id': '2B', 'label': '2B', 'name': 'second base', 'x': 45.0, 'y': 115.0, 'responsibility_radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
+    {'id': 'SS', 'label': 'SS', 'name': 'shortstop', 'x': -45.0, 'y': 115.0, 'responsibility_radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
+    {'id': '3B', 'label': '3B', 'name': 'third base', 'x': -63.6, 'y': 63.6, 'responsibility_radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
+    {'id': 'LF', 'label': 'LF', 'name': 'left field', 'x': -115.0, 'y': 255.0, 'responsibility_radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'CF', 'label': 'CF', 'name': 'center field', 'x': 0.0, 'y': 330.0, 'responsibility_radius': 80.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'RF', 'label': 'RF', 'name': 'right field', 'x': 115.0, 'y': 255.0, 'responsibility_radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
 )
 
 
@@ -106,7 +106,7 @@ def fielder_for_landing(
     nearest: Optional[Dict[str, Any]] = None
     for fielder in FIELDERS:
         distance = math.hypot(landing_x_ft - fielder['x'], landing_y_ft - fielder['y'])
-        if distance <= fielder['radius'] and (nearest is None or distance < nearest['distance']):
+        if distance <= fielder['responsibility_radius'] and (nearest is None or distance < nearest['distance']):
             nearest = {**fielder, 'distance': distance}
     return nearest
 
@@ -128,7 +128,7 @@ def fielder_for_ground_path(
         if s_closest < 10.0 or s_closest > total_distance + 5.0:
             continue
         d_perp = abs(f['x'] * cos_phi - f['y'] * sin_phi)
-        ground_radius = f.get('ground_radius', f['radius'])
+        ground_radius = f.get('ground_radius', f['responsibility_radius'])
         if d_perp <= ground_radius:
             dist = math.hypot(f['x'] - s_closest * sin_phi, f['y'] - s_closest * cos_phi)
             if candidate is None or dist < candidate['distance']:
@@ -293,6 +293,7 @@ def resolve_contact_outcome(
             'fielder_name': None,
             'fielder_distance_ft': None,
             'fielder_radius_ft': None,
+            'fielder_responsibility_radius_ft': None,
         }
 
     fence = _fence_distance(spray)
@@ -337,6 +338,7 @@ def resolve_contact_outcome(
             'fielder_name': None,
             'fielder_distance_ft': None,
             'fielder_radius_ft': None,
+            'fielder_responsibility_radius_ft': None,
         }
 
     # 2. In-play defensive pursuit & intercept resolution
@@ -419,6 +421,7 @@ def resolve_contact_outcome(
             'label': intercept.fielder_id,
             'distance': round(dist_ran, 1),
             'radius': max(60.0, round(dist_ran + 10.0, 1)),
+            'responsibility_radius': max(60.0, round(dist_ran + 10.0, 1)),
         }
 
     batted_ball_trace = None
@@ -472,4 +475,5 @@ def resolve_contact_outcome(
         'fielder_name': fielder_dict['label'] if fielder_dict is not None else None,
         'fielder_distance_ft': fielder_dict['distance'] if fielder_dict is not None else None,
         'fielder_radius_ft': fielder_dict['radius'] if fielder_dict is not None else None,
+        'fielder_responsibility_radius_ft': fielder_dict['responsibility_radius'] if fielder_dict is not None else None,
     }
