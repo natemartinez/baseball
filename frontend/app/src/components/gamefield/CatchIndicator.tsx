@@ -4,6 +4,15 @@ import { useFrame } from '@react-three/fiber';
 
 import { getCatchVisualProfile } from './fielderKinematics';
 
+export const CATCH_INDICATOR_DIMENSIONS = {
+  ringInner: 2.0,
+  ringOuter: 2.6,
+  pulseInner: 2.6,
+  pulseOuter: 3.2,
+  beaconRadius: 0.4,
+  beaconY: 1.25,
+} as const;
+
 export interface CatchIndicatorProps {
   position: [number, number, number];
   fieldingType?: string | null;
@@ -37,7 +46,13 @@ export const CatchIndicator = React.memo(function CatchIndicator({
     <group position={position}>
       {/* Ground catch ring */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
-        <ringGeometry args={[2.8, 3.6, 32]} />
+        <ringGeometry
+          args={[
+            CATCH_INDICATOR_DIMENSIONS.ringInner,
+            CATCH_INDICATOR_DIMENSIONS.ringOuter,
+            32,
+          ]}
+        />
         <meshBasicMaterial
           color={profile.ringColor}
           transparent
@@ -49,7 +64,13 @@ export const CatchIndicator = React.memo(function CatchIndicator({
 
       {/* Expanding pulse ripple */}
       <mesh ref={pulseRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.085, 0]}>
-        <ringGeometry args={[3.6, 4.4, 32]} />
+        <ringGeometry
+          args={[
+            CATCH_INDICATOR_DIMENSIONS.pulseInner,
+            CATCH_INDICATOR_DIMENSIONS.pulseOuter,
+            32,
+          ]}
+        />
         <meshBasicMaterial
           color={profile.ringColor}
           transparent
@@ -60,8 +81,8 @@ export const CatchIndicator = React.memo(function CatchIndicator({
       </mesh>
 
       {/* Rotating catch diamond beacon */}
-      <mesh ref={markerRef} position={[0, 1.6, 0]}>
-        <octahedronGeometry args={[0.55, 0]} />
+      <mesh ref={markerRef} position={[0, CATCH_INDICATOR_DIMENSIONS.beaconY, 0]}>
+        <octahedronGeometry args={[CATCH_INDICATOR_DIMENSIONS.beaconRadius, 0]} />
         <meshStandardMaterial
           color={profile.ringColor}
           emissive={profile.ringColor}

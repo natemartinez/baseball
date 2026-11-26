@@ -12,8 +12,46 @@ import {
 import { CatchIndicator } from './CatchIndicator';
 import { useGameStore } from '../../store/gameStore';
 
+export const DEFAULT_SHOW_RESPONSIBILITY_RINGS = false;
+
+export const FIELDER_MODEL_SCALE = 0.72;
+
+export const FIELDER_MESH_DIMENSIONS = {
+  torso: {
+    radiusTop: 0.52,
+    radiusBottom: 0.62,
+    height: 4.8,
+    radialSegments: 10,
+    position: [0, 2.4, 0] as [number, number, number],
+  },
+  head: {
+    radius: 0.42,
+    widthSegments: 12,
+    heightSegments: 12,
+    position: [0, 5.18, 0] as [number, number, number],
+  },
+  visor: {
+    size: [0.48, 0.07, 0.34] as [number, number, number],
+    position: [0, 5.28, 0.40] as [number, number, number],
+    rotation: [0.15, 0, 0] as [number, number, number],
+  },
+  glove: {
+    radius: 0.26,
+    widthSegments: 8,
+    heightSegments: 8,
+    position: [0.58, 2.75, 0.35] as [number, number, number],
+  },
+} as const;
+
+export function shouldRenderResponsibilityRing(
+  showResponsibilityRings: boolean = DEFAULT_SHOW_RESPONSIBILITY_RINGS,
+): boolean {
+  return Boolean(showResponsibilityRings);
+}
+
 export interface FielderLayerProps {
   activeBattedBall?: ActiveBattedBallData | null;
+  showResponsibilityRings?: boolean;
 }
 
 /**
@@ -26,6 +64,7 @@ export interface FielderLayerProps {
  */
 export const FielderLayer = React.memo(function FielderLayer({
   activeBattedBall,
+  showResponsibilityRings = DEFAULT_SHOW_RESPONSIBILITY_RINGS,
 }: FielderLayerProps = {}) {
   const elapsedRef = useRef(0);
   const activeBallIdRef = useRef<string | null>(null);
@@ -116,45 +155,72 @@ export const FielderLayer = React.memo(function FielderLayer({
           }}
           position={[fielder.x, 0, -fielder.y]}
         >
-          {/* Fielder body torso */}
-          <mesh position={[0, 2.6, 0]} castShadow={false}>
-            <cylinderGeometry args={[0.8, 0.95, 5.2, 10]} />
-            <meshStandardMaterial color="#1E3A8A" roughness={0.7} />
-          </mesh>
+          <group scale={FIELDER_MODEL_SCALE}>
+            {/* Fielder body torso */}
+            <mesh position={FIELDER_MESH_DIMENSIONS.torso.position} castShadow={false}>
+              <cylinderGeometry
+                args={[
+                  FIELDER_MESH_DIMENSIONS.torso.radiusTop,
+                  FIELDER_MESH_DIMENSIONS.torso.radiusBottom,
+                  FIELDER_MESH_DIMENSIONS.torso.height,
+                  FIELDER_MESH_DIMENSIONS.torso.radialSegments,
+                ]}
+              />
+              <meshStandardMaterial color="#1E3A8A" roughness={0.7} />
+            </mesh>
 
-          {/* Fielder head */}
-          <mesh position={[0, 5.55, 0]} castShadow={false}>
-            <sphereGeometry args={[0.55, 12, 12]} />
-            <meshStandardMaterial color="#E2E8F0" roughness={0.6} />
-          </mesh>
+            {/* Fielder head */}
+            <mesh position={FIELDER_MESH_DIMENSIONS.head.position} castShadow={false}>
+              <sphereGeometry
+                args={[
+                  FIELDER_MESH_DIMENSIONS.head.radius,
+                  FIELDER_MESH_DIMENSIONS.head.widthSegments,
+                  FIELDER_MESH_DIMENSIONS.head.heightSegments,
+                ]}
+              />
+              <meshStandardMaterial color="#E2E8F0" roughness={0.6} />
+            </mesh>
 
-          {/* Cap visor pointing forward in local +Z */}
-          <mesh position={[0, 5.65, 0.55]} rotation={[0.15, 0, 0]} castShadow={false}>
-            <boxGeometry args={[0.6, 0.08, 0.4]} />
-            <meshStandardMaterial color="#1E3A8A" roughness={0.5} />
-          </mesh>
+            {/* Cap visor pointing forward in local +Z */}
+            <mesh
+              position={FIELDER_MESH_DIMENSIONS.visor.position}
+              rotation={FIELDER_MESH_DIMENSIONS.visor.rotation}
+              castShadow={false}
+            >
+              <boxGeometry args={[...FIELDER_MESH_DIMENSIONS.visor.size]} />
+              <meshStandardMaterial color="#1E3A8A" roughness={0.5} />
+            </mesh>
 
-          {/* Glove on left arm pointing forward */}
-          <mesh position={[0.75, 3.0, 0.4]} castShadow={false}>
-            <sphereGeometry args={[0.32, 8, 8]} />
-            <meshStandardMaterial color="#92400E" roughness={0.8} />
-          </mesh>
+            {/* Glove on left arm pointing forward */}
+            <mesh position={FIELDER_MESH_DIMENSIONS.glove.position} castShadow={false}>
+              <sphereGeometry
+                args={[
+                  FIELDER_MESH_DIMENSIONS.glove.radius,
+                  FIELDER_MESH_DIMENSIONS.glove.widthSegments,
+                  FIELDER_MESH_DIMENSIONS.glove.heightSegments,
+                ]}
+              />
+              <meshStandardMaterial color="#92400E" roughness={0.8} />
+            </mesh>
+          </group>
 
-          {/* Static reach circle on grass */}
-          <mesh
-            position={[0, 0.08, 0]}
-            rotation={[-Math.PI / 2, 0, 0]}
-            renderOrder={1}
-          >
-            <ringGeometry args={[fielder.responsibility_radius - 0.6, fielder.responsibility_radius, 48]} />
-            <meshBasicMaterial
-              color="#67E8F9"
-              transparent
-              opacity={0.18}
-              depthWrite={false}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
+          {/* Opt-in static reach circle on grass */}
+          {shouldRenderResponsibilityRing(showResponsibilityRings) && (
+            <mesh
+              position={[0, 0.08, 0]}
+              rotation={[-Math.PI / 2, 0, 0]}
+              renderOrder={1}
+            >
+              <ringGeometry args={[fielder.responsibility_radius - 0.6, fielder.responsibility_radius, 48]} />
+              <meshBasicMaterial
+                color="#67E8F9"
+                transparent
+                opacity={0.12}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
         </group>
       ))}
 
