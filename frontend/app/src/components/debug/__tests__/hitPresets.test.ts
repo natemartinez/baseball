@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   HIT_PRESETS,
+  MAX_GROUND_DISTANCE_FT,
   buildActiveBattedBallFromPreset,
   generateKinematicGrounder,
   generateAerodynamicFlight,
@@ -9,6 +10,14 @@ import {
 } from '../hitPresets';
 
 describe('Hit Presets for Debug Launcher', () => {
+  it('aligns MAX_GROUND_DISTANCE_FT and outfield fielderStart with expanded stadium stations', () => {
+    assert.equal(MAX_GROUND_DISTANCE_FT, 420.0);
+    const lineDrive = HIT_PRESETS.find((p) => p.id === 'line_drive_gap')!;
+    const flyBall = HIT_PRESETS.find((p) => p.id === 'fly_ball_rf')!;
+    assert.deepEqual(lineDrive.fielderStart, [-122.0, 268.0]);
+    assert.deepEqual(flyBall.fielderStart, [122.0, 268.0]);
+  });
+
   it('provides all 5 core contact archetypes', () => {
     const ids = HIT_PRESETS.map((p) => p.id);
     assert.ok(ids.includes('ss_chopper'));

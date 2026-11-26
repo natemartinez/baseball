@@ -17,7 +17,7 @@ describe('FielderLayer Animation Logic & Transitions', () => {
       fielded: true,
       fielderId: 'RF',
       fieldingType: 'RUNNING_CATCH',
-      fielderStart: [115.0, 255.0],
+      fielderStart: [122.0, 268.0],
       interceptPoint: [40.0, 280.0, 4.2],
     };
 
@@ -28,7 +28,7 @@ describe('FielderLayer Animation Logic & Transitions', () => {
       elapsedTime: 0.0,
       totalDuration: ball.hangTime,
     });
-    assert.deepEqual(atStart.currentScenePos, statcastToScene(115.0, 255.0, 0.0));
+    assert.deepEqual(atStart.currentScenePos, statcastToScene(122.0, 268.0, 0.0));
     assert.equal(atStart.isArrived, false);
 
     // At t=3.2: RF has arrived at intercept point
@@ -70,7 +70,7 @@ describe('FielderLayer Animation Logic & Transitions', () => {
     assert.equal(positions.size, 8);
     const cf = positions.get('CF');
     assert.ok(cf);
-    assert.deepEqual(cf.scenePos, [0.0, 0.0, -330.0]);
+    assert.deepEqual(cf.scenePos, [0.0, 0.0, -335.0]);
     assert.equal(cf.isPursuing, false);
   });
 });

@@ -139,7 +139,7 @@ describe('Fielder Pursuit Kinematics', () => {
   it('updates all 8 fielders with off-ball shading when one fielder pursues', () => {
     const allFielders = computeAllFielderPositions({
       activeFielderId: 'CF',
-      activeStartStatcast: [0.0, 330.0],
+      activeStartStatcast: [0.0, 335.0],
       activeTargetStatcast: [-40.0, 290.0, 2.0],
       elapsedTime: 2.0,
       totalDuration: 3.0,
@@ -149,12 +149,12 @@ describe('Fielder Pursuit Kinematics', () => {
     // CF is actively moving
     const cf = allFielders.get('CF');
     assert.ok(cf);
-    assert.notDeepEqual(cf.scenePos, [0.0, 0.0, -330.0]);
+    assert.notDeepEqual(cf.scenePos, [0.0, 0.0, -335.0]);
 
     // LF shades slightly toward the ball to back up
     const lf = allFielders.get('LF');
     assert.ok(lf);
-    assert.ok(lf.scenePos[0] > -115.0); // LF stepped toward center
+    assert.ok(lf.scenePos[0] > -122.0); // LF stepped toward center
   });
 });
 

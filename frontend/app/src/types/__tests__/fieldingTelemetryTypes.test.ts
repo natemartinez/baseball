@@ -51,7 +51,7 @@ describe('Fielding Telemetry Type Contract', () => {
       fielder_id: 'CF',
       fielder_name: 'Aaron Judge',
       fielding_type: 'ROUTINE_FLY_CATCH',
-      fielder_start: [0.0, 330.0],
+      fielder_start: [0.0, 335.0],
       intercept_point: [0.0, 325.0, 3.5],
       model_version: 'calibrated-projectile-v1',
     };
@@ -72,7 +72,7 @@ describe('Fielding Telemetry Type Contract', () => {
     assert.equal(activeBall.fielded, true);
     assert.equal(activeBall.fielderId, 'CF');
     assert.equal(activeBall.fieldingType, 'ROUTINE_FLY_CATCH');
-    assert.deepEqual(activeBall.fielderStart, [0.0, 330.0]);
+    assert.deepEqual(activeBall.fielderStart, [0.0, 335.0]);
     assert.deepEqual(activeBall.interceptPoint, [0.0, 325.0, 3.5]);
   });
 });

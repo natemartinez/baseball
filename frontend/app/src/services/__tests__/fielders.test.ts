@@ -12,9 +12,17 @@ describe('fielders service responsibility radius', () => {
   });
 
   it('determines responsible fielder using fielderResponsibleFor', () => {
-    const cf = fielderResponsibleFor(0, 330);
+    const cf = fielderResponsibleFor(0, 335);
     assert.equal(cf?.id, 'CF');
-    assert.equal(cf?.responsibility_radius, 80);
+    assert.equal(cf?.responsibility_radius, 68);
+
+    const lf = fielderResponsibleFor(-122, 268);
+    assert.equal(lf?.id, 'LF');
+    assert.equal(lf?.responsibility_radius, 64);
+
+    const rf = fielderResponsibleFor(122, 268);
+    assert.equal(rf?.id, 'RF');
+    assert.equal(rf?.responsibility_radius, 64);
   });
 
   it('provides backward-compatible fielderForLanding alias', () => {

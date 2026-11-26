@@ -40,7 +40,7 @@ export const COR_HORIZONTAL = 0.82;
 export const SKID_TO_ROLL_FACTOR = 0.88;
 export const TURF_FRICTION_COEFF = 0.48;
 export const HOP_CUTOFF_APEX_FT = 0.20;
-export const MAX_GROUND_DISTANCE_FT = 340.0;
+export const MAX_GROUND_DISTANCE_FT = 420.0;
 
 export interface GroundHop {
   vzHop: number;
@@ -625,7 +625,7 @@ export const HIT_PRESETS: HitPreset[] = [
     fielded: true,
     fielderId: 'LF',
     fieldingType: 'GROUND_SCOOP',
-    fielderStart: [-115.0, 255.0],
+    fielderStart: [-122.0, 268.0],
     interceptPoint: [-75.0, 260.0, 0.0],
   },
   {
@@ -644,14 +644,14 @@ export const HIT_PRESETS: HitPreset[] = [
     fielded: true,
     fielderId: 'RF',
     fieldingType: 'ROUTINE_FLY_CATCH',
-    fielderStart: [115.0, 255.0],
+    fielderStart: [122.0, 268.0],
     interceptPoint: [102.5, 272.0, 4.5],
   },
   {
     id: 'moonshot_hr',
     name: 'Moonshot Home Run',
     category: 'home_run',
-    description: '415-ft blast over dead center. Tests max elevation and expansive stadium tracking.',
+    description: '424-ft blast over dead center. Tests max elevation and expansive stadium tracking.',
     launchAngle: 32.0,
     exitVelocity: 106.0,
     hangTime: moonshotTraj.hangTime,
