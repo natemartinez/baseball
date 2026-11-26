@@ -18,15 +18,15 @@ def test_contact_subpackage_exports():
     assert ContactResolver is not None
     assert callable(resolve_contact_outcome)
     assert callable(fielder_for_landing)
-    assert PARK_FENCE_CENTER_FT == 400.0
-    assert PARK_FENCE_LINE_FT == 330.0
+    assert PARK_FENCE_CENTER_FT == 420.0
+    assert PARK_FENCE_LINE_FT == 350.0
     assert FOUL_LINE_DEG == 45.0
     assert isinstance(FIELDERS, tuple)
 
 
 def test_contact_outcome_functional_classification():
-    # 105 mph at 28 deg straight away = Home Run
-    hr = resolve_contact_outcome(105.0, 28.0, 0.0)
+    # 108 mph at 28 deg straight away = Home Run clearing 420 ft CF wall
+    hr = resolve_contact_outcome(108.0, 28.0, 0.0)
     assert hr['call'] == 'HOME_RUN'
     assert hr['is_in_play'] is True
     assert hr['batted_ball'] is not None

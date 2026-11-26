@@ -43,8 +43,8 @@ from ...game_engine.physics.runner_timing import (
 )
 
 
-PARK_FENCE_CENTER_FT = 400.0
-PARK_FENCE_LINE_FT = 330.0
+PARK_FENCE_CENTER_FT = 420.0
+PARK_FENCE_LINE_FT = 350.0
 FOUL_LINE_DEG = 45.0
 
 # Standard defensive positions plus a baseline reach radius. The radius is the
@@ -52,14 +52,14 @@ FOUL_LINE_DEG = 45.0
 # is intentionally larger than the fielder model. Values are in feet and are
 # mirrored in frontend/app/src/services/fielders.ts.
 FIELDERS: Tuple[Dict[str, Any], ...] = (
-    {'id': 'P', 'label': 'P', 'name': 'pitcher', 'x': 0.0, 'y': 60.5, 'responsibility_radius': 34.0, 'ground_radius': 8.0, 'is_infield': True},
-    {'id': '1B', 'label': '1B', 'name': 'first base', 'x': 63.6, 'y': 63.6, 'responsibility_radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
-    {'id': '2B', 'label': '2B', 'name': 'second base', 'x': 45.0, 'y': 115.0, 'responsibility_radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
-    {'id': 'SS', 'label': 'SS', 'name': 'shortstop', 'x': -45.0, 'y': 115.0, 'responsibility_radius': 60.0, 'ground_radius': 15.0, 'is_infield': True},
-    {'id': '3B', 'label': '3B', 'name': 'third base', 'x': -63.6, 'y': 63.6, 'responsibility_radius': 56.0, 'ground_radius': 13.0, 'is_infield': True},
-    {'id': 'LF', 'label': 'LF', 'name': 'left field', 'x': -115.0, 'y': 255.0, 'responsibility_radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
-    {'id': 'CF', 'label': 'CF', 'name': 'center field', 'x': 0.0, 'y': 330.0, 'responsibility_radius': 80.0, 'ground_radius': 0.0, 'is_infield': False},
-    {'id': 'RF', 'label': 'RF', 'name': 'right field', 'x': 115.0, 'y': 255.0, 'responsibility_radius': 73.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'P', 'label': 'P', 'name': 'pitcher', 'x': 0.0, 'y': 60.5, 'responsibility_radius': 26.0, 'ground_radius': 5.5, 'is_infield': True},
+    {'id': '1B', 'label': '1B', 'name': 'first base', 'x': 63.6, 'y': 63.6, 'responsibility_radius': 44.0, 'ground_radius': 12.0, 'is_infield': True},
+    {'id': '2B', 'label': '2B', 'name': 'second base', 'x': 45.0, 'y': 115.0, 'responsibility_radius': 48.0, 'ground_radius': 14.0, 'is_infield': True},
+    {'id': 'SS', 'label': 'SS', 'name': 'shortstop', 'x': -45.0, 'y': 115.0, 'responsibility_radius': 48.0, 'ground_radius': 14.0, 'is_infield': True},
+    {'id': '3B', 'label': '3B', 'name': 'third base', 'x': -63.6, 'y': 63.6, 'responsibility_radius': 44.0, 'ground_radius': 12.0, 'is_infield': True},
+    {'id': 'LF', 'label': 'LF', 'name': 'left field', 'x': -122.0, 'y': 268.0, 'responsibility_radius': 64.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'CF', 'label': 'CF', 'name': 'center field', 'x': 0.0, 'y': 335.0, 'responsibility_radius': 68.0, 'ground_radius': 0.0, 'is_infield': False},
+    {'id': 'RF', 'label': 'RF', 'name': 'right field', 'x': 122.0, 'y': 268.0, 'responsibility_radius': 64.0, 'ground_radius': 0.0, 'is_infield': False},
 )
 
 
@@ -420,8 +420,8 @@ def resolve_contact_outcome(
             'id': intercept.fielder_id,
             'label': intercept.fielder_id,
             'distance': round(dist_ran, 1),
-            'radius': max(60.0, round(dist_ran + 10.0, 1)),
-            'responsibility_radius': max(60.0, round(dist_ran + 10.0, 1)),
+            'radius': max(26.0, round(dist_ran + 5.0, 1)),
+            'responsibility_radius': max(26.0, round(dist_ran + 5.0, 1)),
         }
 
     batted_ball_trace = None

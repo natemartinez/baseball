@@ -63,3 +63,9 @@ def test_positioning_rating_applies_depth_shading():
     assert cf_deep_state.y > STANDARD_FIELDER_COORDINATES["CF"][1]
     assert cf_shallow_state.y < STANDARD_FIELDER_COORDINATES["CF"][1]
 
+
+def test_standard_outfield_coordinates_match_expanded_park():
+    assert STANDARD_FIELDER_COORDINATES["LF"] == (-122.0, 268.0)
+    assert STANDARD_FIELDER_COORDINATES["CF"] == (0.0, 335.0)
+    assert STANDARD_FIELDER_COORDINATES["RF"] == (122.0, 268.0)
+

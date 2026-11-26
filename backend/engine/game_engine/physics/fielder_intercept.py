@@ -211,6 +211,45 @@ def generate_bounded_samples(
     return samples
 
 
+def _compute_airborne_pursuit_reach(
+    fd: Dict[str, Any],
+    t: float,
+    y: float,
+    spray_deg: float,
+    launch: float,
+    d_total: float,
+    is_infield: bool,
+) -> Tuple[float, float]:
+    """Computes a fielder's horizontal reach (ft) and effective sprint speed (ft/s) during airborne flight."""
+    is_gap = (launch <= 26.0 and 11.0 <= abs(spray_deg) <= 18.5) or (abs(spray_deg) >= 36.0)
+    is_blooper = 18.0 <= launch <= 25.0 and d_total <= 260.0
+    if not is_infield and (is_gap or is_blooper):
+        dt_read = (1.0 - fd["iq"] / 100.0) * 0.35 + (1.0 - fd["reaction"] / 100.0) * 0.20
+        route_mult = 0.85 + (fd["iq"] / 100.0) * 0.15
+    else:
+        dt_read = 0.0
+        route_mult = 1.0
+
+    is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
+    if is_retreating:
+        dt_turn = 0.20 + (1.0 - fd["route_rating"] / 100.0) * 0.15
+        speed_mult = 0.90
+    else:
+        dt_turn = 0.0
+        speed_mult = 1.0
+
+    t_delay = fd["t_react"] + dt_read + dt_turn
+    if t <= t_delay:
+        return fd["r_glove"], fd["v_sprint"]
+
+    dt_sprint = t - t_delay
+    eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
+    tau = 0.75 - (fd["r_range"] / 100.0) * 0.20
+    d_sprint = eff_speed * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
+    r_max = (45.0 if is_infield else 88.0) + (fd["r_range"] / 100.0) * (10.0 if is_infield else 12.0)
+    return min(r_max, d_sprint) + fd["r_glove"], eff_speed
+
+
 def solve_defense_intercept(
     ball_flight: Dict[str, Any],
     spray_deg: float,
@@ -270,12 +309,12 @@ def solve_defense_intercept(
 
             if pos_id == "P":
                 # Comebacker clamp: on hard hits (>= 82 mph), pitcher cannot dive/sprint laterally
-                # reach is strictly limited to immediate area around rubber (3.5 to 5.5 ft).
-                # on softer hits, pitcher can reach 6.0 to 9.0 ft.
+                # reach is strictly limited to immediate area around rubber (3.3 to 4.8 ft).
+                # on softer hits, pitcher can reach 5.5 to 8.0 ft.
                 if ev >= 82.0:
-                    r_ground = 3.5 + (fd["r_range"] / 100.0) * 2.0
+                    r_ground = 3.3 + (fd["r_range"] / 100.0) * 1.5
                 else:
-                    r_ground = 6.0 + (fd["r_range"] / 100.0) * 3.0
+                    r_ground = 5.5 + (fd["r_range"] / 100.0) * 2.5
             elif pos_id in ("1B", "3B"):
                 # Corner infielders have hot-corner dive/step reach (11.0 to 15.0 ft)
                 r_ground = 11.0 + (fd["r_range"] / 100.0) * 4.0
@@ -301,8 +340,8 @@ def solve_defense_intercept(
                 # Crossover step and horizontal diving extension (6.0 to 8.0 ft)
                 r_dive = 6.0 + (fd["r_range"] / 100.0) * 2.0
                 r_dynamic = d_sprint * fd["eta"] + fd["r_glove"] + r_dive
-                # Realistic physical maximum lateral reach: diving stop up to 26.0 to 30.0 ft
-                r_max_infield = 25.0 + (fd["r_range"] / 100.0) * 5.0
+                # Realistic physical maximum lateral reach: diving stop up to 24.0 to 29.0 ft
+                r_max_infield = 24.0 + (fd["r_range"] / 100.0) * 5.0
                 r_ground = min(r_max_infield, r_dynamic)
 
             if d_perp <= r_ground:
@@ -400,52 +439,12 @@ def solve_defense_intercept(
                 if z > max_catch_z:
                     continue
 
-                # Fielder kinematic pursuit
-                t_react = fd["t_react"]
-                is_gap = (11.0 <= abs(spray_deg) <= 17.0) or (abs(spray_deg) >= 36.0)
-                is_blooper = 18.0 <= launch <= 25.0 and d_total <= 260.0
-                is_gap_or_slice = is_gap or is_blooper
-                if not is_infield and is_gap_or_slice:
-                    dt_read = (1.0 - fd["iq"] / 100.0) * 0.35 + (1.0 - fd["reaction"] / 100.0) * 0.20
-                    route_mult = 0.85 + (fd["iq"] / 100.0) * 0.15
-                else:
-                    dt_read = 0.0
-                    route_mult = 1.0
-
-                # Retreating turn delay and speed penalty if ball is behind outfielder
-                is_retreating = (not is_infield) and (y > fd["y0"] + 8.0)
-                if is_retreating:
-                    dt_turn = 0.20 + (1.0 - fd["route_rating"] / 100.0) * 0.15
-                    speed_mult = 0.92
-                else:
-                    dt_turn = 0.0
-                    speed_mult = 1.0
-
-                t_delay = t_react + dt_read + dt_turn
-                if t <= t_delay:
-                    r_reach = fd["r_glove"]
-                    eff_speed = fd["v_sprint"]
-                else:
-                    dt_sprint = t - t_delay
-                    eff_speed = fd["v_sprint"] * fd["eta"] * route_mult * speed_mult
-                    tau = 0.75 - (fd["r_range"] / 100.0) * 0.20
-                    d_sprint = (
-                        eff_speed * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
-                        if dt_sprint > 0.0
-                        else 0.0
-                    )
-                    r_max = (45.0 if is_infield else 115.0) + (fd["r_range"] / 100.0) * 10.0
-                    r_reach = min(r_max, d_sprint) + fd["r_glove"]
+                r_reach, eff_speed = _compute_airborne_pursuit_reach(
+                    fd, t, y, spray_deg, launch, d_total, is_infield
+                )
 
                 if dist_from_start <= r_reach:
                     margin = (r_reach - dist_from_start) / eff_speed if eff_speed > 0 else 0.0
-                    # If a ball traveled deeper than the fielder while elevated above their vertical reach,
-                    # it sailed over their head. Chasing a ball from behind requires getting underneath
-                    # it with sufficient tracking margin (>= 0.20s); otherwise it drops as an uncaught batted ball.
-                    ball_went_over_head = is_retreating and (z_peak > fd["z_vert_reach"])
-                    if ball_went_over_head and (not at_wall) and margin < 0.20:
-                        continue
-
                     candidates.append((dist_from_start, margin, fd, at_wall))
 
             if candidates:
@@ -454,7 +453,9 @@ def solve_defense_intercept(
 
                 is_routine_trajectory = launch >= 22.0 or t_hang >= 3.8
 
-                # Classification & Catch Height Snapping
+                # Classification & Catch Height Snapping.
+                # Every Section-2 intercept occurs at or before t_hang (fly ball still airborne),
+                # so even shoestring catches near z=0 are SLIDING_CATCH, never GROUND_SCOOP.
                 if was_at_wall and z >= 6.5:
                     fielding_type = "WALL_LEAP"
                     intercept_z = z
@@ -465,12 +466,9 @@ def solve_defense_intercept(
                 elif z >= 2.0:
                     fielding_type = "ROUTINE_FLY_CATCH" if (is_routine_trajectory and best_margin >= 0.35) else "RUNNING_CATCH"
                     intercept_z = 5.0 if (is_routine_trajectory and best_margin >= 0.35) else z
-                elif 0.3 <= z < 2.0:
-                    fielding_type = "SLIDING_CATCH"
-                    intercept_z = z
                 else:
-                    fielding_type = "GROUND_SCOOP"
-                    intercept_z = 0.0
+                    fielding_type = "SLIDING_CATCH"
+                    intercept_z = max(0.0, z)
 
                 samples = generate_bounded_samples(ball_flight, spray_deg, t, 20)
                 if fielding_type == "ROUTINE_FLY_CATCH" and samples:
@@ -497,6 +495,8 @@ def solve_defense_intercept(
         s, z = pos_fn(t)
         if s >= fence_dist:
             break
+        if z > 5.5:
+            continue
         x = s * sin_phi
         y = s * cos_phi
         candidates = []
@@ -505,15 +505,24 @@ def solve_defense_intercept(
             if pos_id in ("P", "1B", "2B", "3B", "SS"):
                 continue
             dist = math.hypot(x - fd["x0"], y - fd["y0"])
-            dt_sprint = max(0.0, t - fd["t_react"])
-            tau = 0.65 - (fd["r_range"] / 100.0) * 0.15
-            d_sprint = (
-                fd["v_sprint"] * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
-                if dt_sprint > 0.0
-                else 0.0
-            )
-            r_dive = 3.5
-            r_reach = d_sprint * fd["eta"] + fd["r_glove"] + r_dive
+            if is_ground_ball:
+                dt_sprint = max(0.0, t - fd["t_react"])
+                tau = 0.65 - (fd["r_range"] / 100.0) * 0.15
+                d_sprint = (
+                    fd["v_sprint"] * (dt_sprint - tau * (1.0 - math.exp(-dt_sprint / tau)))
+                    if dt_sprint > 0.0
+                    else 0.0
+                )
+                r_reach = d_sprint * fd["eta"] + fd["r_glove"]
+            else:
+                # Continue smoothly from actual reach achieved at t_hang so fielders
+                # cannot teleport instantaneously to the landing spot at t_hang + 0.02s.
+                y_landing = d_landing * cos_phi
+                r_at_hang, _ = _compute_airborne_pursuit_reach(
+                    fd, t_hang, y_landing, spray_deg, launch, d_total, False
+                )
+                chase_speed = fd["v_sprint"] * fd["eta"]
+                r_reach = r_at_hang + chase_speed * max(0.0, t - t_hang)
             if dist <= r_reach:
                 candidates.append((dist, fd))
         if candidates:

@@ -23,7 +23,7 @@ def test_recalibrated_ground_physics_parameters():
     assert COR_HORIZONTAL_GRASS == 0.70
     assert SKID_TO_ROLL_FACTOR == 0.88
     assert TURF_FRICTION_COEFF == 0.48
-    assert MAX_GROUND_DISTANCE_FT == 340.0
+    assert MAX_GROUND_DISTANCE_FT == 420.0
 
 
 def test_samples_emit_monotonic_4d_timestamps():

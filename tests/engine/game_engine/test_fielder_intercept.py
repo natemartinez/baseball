@@ -103,13 +103,13 @@ def test_routine_fly_ball_caught_at_chest_height():
 
 
 def test_ball_sailing_overhead_out_of_glove_range_becomes_uncaught_batted_ball():
-    # Hard line drive: 106 mph, 17 deg launch, spray -30 (toward LF/CF alley)
+    # Hard line drive: 106 mph, 17 deg launch, spray -34 (toward deep LF corner alley)
     # The ball sails over the shortstop's head at 12 ft elevation, way above SS vertical reach.
-    # The LF starts at (-115, 255) and cannot get underneath the ball by landing time (~3.6s, landing at 340 ft).
+    # The LF starts at (-122, 268) and cannot get underneath the ball by landing time (~2.89s, landing at 347 ft).
     # Ball lands on grass uncaught as a clean batted ball, fielded on ground rollout or unfielded.
-    motion = solve_continuous_ball_flight(106.0, 17.0, -30.0)
+    motion = solve_continuous_ball_flight(106.0, 17.0, -34.0)
     defense = ActiveDefense.default()
-    res = solve_defense_intercept(motion, spray_deg=-30.0, defense=defense)
+    res = solve_defense_intercept(motion, spray_deg=-34.0, defense=defense)
     # Must NOT be caught in mid-air above reach!
     if res.fielded:
         # If fielded, it must be on the bounce/roll on the ground
@@ -180,4 +180,71 @@ def test_pitcher_mound_reach_and_middle_infield_coverage():
     assert res_neg15.s_intercept <= 165.0
 
 
+def test_gap_alley_flies_drop_for_hits_while_center_stays_out():
+    defense = ActiveDefense.default()
+    # True LCF gap alley fly (98/25/-18) and deep LF line liner (100/22/-35) drop outside LF reach
+    for ev, la, spray in ((98.0, 25.0, -18.0), (100.0, 22.0, -35.0)):
+        motion = solve_continuous_ball_flight(ev, la, spray)
+        res = solve_defense_intercept(motion, spray_deg=spray, defense=defense)
+        assert res.fielding_type in ("GROUND_SCOOP", "UNFIELDED")
+        assert res.t_intercept >= motion["t_hang"]
 
+    cf_motion = solve_continuous_ball_flight(88.0, 30.0, 0.0)
+    cf_res = solve_defense_intercept(cf_motion, spray_deg=0.0, defense=defense)
+    assert cf_res.fielded is True
+    assert cf_res.fielder_id == "CF"
+    assert cf_res.fielding_type == "ROUTINE_FLY_CATCH"
+
+
+def test_hard_comebacker_outside_tightened_pitcher_reach_reaches_outfield():
+    defense = ActiveDefense.default()
+    motion = solve_continuous_ball_flight(92.0, 0.0, -4.3)
+    res = solve_defense_intercept(motion, spray_deg=-4.3, defense=defense)
+    assert res.fielder_id != "P"
+    assert res.s_intercept > 165.0 or res.fielded is False
+
+
+def test_fielder_reaching_fly_ball_by_landing_never_returns_ground_scoop():
+    """
+    Whenever a fielder reaches a fly ball (launch >= 10) at or before t_hang
+    (including shoestring catches at z < 0.3 ft and retreating catches within reach),
+    Section 2 must classify it as an airborne catch — never GROUND_SCOOP.
+    """
+    defense = ActiveDefense.default()
+    airborne_catch_cases = [
+        (78.0, 32.0, -4.0),   # Sec 2 z < 0.3 -> previously GROUND_SCOOP
+        (70.0, 42.0, -16.0),  # Sec 2 z == 0.0 at t_hang -> previously GROUND_SCOOP
+        (90.0, 26.0, -15.0),  # Sec 2 z < 0.3 at t_hang -> previously GROUND_SCOOP
+        (92.0, 25.0, -15.0),  # LF reaches 53.7 <= 54.7 at t_hang -> previously blocked by margin<0.20
+        (90.0, 24.0, -15.0),  # LF reaches 48.9 <= 49.5 at t_hang -> previously blocked by margin<0.20
+        (72.0, 36.0, -16.0),  # High 36-deg popup in front of LF -> must not take blind slice delay
+    ]
+    for ev, la, sp in airborne_catch_cases:
+        motion = solve_continuous_ball_flight(ev, la, sp)
+        res = solve_defense_intercept(motion, spray_deg=sp, defense=defense)
+        assert res.fielded is True
+        assert res.t_intercept <= motion["t_hang"] + 1e-6, (
+            f"ev={ev} la={la} sp={sp}: expected airborne intercept <= {motion['t_hang']:.3f}s, "
+            f"got {res.t_intercept:.3f}s ({res.fielding_type})"
+        )
+        assert res.fielding_type in ("SLIDING_CATCH", "RUNNING_CATCH", "ROUTINE_FLY_CATCH"), (
+            f"ev={ev} la={la} sp={sp}: got {res.fielding_type!r}"
+        )
+
+
+def test_section3_ground_retrieval_does_not_teleport_fielder_to_landing_spot():
+    """
+    When no fielder reaches a fly ball by t_hang, Section 3 must continue
+    pursuing continuously from t_hang rather than resetting delays and adding +20 ft
+    at t_hang + 0.02s. Genuine gap drops (e.g. 91/24/-12, 93.6/23.9/-11.5,
+    84.1/25.5/-7.3) must not be scooped within 0.05s of landing.
+    """
+    defense = ActiveDefense.default()
+    for ev, la, sp in ((91.0, 24.0, -12.0), (93.6, 23.9, -11.5), (84.1, 25.5, -7.3)):
+        motion = solve_continuous_ball_flight(ev, la, sp)
+        res = solve_defense_intercept(motion, spray_deg=sp, defense=defense)
+        assert res.t_intercept > motion["t_hang"] + 0.06, (
+            f"ev={ev} la={la} sp={sp}: Section 3 teleported fielder to {res.t_intercept:.3f}s "
+            f"(only {res.t_intercept - motion['t_hang']:+.3f}s after t_hang={motion['t_hang']:.3f}s)"
+        )
+        assert res.fielding_type in ("GROUND_SCOOP", "UNFIELDED")

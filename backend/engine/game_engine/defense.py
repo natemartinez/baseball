@@ -20,9 +20,9 @@ STANDARD_FIELDER_COORDINATES: Dict[str, Tuple[float, float]] = {
     "2B": (45.0, 115.0),
     "3B": (-63.6, 63.6),
     "SS": (-45.0, 115.0),
-    "LF": (-115.0, 255.0),
-    "CF": (0.0, 330.0),
-    "RF": (115.0, 255.0),
+    "LF": (-122.0, 268.0),
+    "CF": (0.0, 335.0),
+    "RF": (122.0, 268.0),
 }
 
 DEFENSIVE_POSITIONS: Tuple[str, ...] = (

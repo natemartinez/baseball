@@ -140,9 +140,23 @@ def test_all_ai_in_play_results_follow_fielder_reach_rule():
             # to a stop in an outfielder's territory.
             launch_deg = details.get('launch_angle_deg')
             if call != 'HOME_RUN' and (launch_deg is None or launch_deg >= 10.0):
-                assert trace.get('fielding_type') not in ('ROUTINE_FLY_CATCH', 'RUNNING_CATCH'), (
-                    f'{call} was caught airborne'
-                )
+                assert trace.get('fielding_type') not in (
+                    'ROUTINE_FLY_CATCH',
+                    'RUNNING_CATCH',
+                    'SLIDING_CATCH',
+                    'WALL_LEAP',
+                ), f'{call} was caught airborne ({trace.get("fielding_type")})'
+                if trace.get('fielding_type') == 'GROUND_SCOOP':
+                    from backend.engine.game_engine.physics.fielder_intercept import solve_continuous_ball_flight
+                    motion = solve_continuous_ball_flight(
+                        details['exit_velocity_mph'],
+                        launch_deg,
+                        details['spray_angle_deg'],
+                    )
+                    assert trace['hang_time_s'] > motion['t_hang'] + 0.05, (
+                        f"{call} scooped on ground at {trace['hang_time_s']}s vs "
+                        f"t_hang={motion['t_hang']}s (fielder arrived at landing!)"
+                    )
             hits += 1
 
     assert outs and hits
@@ -283,9 +297,9 @@ def test_infield_grounder_out_vs_outfield_base_hit():
 
 
 def test_outfield_ball_touching_turf_is_clean_hit_with_retrieval_metadata():
-    # 104 mph line drive into left-center gap (16 deg launch, -15 spray)
-    # Drops onto outfield grass at ~304 ft, then fielded by LF on the bounce
-    res = resolve_contact_outcome(104.0, 16.0, -15.0)
+    # Line drive into shallow left-center (92 mph, 16 deg launch, -15 spray)
+    # Drops onto outfield grass at ~246 ft in front of LF, then fielded by LF on the bounce
+    res = resolve_contact_outcome(92.0, 16.0, -15.0)
     assert res is not None
     assert res["call"] in ("DOUBLE", "SINGLE")
     batted = res["batted_ball"]
@@ -310,8 +324,8 @@ def test_all_batted_ball_base_hits_are_called_singles_pending_baserunners():
     assert deep_gap['call'] == 'SINGLE'
     assert deep_gap['batted_ball']['is_clean_hit'] is True
 
-    # Deep line drive into left-center gap (105 mph, 18 deg, -20 spray, 333 ft) -> SINGLE
-    wall = resolve_contact_outcome(105.0, 18.0, -20.0)
+    # Deep line drive into left-center gap (105 mph, 18 deg, -14 spray, ~378 ft) -> SINGLE
+    wall = resolve_contact_outcome(105.0, 18.0, -14.0)
     assert wall['call'] == 'SINGLE'
     assert wall['batted_ball']['is_clean_hit'] is True
 
@@ -321,4 +335,48 @@ def test_all_batted_ball_base_hits_are_called_singles_pending_baserunners():
     assert grounder['batted_ball']['is_clean_hit'] is True
 
 
+def test_infield_ground_out_responsibility_radius_reflects_calibrated_reach():
+    ss_out = resolve_contact_outcome(92.0, 2.0, -18.0)
+    assert ss_out is not None
+    assert ss_out['call'] == 'IN_PLAY_OUT'
+    assert ss_out['fielder_distance_ft'] <= ss_out['fielder_responsibility_radius_ft']
+    assert 26.0 <= ss_out['fielder_responsibility_radius_ft'] < 50.0
 
+
+def test_calibrated_gap_fly_and_comebacker_produce_clean_hits():
+    alley_fly = resolve_contact_outcome(98.0, 25.0, -18.0)
+    assert alley_fly['call'] == 'SINGLE'
+    assert alley_fly['batted_ball']['is_clean_hit'] is True
+
+    corner_alley_fly = resolve_contact_outcome(100.0, 22.0, -35.0)
+    assert corner_alley_fly['call'] == 'SINGLE'
+    assert corner_alley_fly['batted_ball']['is_clean_hit'] is True
+
+    comebacker = resolve_contact_outcome(92.0, 0.0, -4.3)
+    assert comebacker['call'] == 'SINGLE'
+    assert comebacker['batted_ball']['is_clean_hit'] is True
+
+
+def test_airborne_catch_under_ball_is_in_play_out_not_single():
+    """
+    Fly balls where a fielder reaches the ball at or before landing must be
+    scored IN_PLAY_OUT, never SINGLE / GROUND_SCOOP.
+    """
+    catch_cases = [
+        (78.0, 32.0, -4.0),
+        (70.0, 42.0, -16.0),
+        (72.0, 36.0, -16.0),
+        (92.0, 25.0, -15.0),
+        (90.0, 26.0, -15.0),
+        (90.0, 24.0, -15.0),
+        (98.0, 30.0, -29.0),
+    ]
+    for ev, la, sp in catch_cases:
+        co = resolve_contact_outcome(ev, la, sp)
+        assert co['call'] == 'IN_PLAY_OUT', (
+            f"ev={ev} la={la} sp={sp}: fielder got underneath ball at landing "
+            f"but call={co['call']!r} ({co['batted_ball']['fielding_type']}) — should be IN_PLAY_OUT"
+        )
+        assert co['batted_ball']['is_clean_hit'] is False, (
+            f"ev={ev} la={la} sp={sp}: is_clean_hit should be False for a catch"
+        )
