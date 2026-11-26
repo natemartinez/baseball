@@ -259,8 +259,8 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
 
   describe('Outfield Fence Dimensions & Foul Line Extension', () => {
     it('exports accurate regulation fence distance constants matching backend', () => {
-      assert.equal(FENCE_CENTER_DISTANCE, 400.0);
-      assert.equal(FENCE_FOUL_LINE_DISTANCE, 330.0);
+      assert.equal(FENCE_CENTER_DISTANCE, 420.0);
+      assert.equal(FENCE_FOUL_LINE_DISTANCE, 350.0);
       assert.equal(FENCE_WALL_HEIGHT, 8.0);
       assert.equal(WARNING_TRACK_WIDTH, 15.0);
       assert.equal(FENCE_WALL_THICKNESS, 1.0);
@@ -270,30 +270,30 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
     });
 
     it('computes fence distances matching backend formula', () => {
-      assert.equal(fenceDistance(0), 400.0); // Center Field
-      assert.equal(fenceDistance(45), 330.0); // Right Field Line
-      assert.equal(fenceDistance(-45), 330.0); // Left Field Line
-      assert.equal(fenceDistance(22.5), 365.0); // Right-Center Gap
-      assert.equal(fenceDistance(-22.5), 365.0); // Left-Center Gap
+      assert.equal(fenceDistance(0), 420.0); // Center Field
+      assert.equal(fenceDistance(45), 350.0); // Right Field Line
+      assert.equal(fenceDistance(-45), 350.0); // Left Field Line
+      assert.equal(fenceDistance(22.5), 385.0); // Right-Center Gap
+      assert.equal(fenceDistance(-22.5), 385.0); // Left-Center Gap
     });
 
     it('computes 3D fence points with optional radial offset', () => {
       const cf = getFencePoint(0);
       assert.ok(Math.abs(cf[0] - 0) < 1e-4);
       assert.equal(cf[1], 0);
-      assert.ok(Math.abs(cf[2] - (-400.0)) < 1e-4);
+      assert.ok(Math.abs(cf[2] - (-420.0)) < 1e-4);
 
       const cfOffset = getFencePoint(0, 1.0);
-      assert.ok(Math.abs(cfOffset[2] - (-401.0)) < 1e-4);
+      assert.ok(Math.abs(cfOffset[2] - (-421.0)) < 1e-4);
 
       const rf = getFencePoint(45);
-      const expectedRfX = 330.0 * Math.sin(Math.PI / 4);
-      const expectedRfZ = -330.0 * Math.cos(Math.PI / 4);
+      const expectedRfX = 350.0 * Math.sin(Math.PI / 4);
+      const expectedRfZ = -350.0 * Math.cos(Math.PI / 4);
       assert.ok(Math.abs(rf[0] - expectedRfX) < 1e-4);
       assert.ok(Math.abs(rf[2] - expectedRfZ) < 1e-4);
     });
 
-    it('extends foul lines all the way to the 330 ft fence at the foul pole', () => {
+    it('extends foul lines all the way to the 350 ft fence at the foul pole', () => {
       const halfL = FOUL_LINE_LENGTH / 2;
       const rotY = FOUL_LINE_RIGHT_ROTATION[1];
       // Far endpoint is at local Z = -length / 2
@@ -302,8 +302,8 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
 
       const distFromHome = Math.hypot(farX, farZ);
       assert.ok(
-        Math.abs(distFromHome - 330.0) < 0.2,
-        `Expected foul line far endpoint to reach 330 ft, got ${distFromHome.toFixed(2)}`,
+        Math.abs(distFromHome - 350.0) < 0.2,
+        `Expected foul line far endpoint to reach 350 ft, got ${distFromHome.toFixed(2)}`,
       );
 
       // Foul pole position matches far endpoint
@@ -311,11 +311,11 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
       assert.ok(Math.abs(FOUL_POLE_RIGHT_POS[2] - farZ) < 0.1);
     });
 
-    it('anchors left foul pole symmetrically at the 330 ft fence intersection', () => {
+    it('anchors left foul pole symmetrically at the 350 ft fence intersection', () => {
       const distFromHome = Math.hypot(FOUL_POLE_LEFT_POS[0], FOUL_POLE_LEFT_POS[2]);
       assert.ok(
-        Math.abs(distFromHome - 330.0) < 0.2,
-        `Expected left foul pole to reach 330 ft, got ${distFromHome.toFixed(2)}`,
+        Math.abs(distFromHome - 350.0) < 0.2,
+        `Expected left foul pole to reach 350 ft, got ${distFromHome.toFixed(2)}`,
       );
       assert.ok(Math.abs(FOUL_POLE_LEFT_POS[0] - (-FOUL_POLE_RIGHT_POS[0])) < 1e-4);
       assert.ok(Math.abs(FOUL_POLE_LEFT_POS[2] - FOUL_POLE_RIGHT_POS[2]) < 1e-4);
@@ -330,11 +330,11 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
     });
 
     it('maintains exactly 15 ft width between inner and outer boundary at key field angles', () => {
-      // Check CF (0 deg): outer R = 400 ft, inner R = 385 ft
+      // Check CF (0 deg): outer R = 420 ft, inner R = 405 ft
       const shapePoints = warningTrackShape.getPoints();
 
-      assert.ok(pointInPolygon({ x: 0, y: shapeY(-392) }, shapePoints), 'Warning track midpoint at CF should be inside shape');
-      assert.equal(pointInPolygon({ x: 0, y: shapeY(-375) }, shapePoints), false, 'Grass inside warning track should NOT be in shape');
+      assert.ok(pointInPolygon({ x: 0, y: shapeY(-412) }, shapePoints), 'Warning track midpoint at CF should be inside shape');
+      assert.equal(pointInPolygon({ x: 0, y: shapeY(-395) }, shapePoints), false, 'Grass inside warning track should NOT be in shape');
     });
 
     it('does not intersect or overlap the 95-ft infield dirt skirt', () => {
@@ -353,11 +353,11 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
 
       assert.equal(bbox.min.y, 0);
       assert.equal(bbox.max.y, FENCE_WALL_HEIGHT); // 8.0 ft
-      // Min Z should be at Center Field (-400 ft) minus thickness
-      assert.ok(bbox.min.z <= -400.0);
-      // Max X should be at RF boundary (~ +234 ft)
-      assert.ok(bbox.max.x >= 230.0);
-      assert.ok(bbox.min.x <= -230.0);
+      // Min Z should be at Center Field (-420 ft) minus thickness
+      assert.ok(bbox.min.z <= -420.0);
+      // Max X should be at RF boundary (~ +247 ft)
+      assert.ok(bbox.max.x >= 245.0);
+      assert.ok(bbox.min.x <= -245.0);
     });
 
     it('builds top cap geometry with height from 8.0 to 8.5 ft', () => {
@@ -418,9 +418,9 @@ describe('Field Geometry Baserunning / Foul Line Alignment', () => {
       capGeom.computeBoundingBox();
       const bbox = capGeom.boundingBox!;
 
-      // Center field wall radius is 400 ft. With 0.1 ft overhang on front (399.9) and back (401.1):
-      // Min Z reaches CF back cap edge at -401.1 ft
-      assert.ok(bbox.min.z <= -401.0, `Expected cap min Z <= -401.0, got ${bbox.min.z}`);
+      // Center field wall radius is 420 ft. With 0.1 ft overhang on front (419.9) and back (421.1):
+      // Min Z reaches CF back cap edge at -421.1 ft
+      assert.ok(bbox.min.z <= -421.0, `Expected cap min Z <= -421.0, got ${bbox.min.z}`);
       // Max Y is 8.5, Min Y is 8.0
       assert.equal(bbox.min.y, 8.0);
       assert.equal(bbox.max.y, 8.5);

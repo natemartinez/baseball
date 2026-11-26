@@ -51,6 +51,9 @@ export const WALL_COLOR = '#12212C';
 export const WALL_TRIM_COLOR = '#1F3546';
 export const FOUL_POLE_GOLD = '#FFD700';
 
+export const OUTFIELD_TURF_SIZE = 1000;
+export const OUTFIELD_TURF_CENTER_Z = -350;
+
 const NOOP = () => { };
 
 export function FieldScene({
@@ -106,8 +109,8 @@ export function FieldScene({
       <directionalLight position={[30, 60, 20]} intensity={1.2} castShadow={false} />
 
       {/* Outfield turf */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, -300]}>
-        <planeGeometry args={[800, 800]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, OUTFIELD_TURF_CENTER_Z]}>
+        <planeGeometry args={[OUTFIELD_TURF_SIZE, OUTFIELD_TURF_SIZE]} />
         <meshStandardMaterial color={GRASS_COLOR} roughness={0.9} metalness={0.1} />
       </mesh>
 
@@ -257,7 +260,7 @@ export function FieldScene({
         <meshStandardMaterial color={FOUL_POLE_GOLD} roughness={0.4} metalness={0.3} />
       </mesh>
 
-      {/* Outfield distance markers (330, 365, 400) mounted on wall face */}
+      {/* Outfield distance markers (350, 385, 420) mounted on wall face */}
       <WallDistanceMarkers />
 
       {/* Outfield foul poles with fair-territory screen wings */}

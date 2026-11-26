@@ -18,6 +18,8 @@ import {
 import {
   FOUL_POLE_GOLD,
   FieldScene,
+  OUTFIELD_TURF_CENTER_Z,
+  OUTFIELD_TURF_SIZE,
   WALL_COLOR,
   WALL_TRIM_COLOR,
 } from '../FieldScene';
@@ -80,5 +82,11 @@ describe('FieldScene Outfield Wall & Warning Track Integration', () => {
     const element = WallDistanceMarkers();
     assert.ok(element, 'WallDistanceMarkers element must be instantiated cleanly');
     assert.equal(element.type, 'group');
+  });
+
+  it('sizes background turf plane to cover expanded 420 ft outfield without void clipping', () => {
+    assert.ok(OUTFIELD_TURF_SIZE >= 1000);
+    assert.ok(OUTFIELD_TURF_CENTER_Z - OUTFIELD_TURF_SIZE / 2 <= -800);
+    assert.ok(OUTFIELD_TURF_CENTER_Z + OUTFIELD_TURF_SIZE / 2 >= 100);
   });
 });

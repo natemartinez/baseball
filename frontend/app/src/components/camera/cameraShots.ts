@@ -21,13 +21,15 @@ export const PITCH_SHOT: CameraShot = {
   fov: 50,
 };
 
+export const CAMERA_FAR_CLIP = 1600;
+
 /**
  * High-angle drone shot behind and above home plate. Framed so the fair field
  * sits below the top-center HUD safe area with the plate near the bottom.
  */
 export const BIRDSEYE_SHOT: CameraShot = {
-  position: [0, 400, 280],
-  target: [0, -10, -190],
+  position: [0, 425, 295],
+  target: [0, -10, -200],
   fov: 28, /* Will eventually follow the ball */
 };
 
@@ -353,11 +355,11 @@ export function computeAdaptiveBattedBallShot(
   const target: [number, number, number] = [anchorX, targetY, anchorZ];
 
   // Dynamic Telephoto Optical Zoom:
-  // As distance from home plate increases from 40 ft to 360 ft,
+  // As distance from home plate increases from 40 ft to 380 ft,
   // smoothly narrow FOV from base FOV down to ~22° (line drive) or ~22° (fly ball),
   // keeping the baseball clearly visible and prominent on mobile screens.
   const dist = Math.hypot(anchorX, anchorZ);
-  const zoomProgress = Math.max(0, Math.min(1.0, (dist - 40.0) / 320.0));
+  const zoomProgress = Math.max(0, Math.min(1.0, (dist - 40.0) / 340.0));
   const maxZoomDeg = isLineDrive ? 14.0 : 18.0;
   const fov = Math.max(18.0, activeBaseShot.fov - zoomProgress * maxZoomDeg);
 

@@ -23,11 +23,11 @@ export const MARKER_BG_COLOR = '#0D1721'; // dark navy backing plate
 export const MARKER_TEXT_COLOR = '#FFFFFF'; // high-contrast white numerals
 
 export const WALL_DISTANCE_MARKERS: WallDistanceMarkerSpec[] = [
-  { text: '330', sprayAngle: -45.0, y: MARKER_ELEVATION },
-  { text: '365', sprayAngle: -22.5, y: MARKER_ELEVATION },
-  { text: '400', sprayAngle: 0.0, y: MARKER_ELEVATION },
-  { text: '365', sprayAngle: 22.5, y: MARKER_ELEVATION },
-  { text: '330', sprayAngle: 45.0, y: MARKER_ELEVATION },
+  { text: '350', sprayAngle: -45.0, y: MARKER_ELEVATION },
+  { text: '385', sprayAngle: -22.5, y: MARKER_ELEVATION },
+  { text: '420', sprayAngle: 0.0, y: MARKER_ELEVATION },
+  { text: '385', sprayAngle: 22.5, y: MARKER_ELEVATION },
+  { text: '350', sprayAngle: 45.0, y: MARKER_ELEVATION },
 ].map((spec) => {
   const pt = getFencePoint(spec.sprayAngle, -0.05);
   const position: [number, number, number] = [pt[0], spec.y, pt[2]];
@@ -47,7 +47,7 @@ const markerTextureCache = new Map<string, THREE.Texture>();
 const numeralGeometryCache = new Map<string, THREE.BufferGeometry>();
 
 /**
- * Creates 2D segment quads for standard athletic block numerals (0, 3, 4, 5, 6).
+ * Creates 2D segment quads for standard athletic block numerals (0-9).
  */
 function getDigitSegments(
   digit: string,
@@ -62,10 +62,15 @@ function getDigitSegments(
   const rects: Array<{ x: number; y: number; w: number; h: number }> = [];
   const map: Record<string, string[]> = {
     '0': ['a', 'b', 'c', 'd', 'e', 'f'],
+    '1': ['b', 'c'],
+    '2': ['a', 'b', 'g', 'e', 'd'],
     '3': ['a', 'b', 'g', 'c', 'd'],
     '4': ['f', 'g', 'b', 'c'],
     '5': ['a', 'f', 'g', 'c', 'd'],
     '6': ['a', 'f', 'e', 'g', 'c', 'd'],
+    '7': ['a', 'b', 'c'],
+    '8': ['a', 'b', 'c', 'd', 'e', 'f', 'g'],
+    '9': ['a', 'b', 'c', 'd', 'f', 'g'],
   };
   const segs = map[digit] || [];
   for (const s of segs) {
@@ -109,7 +114,7 @@ function getDigitSegments(
 }
 
 /**
- * Generates a clean 3D procedural BufferGeometry for distance numerals (e.g. "330", "365", "400").
+ * Generates a clean 3D procedural BufferGeometry for distance numerals (e.g. "350", "385", "420").
  * Works 100% natively on React Native (iOS, Android), web, and headless test environments with zero DOM canvas dependencies.
  */
 export function createDistanceMarkerNumeralGeometry(text: string): THREE.BufferGeometry {
@@ -226,7 +231,7 @@ export function getOrCreateDistanceMarkerTexture(text: string): THREE.Texture | 
 /**
  * WallDistanceMarkers Component
  *
- * Renders authentic stadium distance plates ("330", "365", "400", "365", "330")
+ * Renders authentic stadium distance plates ("350", "385", "420", "385", "350")
  * mounted along the inner face of the outfield wall at Y = 4.5 ft.
  * Uses 100% native vector numeral geometry compatible with React Native (iOS, Android),
  * web, and headless test runners.

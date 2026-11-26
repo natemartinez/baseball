@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   BASE_ASPECT,
   BIRDSEYE_SHOT,
+  CAMERA_FAR_CLIP,
   GROUNDER_SHOT,
   LINE_DRIVE_SHOT,
   FLY_BALL_SHOT,
@@ -87,6 +88,19 @@ describe('Responsive Camera Shot Director', () => {
       assert.ok(shot.position[2] > BIRDSEYE_SHOT.position[2]);
       // Target shifted slightly toward home plate to frame below top HUD
       assert.ok(shot.target[2] > BIRDSEYE_SHOT.target[2]);
+    });
+
+    it('keeps 9:16 portrait BIRDSEYE_SHOT center-field fence strictly within CAMERA_FAR_CLIP', () => {
+      assert.ok(CAMERA_FAR_CLIP >= 1600);
+      assert.ok(BIRDSEYE_SHOT.position[1] >= 425);
+      assert.ok(BIRDSEYE_SHOT.position[2] >= 295);
+      const shot = getResponsiveCameraShot('BIRDSEYE', 9 / 16);
+      assert.ok(Math.hypot(shot.position[0], shot.position[1], shot.position[2] - (-420)) < CAMERA_FAR_CLIP);
+    });
+
+    it('scales adaptive telephoto zoom smoothly out to expanded 380-420 ft warning track', () => {
+      const deepShot = computeAdaptiveBattedBallShot([0, 0, -380], [0, 0, -1], 25, 0.9, false, [0, 0, -415], 16 / 9, 32);
+      assert.ok(deepShot.fov >= 18.0 && deepShot.fov <= 26.0);
     });
   });
 

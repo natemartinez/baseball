@@ -17,7 +17,7 @@ describe('WallDistanceMarkers Specification', () => {
     assert.equal(WALL_DISTANCE_MARKERS.length, 5);
     assert.deepEqual(
       WALL_DISTANCE_MARKERS.map((m) => m.text),
-      ['330', '365', '400', '365', '330'],
+      ['350', '385', '420', '385', '350'],
     );
     assert.deepEqual(
       WALL_DISTANCE_MARKERS.map((m) => m.sprayAngle),
@@ -54,23 +54,23 @@ describe('WallDistanceMarkers Specification', () => {
     }
 
     // Explicit distance checks
-    // Center field (0 deg) -> 400 - 0.05 = 399.95 ft
+    // Center field (0 deg) -> 420 - 0.05 = 419.95 ft
     const cf = WALL_DISTANCE_MARKERS[2];
-    assert.equal(cf.text, '400');
+    assert.equal(cf.text, '420');
     assert.equal(cf.position[0], 0);
-    assert.equal(cf.position[2], -399.95);
+    assert.equal(cf.position[2], -419.95);
 
-    // Foul lines (+/- 45 deg) -> 330 - 0.05 = 329.95 ft
+    // Foul lines (+/- 45 deg) -> 350 - 0.05 = 349.95 ft
     const lf = WALL_DISTANCE_MARKERS[0];
     const rf = WALL_DISTANCE_MARKERS[4];
-    assert.ok(Math.abs(Math.hypot(lf.position[0], lf.position[2]) - 329.95) < 1e-5);
-    assert.ok(Math.abs(Math.hypot(rf.position[0], rf.position[2]) - 329.95) < 1e-5);
+    assert.ok(Math.abs(Math.hypot(lf.position[0], lf.position[2]) - 349.95) < 1e-5);
+    assert.ok(Math.abs(Math.hypot(rf.position[0], rf.position[2]) - 349.95) < 1e-5);
 
-    // Gaps (+/- 22.5 deg) -> 365 - 0.05 = 364.95 ft
+    // Gaps (+/- 22.5 deg) -> 385 - 0.05 = 384.95 ft
     const lcf = WALL_DISTANCE_MARKERS[1];
     const rcf = WALL_DISTANCE_MARKERS[3];
-    assert.ok(Math.abs(Math.hypot(lcf.position[0], lcf.position[2]) - 364.95) < 1e-5);
-    assert.ok(Math.abs(Math.hypot(rcf.position[0], rcf.position[2]) - 364.95) < 1e-5);
+    assert.ok(Math.abs(Math.hypot(lcf.position[0], lcf.position[2]) - 384.95) < 1e-5);
+    assert.ok(Math.abs(Math.hypot(rcf.position[0], rcf.position[2]) - 384.95) < 1e-5);
   });
 
   it('aligns marker rotation to face home plate along wall tangent', () => {
@@ -123,10 +123,11 @@ describe('WallDistanceMarkers Specification', () => {
     }
   });
 
-  it('generates valid 3D procedural numeral geometries for 330, 365, and 400', () => {
-    for (const text of ['330', '365', '400']) {
+  it('generates valid 3D procedural numeral geometries for 350, 385, and 420', () => {
+    for (const text of ['350', '385', '420']) {
       const geom = createDistanceMarkerNumeralGeometry(text);
       assert.ok(geom.attributes.position, `Position attribute must exist for ${text}`);
+      assert.ok(geom.attributes.position.count > 0, `Vertices must exist for ${text}`);
       assert.ok(geom.attributes.normal, `Normal attribute must exist for ${text}`);
       assert.ok(geom.index, `Index buffer must exist for ${text}`);
       assert.ok(geom.boundingBox, `Bounding box must be computed for ${text}`);
@@ -138,5 +139,7 @@ describe('WallDistanceMarkers Specification', () => {
       assert.ok(width <= 3.0, `Width ${width} must fit inside 3.0 ft badge for ${text}`);
       assert.ok(height <= 1.4, `Height ${height} must fit inside 1.4 ft badge for ${text}`);
     }
+    assert.equal(createDistanceMarkerNumeralGeometry('8').attributes.position.count, 7 * 4);
+    assert.equal(createDistanceMarkerNumeralGeometry('2').attributes.position.count, 5 * 4);
   });
 });

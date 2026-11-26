@@ -56,14 +56,14 @@ const rightWingRotation: [number, number, number] = [0, Math.atan2(-cosRf, -sinR
 /**
  * FoulPoles Component
  *
- * Renders the left and right regulation 32 ft yellow foul poles at the 330 ft outfield
+ * Renders the left and right regulation 32 ft yellow foul poles at the 350 ft outfield
  * fence intersections, complete with fair-territory screen wings (24 ft x 2.5 ft)
  * extending from the top of the 8 ft wall to the pole top.
  */
 export function FoulPoles(props?: React.ComponentProps<'group'>) {
   return (
     <group {...props}>
-      {/* Left-field Foul Pole (at LF 330 ft corner) */}
+      {/* Left-field Foul Pole (at LF 350 ft corner) */}
       <group position={FOUL_POLE_LEFT_POS}>
         {/* Main Pole */}
         <mesh position={[0, FOUL_POLE_HEIGHT / 2, 0]}>
@@ -94,7 +94,7 @@ export function FoulPoles(props?: React.ComponentProps<'group'>) {
         </mesh>
       </group>
 
-      {/* Right-field Foul Pole (at RF 330 ft corner) */}
+      {/* Right-field Foul Pole (at RF 350 ft corner) */}
       <group position={FOUL_POLE_RIGHT_POS}>
         {/* Main Pole */}
         <mesh position={[0, FOUL_POLE_HEIGHT / 2, 0]}>

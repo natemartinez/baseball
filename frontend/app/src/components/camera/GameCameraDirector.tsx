@@ -3,6 +3,7 @@ import * as THREE from 'three';
 
 import {
   BASE_ASPECT,
+  CAMERA_FAR_CLIP,
   computeAdaptiveBattedBallShot,
   computeGrounderShot,
   computeIsometricFollowPose,
@@ -40,7 +41,7 @@ function applyStaticShot(
     perspective.fov = shot.fov;
     perspective.aspect = aspect;
     perspective.near = 1.0;
-    perspective.far = 1000;
+    perspective.far = CAMERA_FAR_CLIP;
     perspective.updateProjectionMatrix();
   }
 

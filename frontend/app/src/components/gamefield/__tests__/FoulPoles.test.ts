@@ -17,9 +17,9 @@ import {
 } from '../FoulPoles';
 
 describe('FoulPoles Component Specification', () => {
-  it('anchors left and right foul pole coordinates at 330 ft fence intersections', () => {
-    assert.ok(Math.abs(Math.hypot(FOUL_POLE_LEFT_POS[0], FOUL_POLE_LEFT_POS[2]) - 330.0) < 0.2);
-    assert.ok(Math.abs(Math.hypot(FOUL_POLE_RIGHT_POS[0], FOUL_POLE_RIGHT_POS[2]) - 330.0) < 0.2);
+  it('anchors left and right foul pole coordinates at 350 ft fence intersections', () => {
+    assert.ok(Math.abs(Math.hypot(FOUL_POLE_LEFT_POS[0], FOUL_POLE_LEFT_POS[2]) - 350.0) < 0.2);
+    assert.ok(Math.abs(Math.hypot(FOUL_POLE_RIGHT_POS[0], FOUL_POLE_RIGHT_POS[2]) - 350.0) < 0.2);
   });
 
   it('specifies 32 ft elevation with gold material color', () => {

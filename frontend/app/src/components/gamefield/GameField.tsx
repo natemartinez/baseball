@@ -4,7 +4,7 @@ import { Canvas } from '@react-three/fiber';
 
 import { FieldScene } from './FieldScene';
 import { FieldScrims } from './FieldScrims';
-import { PITCH_SHOT } from '../camera';
+import { CAMERA_FAR_CLIP, PITCH_SHOT } from '../camera';
 import type { GameFieldProps } from './types';
 import { Colors } from '../../theme/colors';
 
@@ -41,7 +41,7 @@ export const GameField = React.memo(function GameField({
           position: PITCH_SHOT.position,
           fov: PITCH_SHOT.fov,
           near: 1.0,
-          far: 1000,
+          far: CAMERA_FAR_CLIP,
         }}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
       >

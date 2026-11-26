@@ -180,10 +180,10 @@ export const BATTERS_BOX_RIGHT_POS: [number, number, number] = [3.21, 0.060, -0.
 
 /**
  * Outfield Fence & Regulation Ballpark Dimensions
- * Matching backend batting engine (contact_outcome.py) and MLB standards.
+ * Matching backend batting engine (contact_outcome.py) and expanded dimensions.
  */
-export const FENCE_CENTER_DISTANCE = 400.0;
-export const FENCE_FOUL_LINE_DISTANCE = 330.0;
+export const FENCE_CENTER_DISTANCE = 420.0;
+export const FENCE_FOUL_LINE_DISTANCE = 350.0;
 export const FENCE_WALL_HEIGHT = 8.0;
 export const FENCE_WALL_THICKNESS = 1.0;
 export const FENCE_TOP_RAIL_HEIGHT = 0.5;
@@ -194,7 +194,7 @@ export const FOUL_POLE_RADIUS = 0.4;
 /**
  * Calculates distance to the outfield wall at a given spray angle (degrees).
  * Angle convention: 0 = Center Field, +45 = Right Field Line, -45 = Left Field Line.
- * Symmetrically interpolates between 400 ft (center) and 330 ft (corners).
+ * Symmetrically interpolates between 420 ft (center) and 350 ft (corners).
  */
 export function fenceDistance(sprayAngleDeg: number): number {
   const fraction = Math.min(Math.abs(sprayAngleDeg), 45.0) / 45.0;
@@ -256,7 +256,7 @@ warningTrackShape.closePath();
  * Both lines meet at the top-middle of the respective batter's boxes
  * (X = ±3.21, Z = -3.71) rather than converging at the rear apex of home plate (0, 0, 0),
  * pass straight through 1B (63.64, -63.64) and 3B (-63.64, -63.64) into the outfield,
- * and extend to intersect the outfield fence circle at R = 330.0 ft (X = ±234.05, Z = -232.64).
+ * and extend to intersect the outfield fence circle at R = 350.0 ft.
  */
 const rightBoxTopMiddleX = BATTERS_BOX_RIGHT_POS[0];
 const rightBoxTopMiddleZ = BATTERS_BOX_RIGHT_POS[2] - boxLength / 2; // -3.71
@@ -265,7 +265,7 @@ const foulLineDx = BASE_1B_POS[0] - rightBoxTopMiddleX; // 60.43
 const foulLineDz = BASE_1B_POS[2] - rightBoxTopMiddleZ; // -59.93
 const foulLineAngle = Math.atan2(foulLineDx, -foulLineDz);
 
-// Solve quadratic intersection of foul line ray (x0 + t*dx, z0 + t*dz) with circle of radius R = 330.0 ft
+// Solve quadratic intersection of foul line ray (x0 + t*dx, z0 + t*dz) with circle of radius R = 350.0 ft
 const aFoul = foulLineDx * foulLineDx + foulLineDz * foulLineDz;
 const bFoul = 2 * (rightBoxTopMiddleX * foulLineDx + rightBoxTopMiddleZ * foulLineDz);
 const cFoul =
